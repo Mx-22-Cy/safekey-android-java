@@ -8,10 +8,12 @@ import java.io.File;
 
 public class SafeKeyDatabase {
 
-    private static final String DATABASE_NAME = "safekey.db";
+    private static final String DEFAULT_DATABASE_NAME = "safekey.db";
     private static final int DATABASE_VERSION = 1;
 
     private final Context context;
+    private final String databaseName;
+
     private SQLiteDatabase database;
 
     static {
@@ -19,19 +21,48 @@ public class SafeKeyDatabase {
     }
 
     public SafeKeyDatabase(Context context) {
-        this.context = context.getApplicationContext();
+        this(
+                context,
+                DEFAULT_DATABASE_NAME
+        );
     }
 
-    public SQLiteDatabase open(String password) {
+    public SafeKeyDatabase(
+            Context context,
+            String databaseName
+    ) {
+        if (databaseName == null
+                || databaseName.trim().isEmpty()) {
 
-        if (database != null && database.isOpen()) {
+            throw new IllegalArgumentException(
+                    "Database name cannot be empty."
+            );
+        }
+
+        this.context =
+                context.getApplicationContext();
+
+        this.databaseName =
+                databaseName;
+    }
+
+    public SQLiteDatabase open(
+            String databasePassphrase
+    ) {
+
+        if (database != null
+                && database.isOpen()) {
+
             return database;
         }
 
         File databaseFile =
-                context.getDatabasePath(DATABASE_NAME);
+                context.getDatabasePath(
+                        databaseName
+                );
 
-        File parent = databaseFile.getParentFile();
+        File parent =
+                databaseFile.getParentFile();
 
         if (parent != null) {
             parent.mkdirs();
@@ -40,23 +71,30 @@ public class SafeKeyDatabase {
         SQLiteDatabase db =
                 SQLiteDatabase.openOrCreateDatabase(
                         databaseFile,
-                        password,
+                        databasePassphrase,
                         null,
                         null,
                         null
                 );
 
-        db.execSQL("PRAGMA foreign_keys = ON");
+        db.execSQL(
+                "PRAGMA foreign_keys = ON"
+        );
 
-        int currentVersion = db.getVersion();
+        int currentVersion =
+                db.getVersion();
 
         if (currentVersion == 0) {
 
             createVersion1Schema(db);
 
-            db.setVersion(DATABASE_VERSION);
+            db.setVersion(
+                    DATABASE_VERSION
+            );
 
-        } else if (currentVersion < DATABASE_VERSION) {
+        } else if (
+                currentVersion < DATABASE_VERSION
+        ) {
 
             migrateDatabase(
                     db,
@@ -130,7 +168,8 @@ public class SafeKeyDatabase {
             int newVersion
     ) {
 
-        int version = oldVersion;
+        int version =
+                oldVersion;
 
         db.beginTransaction();
 
@@ -140,14 +179,8 @@ public class SafeKeyDatabase {
 
                 switch (version) {
 
-                    // Future example:
-                    //
-                    // case 1:
-                    //     migrateFrom1To2(db);
-                    //     version = 2;
-                    //     break;
-
                     default:
+
                         throw new IllegalStateException(
                                 "No migration available from database version "
                                         + version
@@ -155,7 +188,9 @@ public class SafeKeyDatabase {
                 }
             }
 
-            db.setVersion(newVersion);
+            db.setVersion(
+                    newVersion
+            );
 
             db.setTransactionSuccessful();
 
