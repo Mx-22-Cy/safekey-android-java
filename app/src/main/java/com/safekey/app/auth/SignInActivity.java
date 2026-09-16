@@ -7,10 +7,10 @@ import android.text.TextUtils;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ImageButton;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -19,7 +19,8 @@ import com.safekey.app.R;
 public class SignInActivity extends AppCompatActivity {
 
     private EditText editMasterPassword;
-    private CheckBox checkShowPassword;
+    private ImageButton buttonTogglePassword;
+    private boolean passwordVisible = false;
     private TextView textValidationMessage;
 
     @Override
@@ -43,9 +44,9 @@ public class SignInActivity extends AppCompatActivity {
                         R.id.editMasterPassword
                 );
 
-        checkShowPassword =
+        buttonTogglePassword =
                 findViewById(
-                        R.id.checkShowPassword
+                        R.id.buttonTogglePassword
                 );
 
         textValidationMessage =
@@ -63,11 +64,27 @@ public class SignInActivity extends AppCompatActivity {
                         R.id.buttonGoToSignUp
                 );
 
-        checkShowPassword.setOnCheckedChangeListener(
-                (buttonView, isChecked) ->
-                        setPasswordVisibility(
-                                isChecked
-                        )
+        buttonTogglePassword.setOnClickListener(
+                view -> {
+                    passwordVisible = !passwordVisible;
+                    setPasswordVisibility(passwordVisible);
+
+                    if (passwordVisible) {
+                        buttonTogglePassword.setImageResource(
+                                R.drawable.ic_visibility_off
+                        );
+                        buttonTogglePassword.setContentDescription(
+                                "Hide password"
+                        );
+                    } else {
+                        buttonTogglePassword.setImageResource(
+                                R.drawable.ic_visibility
+                        );
+                        buttonTogglePassword.setContentDescription(
+                                "Show password"
+                        );
+                    }
+                }
         );
 
         buttonUnlockVault.setOnClickListener(
