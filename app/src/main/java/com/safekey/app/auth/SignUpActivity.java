@@ -226,7 +226,7 @@ public class SignUpActivity extends AppCompatActivity {
             strength = 1;
         } else if (categories == 2 || categories == 3) {
             strength = 3;
-        } else if (categories == 4 && password.length() >= 12) {
+        } else if (categories == 4 && password.length() >= 15) {
             strength = 5;
         } else {
             strength = 3;
@@ -324,10 +324,10 @@ public class SignUpActivity extends AppCompatActivity {
             return;
         }
 
-        if (masterPassword.length() < 12) {
+        if (masterPassword.length() < 15) {
 
             editMasterPassword.setError(
-                    "Use at least 12 characters."
+                    "Use at least 15 characters."
             );
 
             editMasterPassword.requestFocus();

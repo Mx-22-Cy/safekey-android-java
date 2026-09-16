@@ -150,7 +150,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="12+ characters. Mix letters, numbers and a symbol for a stronger vault."
+                android:text="15+ characters. Mix letters, numbers and a symbol for a stronger vault."
                 android:textColor="#5B6178"
                 android:textSize="12sp" />
 
