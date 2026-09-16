@@ -3,7 +3,6 @@ package com.safekey.app.auth;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.text.TextUtils;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
 import android.widget.Button;
@@ -18,6 +17,8 @@ import com.safekey.app.R;
 import android.view.View;
 import android.text.Editable;
 import android.text.TextWatcher;
+import com.safekey.app.auth.logic.MasterPasswordPolicy;
+import com.safekey.app.auth.logic.MasterPasswordValidationResult;
 
 public class SignUpActivity extends AppCompatActivity {
 
@@ -216,6 +217,12 @@ public class SignUpActivity extends AppCompatActivity {
         if (hasDigit) categories++;
         if (hasSymbol) categories++;
 
+        int characterCount =
+                password.codePointCount(
+                        0,
+                        password.length()
+                );
+
         int strength;
 
         if (password.isEmpty()) {
@@ -226,7 +233,8 @@ public class SignUpActivity extends AppCompatActivity {
             strength = 1;
         } else if (categories == 2 || categories == 3) {
             strength = 3;
-        } else if (categories == 4 && password.length() >= 15) {
+        } else if (categories == 4
+                && characterCount >= MasterPasswordPolicy.MIN_LENGTH) {
             strength = 5;
         } else {
             strength = 3;
@@ -309,61 +317,61 @@ public class SignUpActivity extends AppCompatActivity {
                         .getText()
                         .toString();
 
+        char[] masterPasswordChars =
+                masterPassword.toCharArray();
+
+        char[] confirmPasswordChars =
+                confirmPassword.toCharArray();
+
+        MasterPasswordValidationResult validationResult =
+                MasterPasswordPolicy.validateForEnrollment(
+                        masterPasswordChars,
+                        confirmPasswordChars
+                );
+
         textValidationMessage.setText("");
 
-        if (TextUtils.isEmpty(
-                masterPassword
-        )) {
+        switch (validationResult) {
 
-            editMasterPassword.setError(
-                    "Enter a master password."
-            );
+            case REQUIRED:
+                editMasterPassword.setError(
+                        "Enter your master password."
+                );
+                editMasterPassword.requestFocus();
+                return;
 
-            editMasterPassword.requestFocus();
+            case TOO_SHORT:
+                editMasterPassword.setError(
+                        "Use at least " + MasterPasswordPolicy.MIN_LENGTH + " characters."
+                );
+                editMasterPassword.requestFocus();
+                return;
 
-            return;
+            case TOO_LONG:
+                editMasterPassword.setError(
+                        "Use " + MasterPasswordPolicy.MAX_LENGTH + " characters or fewer."
+                );
+                editMasterPassword.requestFocus();
+                return;
+
+            case CONFIRMATION_REQUIRED:
+                editConfirmPassword.setError(
+                        "Confirm the master password."
+                );
+                editConfirmPassword.requestFocus();
+                return;
+
+            case PASSWORDS_DO_NOT_MATCH:
+                editConfirmPassword.setError(
+                        "Passwords do not match."
+                );
+                editConfirmPassword.requestFocus();
+                return;
+
+            case VALID:
+                break;
         }
 
-        if (masterPassword.length() < 15) {
-
-            editMasterPassword.setError(
-                    "Use at least 15 characters."
-            );
-
-            editMasterPassword.requestFocus();
-
-            return;
-        }
-        if (masterPassword.length() > 128) {
-            editMasterPassword.setError("Use 128 characters or fewer.");
-            return;
-        }
-
-        if (TextUtils.isEmpty(
-                confirmPassword
-        )) {
-
-            editConfirmPassword.setError(
-                    "Confirm the master password."
-            );
-
-            editConfirmPassword.requestFocus();
-
-            return;
-        }
-
-        if (!masterPassword.equals(
-                confirmPassword
-        )) {
-
-            editConfirmPassword.setError(
-                    "Passwords do not match."
-            );
-
-            editConfirmPassword.requestFocus();
-
-            return;
-        }
 
         /*
          * TODO(Maryam/security integration):
