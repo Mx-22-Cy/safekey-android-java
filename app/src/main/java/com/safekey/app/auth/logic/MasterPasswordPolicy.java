@@ -7,6 +7,18 @@ public final class MasterPasswordPolicy {
     public static final int MIN_LENGTH = 15;
     public static final int MAX_LENGTH = 128;
 
+    private static final String[] BLOCKED_PASSWORDS = {
+            "passwordpassword",
+            "password1234567",
+            "123456789012345",
+            "qwertyuiopasdfgh",
+            "safekeypassword",
+            "letmeinletmeinletmein",
+            "adminadminadmin",
+            "iloveyouiloveyou",
+            "welcome123456789"
+    };
+
     private MasterPasswordPolicy() {
         // Utility class.
     }
@@ -29,6 +41,10 @@ public final class MasterPasswordPolicy {
 
         if (characterCount > MAX_LENGTH) {
             return MasterPasswordValidationResult.TOO_LONG;
+        }
+
+        if (isEasilyGuessed(password)) {
+            return MasterPasswordValidationResult.EASILY_GUESSED;
         }
 
         return MasterPasswordValidationResult.VALID;
@@ -54,5 +70,71 @@ public final class MasterPasswordPolicy {
         }
 
         return MasterPasswordValidationResult.VALID;
+    }
+
+    private static boolean isEasilyGuessed(char[] password) {
+        if (isRepeatedShortPattern(password)) {
+            return true;
+        }
+
+        for (String blockedPassword : BLOCKED_PASSWORDS) {
+            if (matchesIgnoringCase(password, blockedPassword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isRepeatedShortPattern(char[] password) {
+        final int maximumPatternLength = 4;
+
+        for (
+                int patternLength = 1;
+                patternLength <= maximumPatternLength;
+                patternLength++
+        ) {
+            if (password.length % patternLength != 0) {
+                continue;
+            }
+
+            boolean repeated = true;
+
+            for (int index = patternLength; index < password.length; index++) {
+                if (password[index] != password[index % patternLength]) {
+                    repeated = false;
+                    break;
+                }
+            }
+
+            if (repeated) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean matchesIgnoringCase(
+            char[] password,
+            String blockedPassword
+    ) {
+        if (password.length != blockedPassword.length()) {
+            return false;
+        }
+
+        for (int index = 0; index < password.length; index++) {
+            char passwordCharacter =
+                    Character.toLowerCase(password[index]);
+
+            char blockedCharacter =
+                    Character.toLowerCase(blockedPassword.charAt(index));
+
+            if (passwordCharacter != blockedCharacter) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

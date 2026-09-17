@@ -32,6 +32,20 @@ public class MasterPasswordEnrollmentTest {
     }
 
     @Test
+    public void validateForEnrollment_easilyGuessedPassword_returnsEasilyGuessed() {
+        char[] password =
+                "passwordpassword".toCharArray();
+
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validateForEnrollment(
+                        password,
+                        password
+                )
+        );
+    }
+
+    @Test
     public void validateForEnrollment_nullConfirmation_returnsConfirmationRequired() {
         assertEquals(
                 MasterPasswordValidationResult.CONFIRMATION_REQUIRED,
