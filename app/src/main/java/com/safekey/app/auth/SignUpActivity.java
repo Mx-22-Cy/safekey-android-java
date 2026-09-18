@@ -1,10 +1,12 @@
 package com.safekey.app.auth;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
+import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -12,13 +14,18 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
-import android.view.View;
-import android.text.Editable;
-import android.text.TextWatcher;
 import com.safekey.app.auth.logic.MasterPasswordPolicy;
 import com.safekey.app.auth.logic.MasterPasswordValidationResult;
+
+import java.util.Arrays;
 
 public class SignUpActivity extends AppCompatActivity {
 
@@ -38,16 +45,50 @@ public class SignUpActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(
-                Color.parseColor("#050B15")
+        WindowCompat.enableEdgeToEdge(
+                getWindow()
         );
 
-        getWindow().setNavigationBarColor(
-                Color.parseColor("#050B15")
-        );
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(
+                        getWindow(),
+                        getWindow().getDecorView()
+                );
+
+        insetsController.setAppearanceLightStatusBars(false);
+        insetsController.setAppearanceLightNavigationBars(false);
 
         setContentView(
                 R.layout.activity_sign_up
+        );
+
+        View rootSignUp =
+                findViewById(
+                        R.id.rootSignUp
+                );
+
+        ViewCompat.setOnApplyWindowInsetsListener(
+                rootSignUp,
+                (view, windowInsets) -> {
+
+                    Insets systemBars =
+                            windowInsets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                            );
+
+                    view.setPadding(
+                            systemBars.left,
+                            systemBars.top,
+                            systemBars.right,
+                            systemBars.bottom
+                    );
+
+                    return windowInsets;
+                }
+        );
+
+        ViewCompat.requestApplyInsets(
+                rootSignUp
         );
 
         editMasterPassword =
@@ -86,28 +127,49 @@ public class SignUpActivity extends AppCompatActivity {
                                 isChecked
                         )
         );
+
         strengthBar1 = findViewById(R.id.strengthBar1);
         strengthBar2 = findViewById(R.id.strengthBar2);
         strengthBar3 = findViewById(R.id.strengthBar3);
         strengthBar4 = findViewById(R.id.strengthBar4);
         strengthBar5 = findViewById(R.id.strengthBar5);
 
-        textPasswordStrength = findViewById(R.id.textPasswordStrength);
+        textPasswordStrength =
+                findViewById(
+                        R.id.textPasswordStrength
+                );
 
-        editMasterPassword.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
+        editMasterPassword.addTextChangedListener(
+                new TextWatcher() {
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                updatePasswordStrength(s.toString());
-            }
+                    @Override
+                    public void beforeTextChanged(
+                            CharSequence s,
+                            int start,
+                            int count,
+                            int after
+                    ) {
+                    }
 
-            @Override
-            public void afterTextChanged(Editable s) {
-            }
-        });
+                    @Override
+                    public void onTextChanged(
+                            CharSequence s,
+                            int start,
+                            int before,
+                            int count
+                    ) {
+                        updatePasswordStrength(
+                                s.toString()
+                        );
+                    }
+
+                    @Override
+                    public void afterTextChanged(
+                            Editable s
+                    ) {
+                    }
+                }
+        );
 
         buttonCreateVault.setOnClickListener(
                 view ->
@@ -190,7 +252,11 @@ public class SignUpActivity extends AppCompatActivity {
             );
         }
     }
-    private void updatePasswordStrength(String password) {
+
+    private void updatePasswordStrength(
+            String password
+    ) {
+
         View[] bars = {
                 strengthBar1,
                 strengthBar2,
@@ -199,23 +265,55 @@ public class SignUpActivity extends AppCompatActivity {
                 strengthBar5
         };
 
-        int inactiveColor = Color.parseColor("#2A3142");
+        int inactiveColor =
+                ContextCompat.getColor(
+                        this,
+                        R.color.auth_strength_inactive
+                );
 
         for (View bar : bars) {
-            bar.setBackgroundColor(inactiveColor);
+            bar.setBackgroundColor(
+                    inactiveColor
+            );
         }
 
-        boolean hasLower = password.matches(".*[a-z].*");
-        boolean hasUpper = password.matches(".*[A-Z].*");
-        boolean hasDigit = password.matches(".*\\d.*");
-        boolean hasSymbol = password.matches(".*[^A-Za-z0-9].*");
+        boolean hasLower =
+                password.matches(
+                        ".*[a-z].*"
+                );
+
+        boolean hasUpper =
+                password.matches(
+                        ".*[A-Z].*"
+                );
+
+        boolean hasDigit =
+                password.matches(
+                        ".*\\d.*"
+                );
+
+        boolean hasSymbol =
+                password.matches(
+                        ".*[^A-Za-z0-9].*"
+                );
 
         int categories = 0;
 
-        if (hasLower) categories++;
-        if (hasUpper) categories++;
-        if (hasDigit) categories++;
-        if (hasSymbol) categories++;
+        if (hasLower) {
+            categories++;
+        }
+
+        if (hasUpper) {
+            categories++;
+        }
+
+        if (hasDigit) {
+            categories++;
+        }
+
+        if (hasSymbol) {
+            categories++;
+        }
 
         int characterCount =
                 password.codePointCount(
@@ -226,72 +324,191 @@ public class SignUpActivity extends AppCompatActivity {
         int strength;
 
         if (password.isEmpty()) {
+
             strength = 0;
-        } else if (isObviouslyRepetitive(password)) {
+
+        } else if (
+                isObviouslyRepetitive(
+                        password
+                )
+        ) {
+
             strength = 1;
+
         } else if (categories == 1) {
+
             strength = 1;
-        } else if (categories == 2 || categories == 3) {
+
+        } else if (
+                categories == 2
+                        || categories == 3
+        ) {
+
             strength = 3;
-        } else if (categories == 4
-                && characterCount >= MasterPasswordPolicy.MIN_LENGTH) {
+
+        } else if (
+                categories == 4
+                        && characterCount
+                        >= MasterPasswordPolicy.MIN_LENGTH
+        ) {
+
             strength = 5;
+
         } else {
+
             strength = 3;
         }
 
         int activeColor;
 
         if (strength <= 1) {
-            activeColor = Color.parseColor("#EF4444"); // Weak
+
+            activeColor =
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_weak
+                    );
+
         } else if (strength == 3) {
-            activeColor = Color.parseColor("#EAB308"); // Medium
+
+            activeColor =
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_medium
+                    );
+
         } else {
-            activeColor = Color.parseColor("#2DD4B0"); // Strong
+
+            activeColor =
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_strong
+                    );
         }
 
         if (strength == 0) {
-            textPasswordStrength.setVisibility(View.GONE);
+
+            textPasswordStrength
+                    .setVisibility(
+                            View.GONE
+                    );
+
         } else if (strength == 1) {
-            textPasswordStrength.setText("Weak");
-            textPasswordStrength.setTextColor(Color.parseColor("#EF4444"));
-            textPasswordStrength.setVisibility(View.VISIBLE);
+
+            textPasswordStrength.setText(
+                    R.string.password_strength_weak
+            );
+
+            textPasswordStrength.setTextColor(
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_weak
+                    )
+            );
+
+            textPasswordStrength
+                    .setVisibility(
+                            View.VISIBLE
+                    );
+
         } else if (strength == 3) {
-            textPasswordStrength.setText("Medium");
-            textPasswordStrength.setTextColor(Color.parseColor("#EAB308"));
-            textPasswordStrength.setVisibility(View.VISIBLE);
+
+            textPasswordStrength.setText(
+                    R.string.password_strength_medium
+            );
+
+            textPasswordStrength.setTextColor(
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_medium
+                    )
+            );
+
+            textPasswordStrength
+                    .setVisibility(
+                            View.VISIBLE
+                    );
+
         } else {
-            textPasswordStrength.setText("Strong");
-            textPasswordStrength.setTextColor(Color.parseColor("#2DD4B0"));
-            textPasswordStrength.setVisibility(View.VISIBLE);
+
+            textPasswordStrength.setText(
+                    R.string.password_strength_strong
+            );
+
+            textPasswordStrength.setTextColor(
+                    ContextCompat.getColor(
+                            this,
+                            R.color.auth_strength_strong
+                    )
+            );
+
+            textPasswordStrength
+                    .setVisibility(
+                            View.VISIBLE
+                    );
         }
 
         for (int i = 0; i < strength; i++) {
-            bars[i].setBackgroundColor(activeColor);
+
+            bars[i].setBackgroundColor(
+                    activeColor
+            );
         }
     }
 
-    private boolean isObviouslyRepetitive(String password) {
+    private boolean isObviouslyRepetitive(
+            String password
+    ) {
+
         if (password.length() < 2) {
             return false;
         }
 
-        // Same character repeated: aaaaaaaa, 11111111, @@@@@@@@
-        if (password.matches("^(.)\\1+$")) {
+        // Advisory strength warning only.
+        // Same character repeated:
+        // aaaaaaaa, 11111111, @@@@@@@@
+        if (password.matches(
+                "^(.)\\1+$"
+        )) {
             return true;
         }
 
-        // Short pattern repeated: 1a1a1a1a, abcabcabc, abcdabcd
-        for (int unitLength = 2; unitLength <= 4; unitLength++) {
-            if (password.length() % unitLength != 0) {
+        // Short pattern repeated:
+        // 1a1a1a1a, abcabcabc, abcdabcd
+        for (
+                int unitLength = 2;
+                unitLength <= 4;
+                unitLength++
+        ) {
+
+            if (
+                    password.length()
+                            % unitLength != 0
+            ) {
                 continue;
             }
 
-            String unit = password.substring(0, unitLength);
+            String unit =
+                    password.substring(
+                            0,
+                            unitLength
+                    );
+
             boolean repeated = true;
 
-            for (int i = unitLength; i < password.length(); i += unitLength) {
-                if (!password.substring(i, i + unitLength).equals(unit)) {
+            for (
+                    int i = unitLength;
+                    i < password.length();
+                    i += unitLength
+            ) {
+
+                if (
+                        !password.substring(
+                                i,
+                                i + unitLength
+                        ).equals(unit)
+                ) {
+
                     repeated = false;
                     break;
                 }
@@ -307,103 +524,146 @@ public class SignUpActivity extends AppCompatActivity {
 
     private void validateSignUpForm() {
 
-        String masterPassword =
-                editMasterPassword
-                        .getText()
-                        .toString();
+        Editable masterEditable =
+                editMasterPassword.getText();
 
-        String confirmPassword =
-                editConfirmPassword
-                        .getText()
-                        .toString();
+        Editable confirmEditable =
+                editConfirmPassword.getText();
 
         char[] masterPasswordChars =
-                masterPassword.toCharArray();
+                new char[masterEditable.length()];
 
         char[] confirmPasswordChars =
-                confirmPassword.toCharArray();
+                new char[confirmEditable.length()];
 
-        MasterPasswordValidationResult validationResult =
-                MasterPasswordPolicy.validateForEnrollment(
-                        masterPasswordChars,
-                        confirmPasswordChars
-                );
-
-        textValidationMessage.setText("");
-
-        switch (validationResult) {
-
-            case REQUIRED:
-                editMasterPassword.setError(
-                        "Enter your master password."
-                );
-                editMasterPassword.requestFocus();
-                return;
-
-            case TOO_SHORT:
-                editMasterPassword.setError(
-                        "Use at least " + MasterPasswordPolicy.MIN_LENGTH + " characters."
-                );
-                editMasterPassword.requestFocus();
-                return;
-
-            case TOO_LONG:
-                editMasterPassword.setError(
-                        "Use " + MasterPasswordPolicy.MAX_LENGTH + " characters or fewer."
-                );
-                editMasterPassword.requestFocus();
-                return;
-
-            case CONFIRMATION_REQUIRED:
-                editConfirmPassword.setError(
-                        "Confirm the master password."
-                );
-                editConfirmPassword.requestFocus();
-                return;
-
-            case PASSWORDS_DO_NOT_MATCH:
-                editConfirmPassword.setError(
-                        "Passwords do not match."
-                );
-                editConfirmPassword.requestFocus();
-                return;
-
-            case VALID:
-                break;
-        }
-
-
-        /*
-         * TODO(Maryam/security integration):
-         *
-         * Do NOT save the raw master password.
-         *
-         * Do NOT pass the raw master password directly
-         * to SafeKeyDatabase as the SQLCipher passphrase.
-         *
-         * Maryam's security/key-management layer should:
-         *
-         * 1. Derive cryptographic key material using Argon2id.
-         * 2. Produce/unlock the SQLCipher database passphrase.
-         * 3. Protect long-lived key material with Android
-         *    Keystore / hardware-backed protection.
-         * 4. Clear sensitive temporary values when possible.
-         *
-         * Never log the master password,
-         * derived key, or database passphrase.
-         */
-
-        textValidationMessage.setText(
-                "Sign-up UI is ready. Security integration is pending."
+        masterEditable.getChars(
+                0,
+                masterEditable.length(),
+                masterPasswordChars,
+                0
         );
 
-        Toast.makeText(
-                this,
-                "Sign-up screen ready for security integration.",
-                Toast.LENGTH_LONG
-        ).show();
+        confirmEditable.getChars(
+                0,
+                confirmEditable.length(),
+                confirmPasswordChars,
+                0
+        );
 
-        editMasterPassword.setText("");
-        editConfirmPassword.setText("");
+        try {
+
+            MasterPasswordValidationResult validationResult =
+                    MasterPasswordPolicy
+                            .validateForEnrollment(
+                                    masterPasswordChars,
+                                    confirmPasswordChars
+                            );
+
+            textValidationMessage.setText(null);
+
+            switch (validationResult) {
+
+                case REQUIRED:
+
+                    editMasterPassword.setError(
+                            getString(
+                                    R.string.error_master_password_required
+                            )
+                    );
+
+                    editMasterPassword.requestFocus();
+                    return;
+
+                case TOO_SHORT:
+
+                    editMasterPassword.setError(
+                            getResources().getQuantityString(
+                                    R.plurals.error_password_too_short,
+                                    MasterPasswordPolicy.MIN_LENGTH,
+                                    MasterPasswordPolicy.MIN_LENGTH
+                            )
+                    );
+
+                    editMasterPassword.requestFocus();
+                    return;
+
+                case TOO_LONG:
+
+                    editMasterPassword.setError(
+                            getResources().getQuantityString(
+                                    R.plurals.error_password_too_long,
+                                    MasterPasswordPolicy.MAX_LENGTH,
+                                    MasterPasswordPolicy.MAX_LENGTH
+                            )
+                    );
+
+                    editMasterPassword.requestFocus();
+                    return;
+
+                case CONFIRMATION_REQUIRED:
+
+                    editConfirmPassword.setError(
+                            getString(
+                                    R.string.error_confirmation_required
+                            )
+                    );
+
+                    editConfirmPassword.requestFocus();
+                    return;
+
+                case PASSWORDS_DO_NOT_MATCH:
+
+                    editConfirmPassword.setError(
+                            getString(
+                                    R.string.error_passwords_do_not_match
+                            )
+                    );
+
+                    editConfirmPassword.requestFocus();
+                    return;
+
+                case VALID:
+                    break;
+            }
+
+            /*
+             * TODO: Connect this screen to Maryam's security logic later.
+             *
+             * Do not save or log the master password.
+             * The master password should not be used directly as the
+             * SQLCipher database password.
+             *
+             * Later, the security layer will:
+             * - derive the required key using Argon2id;
+             * - open/unlock the encrypted database;
+             * - protect keys using Android Keystore;
+             * - clear temporary sensitive values when possible.
+             */
+
+            textValidationMessage.setText(
+                    R.string.signup_pending_integration
+            );
+
+            Toast.makeText(
+                    this,
+                    R.string.signup_pending_integration_toast,
+                    Toast.LENGTH_LONG
+            ).show();
+
+            editMasterPassword.setText("");
+            editConfirmPassword.setText("");
+
+        } finally {
+
+            Arrays.fill(
+                    masterPasswordChars,
+                    '\0'
+            );
+
+            Arrays.fill(
+                    confirmPasswordChars,
+                    '\0'
+            );
+        }
     }
 }

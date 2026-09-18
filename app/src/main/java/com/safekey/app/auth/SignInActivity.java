@@ -1,18 +1,22 @@
 package com.safekey.app.auth;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.text.TextUtils;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.ImageButton;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
 
@@ -27,16 +31,50 @@ public class SignInActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        getWindow().setStatusBarColor(
-                Color.parseColor("#050B15")
+        WindowCompat.enableEdgeToEdge(
+                getWindow()
         );
 
-        getWindow().setNavigationBarColor(
-                Color.parseColor("#050B15")
-        );
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(
+                        getWindow(),
+                        getWindow().getDecorView()
+                );
+
+        insetsController.setAppearanceLightStatusBars(false);
+        insetsController.setAppearanceLightNavigationBars(false);
 
         setContentView(
                 R.layout.activity_sign_in
+        );
+
+        View rootSignIn =
+                findViewById(
+                        R.id.rootSignIn
+                );
+
+        ViewCompat.setOnApplyWindowInsetsListener(
+                rootSignIn,
+                (view, windowInsets) -> {
+
+                    Insets systemBars =
+                            windowInsets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                            );
+
+                    view.setPadding(
+                            systemBars.left,
+                            systemBars.top,
+                            systemBars.right,
+                            systemBars.bottom
+                    );
+
+                    return windowInsets;
+                }
+        );
+
+        ViewCompat.requestApplyInsets(
+                rootSignIn
         );
 
         editMasterPassword =
@@ -66,22 +104,36 @@ public class SignInActivity extends AppCompatActivity {
 
         buttonTogglePassword.setOnClickListener(
                 view -> {
-                    passwordVisible = !passwordVisible;
-                    setPasswordVisibility(passwordVisible);
+
+                    passwordVisible =
+                            !passwordVisible;
+
+                    setPasswordVisibility(
+                            passwordVisible
+                    );
 
                     if (passwordVisible) {
+
                         buttonTogglePassword.setImageResource(
                                 R.drawable.ic_visibility_off
                         );
+
                         buttonTogglePassword.setContentDescription(
-                                "Hide password"
+                                getString(
+                                        R.string.hide_password_content_description
+                                )
                         );
+
                     } else {
+
                         buttonTogglePassword.setImageResource(
                                 R.drawable.ic_visibility
                         );
+
                         buttonTogglePassword.setContentDescription(
-                                "Show password"
+                                getString(
+                                        R.string.show_password_content_description
+                                )
                         );
                     }
                 }
@@ -145,52 +197,39 @@ public class SignInActivity extends AppCompatActivity {
 
     private void validateSignInForm() {
 
-        String masterPassword =
-                editMasterPassword
-                        .getText()
-                        .toString();
+        textValidationMessage.setText(null);
 
-        textValidationMessage.setText("");
-
-        if (TextUtils.isEmpty(
-                masterPassword
-        )) {
+        if (editMasterPassword
+                .getText()
+                .length() == 0) {
 
             editMasterPassword.setError(
-                    "Enter your master password."
+                    getString(
+                            R.string.error_master_password_required
+                    )
             );
 
             editMasterPassword.requestFocus();
-
             return;
         }
 
         /*
-         * TODO(Maryam/security integration):
+         * TODO: Connect this screen to the real vault unlock logic later.
          *
-         * Replace this UI-only validation with
-         * the approved vault unlock workflow.
+         * Do not save or log the master password.
+         * The password should not be used directly as the SQLCipher password.
          *
-         * The raw master password must NOT become
-         * the final SQLCipher database passphrase.
-         *
-         * Maryam's key-management layer should
-         * derive/unlock the required key material
-         * before VaultDataService opens the vault.
-         *
-         * Hardware-backed biometric authentication
-         * can also be connected here later.
-         *
-         * Never log passwords or keys.
+         * Later, the security layer will verify the password,
+         * unlock the required key material, and open the encrypted vault.
          */
 
         textValidationMessage.setText(
-                "Sign-in UI is ready. Vault security integration is pending."
+                R.string.signin_pending_integration
         );
 
         Toast.makeText(
                 this,
-                "Sign-in screen ready for security integration.",
+                R.string.signin_pending_integration_toast,
                 Toast.LENGTH_LONG
         ).show();
 

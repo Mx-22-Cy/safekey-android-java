@@ -3,9 +3,9 @@
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootSignUp"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#10141F"
     android:fillViewport="true">
 
     <LinearLayout
@@ -28,16 +28,16 @@
                 android:id="@+id/imageLogo"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:contentDescription="SafeKey logo"
+                android:contentDescription="@null"
                 android:src="@drawable/ic_safekey_logo" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
-                android:text="SafeKey"
                 android:fontFamily="@font/fraunces_semibold"
-                android:textColor="#ECEEF3"
+                android:text="@string/app_name"
+                android:textColor="@color/auth_text_primary"
                 android:textSize="20sp"
                 android:textStyle="bold" />
 
@@ -48,9 +48,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="30dp"
-            android:text="Set up your vault"
             android:fontFamily="@font/fraunces_semibold"
-            android:textColor="#ECEEF3"
+            android:text="@string/signup_title"
+            android:textColor="@color/auth_text_primary"
             android:textSize="29sp"
             android:textStyle="bold" />
 
@@ -59,8 +59,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Your vault is designed to stay local and private."
-            android:textColor="#8C93A8"
+            android:text="@string/signup_subtitle"
+            android:textColor="@color/auth_text_secondary"
             android:textSize="15sp" />
 
         <!-- Password card -->
@@ -76,10 +76,12 @@
             android:paddingBottom="22dp">
 
             <TextView
+                android:id="@+id/labelMasterPassword"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Master password"
-                android:textColor="#ECEEF3"
+                android:labelFor="@id/editMasterPassword"
+                android:text="@string/auth_master_password"
+                android:textColor="@color/auth_text_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -89,13 +91,12 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/auth_input_bg"
-                android:hint="Enter master password"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
-                android:textColor="#ECEEF3"
-                android:textColorHint="#5B6178"
+                android:textColor="@color/auth_text_primary"
+                android:textColorHint="@color/auth_text_hint"
                 android:textSize="15sp" />
 
             <!-- Password strength meter -->
@@ -111,7 +112,7 @@
                     android:layout_height="3dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="3dp"
-                    android:background="#2A3142" />
+                    android:background="@color/auth_strength_inactive" />
 
                 <View
                     android:id="@+id/strengthBar2"
@@ -119,7 +120,7 @@
                     android:layout_height="3dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="3dp"
-                    android:background="#2A3142" />
+                    android:background="@color/auth_strength_inactive" />
 
                 <View
                     android:id="@+id/strengthBar3"
@@ -127,7 +128,7 @@
                     android:layout_height="3dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="3dp"
-                    android:background="#2A3142" />
+                    android:background="@color/auth_strength_inactive" />
 
                 <View
                     android:id="@+id/strengthBar4"
@@ -135,14 +136,14 @@
                     android:layout_height="3dp"
                     android:layout_weight="1"
                     android:layout_marginEnd="3dp"
-                    android:background="#2A3142" />
+                    android:background="@color/auth_strength_inactive" />
 
                 <View
                     android:id="@+id/strengthBar5"
                     android:layout_width="0dp"
                     android:layout_height="3dp"
                     android:layout_weight="1"
-                    android:background="#2A3142" />
+                    android:background="@color/auth_strength_inactive" />
 
             </LinearLayout>
 
@@ -150,8 +151,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="15+ characters. Mix letters, numbers and a symbol for a stronger vault."
-                android:textColor="#5B6178"
+                android:text="@string/signup_password_help"
+                android:textColor="@color/auth_text_hint"
                 android:textSize="12sp" />
 
             <TextView
@@ -159,17 +160,18 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text=""
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
             <TextView
+                android:id="@+id/labelConfirmPassword"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="22dp"
-                android:text="Confirm master password"
-                android:textColor="#ECEEF3"
+                android:labelFor="@id/editConfirmPassword"
+                android:text="@string/signup_confirm_master_password"
+                android:textColor="@color/auth_text_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -179,13 +181,12 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/auth_input_bg"
-                android:hint="Re-enter master password"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
-                android:textColor="#ECEEF3"
-                android:textColorHint="#5B6178"
+                android:textColor="@color/auth_text_primary"
+                android:textColorHint="@color/auth_text_hint"
                 android:textSize="15sp" />
 
             <CheckBox
@@ -194,8 +195,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
                 android:buttonTint="@color/auth_checkbox_tint"
-                android:text="Show passwords"
-                android:textColor="#8C93A8"
+                android:text="@string/auth_show_passwords"
+                android:textColor="@color/auth_text_secondary"
                 android:textSize="14sp" />
 
             <TextView
@@ -203,7 +204,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:textColor="#3ECF8E"
+                android:textColor="@color/auth_accent"
                 android:textSize="13sp" />
 
         </LinearLayout>
@@ -216,9 +217,9 @@
             android:layout_marginTop="28dp"
             android:background="@drawable/auth_primary_button_bg"
             app:backgroundTint="@null"
-            android:text="Create vault"
+            android:text="@string/signup_create_vault"
             android:textAllCaps="false"
-            android:textColor="#12261E"
+            android:textColor="@color/auth_primary_button_text"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -230,9 +231,9 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/auth_secondary_button_bg"
             app:backgroundTint="@null"
-            android:text="Already have a vault? Sign in"
+            android:text="@string/signup_already_have_vault"
             android:textAllCaps="false"
-            android:textColor="#3ECF8E"
+            android:textColor="@color/auth_accent"
             android:textSize="14sp" />
 
     </LinearLayout>

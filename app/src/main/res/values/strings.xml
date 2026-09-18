@@ -1,3 +1,50 @@
 <resources>
     <string name="app_name">SafeKey</string>
+
+    <!-- Authentication shared -->
+    <string name="auth_master_password">Master password</string>
+    <string name="auth_show_passwords">Show passwords</string>
+
+    <!-- Sign Up -->
+    <string name="signup_title">Set up your vault</string>
+    <string name="signup_subtitle">Your vault is designed to stay local and private.</string>
+    <string name="signup_confirm_master_password">Confirm master password</string>
+    <string name="signup_password_help">15+ characters. Mix letters, numbers and a symbol for a stronger vault.</string>
+    <string name="signup_create_vault">Create vault</string>
+    <string name="signup_already_have_vault">Already have a vault? Sign in</string>
+
+    <!-- Sign In -->
+    <string name="signin_title">Unlock your vault</string>
+    <string name="signin_subtitle">Access your local password vault.</string>
+    <string name="signin_unlock_vault">Unlock Vault</string>
+    <string name="signin_create_vault">New to SafeKey? Create a vault</string>
+
+    <!-- Strength -->
+    <string name="password_strength_weak">Weak</string>
+    <string name="password_strength_medium">Medium</string>
+    <string name="password_strength_strong">Strong</string>
+
+    <!-- Validation -->
+    <string name="error_master_password_required">Enter your master password.</string>
+    <plurals name="error_password_too_short">
+        <item quantity="one">Use at least %1$d character.</item>
+        <item quantity="other">Use at least %1$d characters.</item>
+    </plurals>
+
+    <plurals name="error_password_too_long">
+        <item quantity="one">Use %1$d character or fewer.</item>
+        <item quantity="other">Use %1$d characters or fewer.</item>
+    </plurals>
+    <string name="error_confirmation_required">Confirm the master password.</string>
+    <string name="error_passwords_do_not_match">Passwords do not match.</string>
+
+    <!-- Temporary integration messages -->
+    <string name="signup_pending_integration">Sign-up UI is ready. Security integration is pending.</string>
+    <string name="signup_pending_integration_toast">Sign-up screen ready for security integration.</string>
+    <string name="signin_pending_integration">Sign-in UI is ready. Vault security integration is pending.</string>
+    <string name="signin_pending_integration_toast">Sign-in screen ready for security integration.</string>
+
+    <!-- Accessibility -->
+    <string name="show_password_content_description">Show password</string>
+    <string name="hide_password_content_description">Hide password</string>
 </resources>

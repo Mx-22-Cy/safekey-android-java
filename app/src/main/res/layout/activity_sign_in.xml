@@ -3,9 +3,9 @@
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootSignIn"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#10141F"
     android:fillViewport="true">
 
     <LinearLayout
@@ -35,8 +35,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
                 android:fontFamily="@font/fraunces_semibold"
-                android:text="SafeKey"
-                android:textColor="#ECEEF3"
+                android:text="@string/app_name"
+                android:textColor="@color/auth_text_primary"
                 android:textSize="20sp" />
 
         </LinearLayout>
@@ -47,8 +47,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="32dp"
             android:fontFamily="@font/fraunces_semibold"
-            android:text="Unlock your vault"
-            android:textColor="#ECEEF3"
+            android:text="@string/signin_title"
+            android:textColor="@color/auth_text_primary"
             android:textSize="29sp" />
 
         <!-- Subtitle -->
@@ -56,8 +56,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Access your local password vault."
-            android:textColor="#8C93A8"
+            android:text="@string/signin_subtitle"
+            android:textColor="@color/auth_text_secondary"
             android:textSize="14sp" />
 
         <!-- Password card -->
@@ -70,10 +70,12 @@
             android:padding="20dp">
 
             <TextView
+                android:id="@+id/labelMasterPassword"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Master password"
-                android:textColor="#ECEEF3"
+                android:labelFor="@id/editMasterPassword"
+                android:text="@string/auth_master_password"
+                android:textColor="@color/auth_text_primary"
                 android:textSize="14sp"
                 android:textStyle="bold" />
 
@@ -87,13 +89,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:background="@drawable/auth_input_bg"
-                    android:hint="Enter master password"
                     android:importantForAutofill="no"
                     android:inputType="textPassword"
                     android:paddingStart="16dp"
                     android:paddingEnd="52dp"
-                    android:textColor="#ECEEF3"
-                    android:textColorHint="#65758A"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_hint_signin"
                     android:textSize="15sp" />
 
                 <ImageButton
@@ -102,7 +103,7 @@
                     android:layout_height="48dp"
                     android:layout_gravity="end|center_vertical"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Show password"
+                    android:contentDescription="@string/show_password_content_description"
                     android:padding="12dp"
                     android:src="@drawable/ic_visibility" />
 
@@ -113,7 +114,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:textColor="#3ECF8E"
+                android:textColor="@color/auth_accent"
                 android:textSize="13sp" />
 
         </LinearLayout>
@@ -126,9 +127,9 @@
             android:layout_marginTop="28dp"
             android:background="@drawable/auth_primary_button_bg"
             app:backgroundTint="@null"
-            android:text="Unlock Vault"
+            android:text="@string/signin_unlock_vault"
             android:textAllCaps="false"
-            android:textColor="#12261E"
+            android:textColor="@color/auth_primary_button_text"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -140,9 +141,9 @@
             android:layout_marginTop="12dp"
             android:background="@drawable/auth_secondary_button_bg"
             app:backgroundTint="@null"
-            android:text="New to SafeKey? Create a vault"
+            android:text="@string/signin_create_vault"
             android:textAllCaps="false"
-            android:textColor="#3ECF8E"
+            android:textColor="@color/auth_accent"
             android:textSize="14sp" />
 
     </LinearLayout>

@@ -32,8 +32,8 @@
             android:exported="false" />
 
         <!--
-            Keep MainActivity as the launcher.
-            Do not change MainActivity.java in this branch.
+            MainActivity is kept for later integration.
+            SignUpActivity is the temporary launcher for Week 2 UI testing.
         -->
         <activity
             android:name=".MainActivity"
