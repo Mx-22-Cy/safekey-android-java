@@ -3,6 +3,7 @@
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/rootSignUp"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -91,13 +92,16 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/auth_input_bg"
+                android:hint="@string/auth_enter_master_password"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:textColor="@color/auth_text_primary"
                 android:textColorHint="@color/auth_text_hint"
-                android:textSize="15sp" />
+                android:textSize="15sp"
+                tools:ignore="LabelFor" />
+
 
             <!-- Password strength meter -->
             <LinearLayout
@@ -181,13 +185,15 @@
                 android:layout_height="54dp"
                 android:layout_marginTop="8dp"
                 android:background="@drawable/auth_input_bg"
+                android:hint="@string/signup_reenter_master_password"
                 android:importantForAutofill="no"
                 android:inputType="textPassword"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:textColor="@color/auth_text_primary"
                 android:textColorHint="@color/auth_text_hint"
-                android:textSize="15sp" />
+                android:textSize="15sp"
+                tools:ignore="LabelFor" />
 
             <CheckBox
                 android:id="@+id/checkShowPasswords"

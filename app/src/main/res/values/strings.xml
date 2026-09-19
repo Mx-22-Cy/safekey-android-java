@@ -3,12 +3,14 @@
 
     <!-- Authentication shared -->
     <string name="auth_master_password">Master password</string>
+    <string name="auth_enter_master_password">Enter master password</string>
     <string name="auth_show_passwords">Show passwords</string>
 
     <!-- Sign Up -->
     <string name="signup_title">Set up your vault</string>
     <string name="signup_subtitle">Your vault is designed to stay local and private.</string>
     <string name="signup_confirm_master_password">Confirm master password</string>
+    <string name="signup_reenter_master_password">Re-enter master password</string>
     <string name="signup_password_help">15+ characters. Mix letters, numbers and a symbol for a stronger vault.</string>
     <string name="signup_create_vault">Create vault</string>
     <string name="signup_already_have_vault">Already have a vault? Sign in</string>
@@ -26,6 +28,7 @@
 
     <!-- Validation -->
     <string name="error_master_password_required">Enter your master password.</string>
+    <string name="error_password_easily_guessed">Choose a less common and less repetitive master password.</string>
     <plurals name="error_password_too_short">
         <item quantity="one">Use at least %1$d character.</item>
         <item quantity="other">Use at least %1$d characters.</item>

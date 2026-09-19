@@ -3,6 +3,7 @@
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/rootSignIn"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -89,13 +90,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:background="@drawable/auth_input_bg"
+                    android:hint="@string/auth_enter_master_password"
                     android:importantForAutofill="no"
                     android:inputType="textPassword"
                     android:paddingStart="16dp"
                     android:paddingEnd="52dp"
                     android:textColor="@color/auth_text_primary"
                     android:textColorHint="@color/auth_text_hint_signin"
-                    android:textSize="15sp" />
+                    android:textSize="15sp"
+                    tools:ignore="LabelFor" />
 
                 <ImageButton
                     android:id="@+id/buttonTogglePassword"

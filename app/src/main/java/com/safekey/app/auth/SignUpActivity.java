@@ -622,12 +622,23 @@ public class SignUpActivity extends AppCompatActivity {
                     editConfirmPassword.requestFocus();
                     return;
 
+                case EASILY_GUESSED:
+
+                    editMasterPassword.setError(
+                            getString(
+                                    R.string.error_password_easily_guessed
+                            )
+                    );
+
+                    editMasterPassword.requestFocus();
+                    return;
+
                 case VALID:
                     break;
             }
 
             /*
-             * TODO: Connect this screen to Maryam's security logic later.
+             * TODO: Connect this screen to the remaining security and key-management logic later.
              *
              * Do not save or log the master password.
              * The master password should not be used directly as the
