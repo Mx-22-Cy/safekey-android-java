@@ -159,7 +159,7 @@ public class SignUpActivity extends AppCompatActivity {
                             int count
                     ) {
                         updatePasswordStrength(
-                                s.toString()
+                                s
                         );
                     }
 
@@ -254,7 +254,7 @@ public class SignUpActivity extends AppCompatActivity {
     }
 
     private void updatePasswordStrength(
-            String password
+            CharSequence password
     ) {
 
         View[] bars = {
@@ -277,25 +277,57 @@ public class SignUpActivity extends AppCompatActivity {
             );
         }
 
-        boolean hasLower =
-                password.matches(
-                        ".*[a-z].*"
-                );
+        boolean hasLower = false;
+        boolean hasUpper = false;
+        boolean hasDigit = false;
+        boolean hasSymbol = false;
 
-        boolean hasUpper =
-                password.matches(
-                        ".*[A-Z].*"
-                );
+        int characterCount = 0;
 
-        boolean hasDigit =
-                password.matches(
-                        ".*\\d.*"
-                );
+        for (
+                int offset = 0;
+                offset < password.length();
+        ) {
 
-        boolean hasSymbol =
-                password.matches(
-                        ".*[^A-Za-z0-9].*"
-                );
+            int codePoint =
+                    Character.codePointAt(
+                            password,
+                            offset
+                    );
+
+            characterCount++;
+
+            if (
+                    codePoint >= 'a'
+                            && codePoint <= 'z'
+            ) {
+
+                hasLower = true;
+
+            } else if (
+                    codePoint >= 'A'
+                            && codePoint <= 'Z'
+            ) {
+
+                hasUpper = true;
+
+            } else if (
+                    codePoint >= '0'
+                            && codePoint <= '9'
+            ) {
+
+                hasDigit = true;
+
+            } else {
+
+                hasSymbol = true;
+            }
+
+            offset +=
+                    Character.charCount(
+                            codePoint
+                    );
+        }
 
         int categories = 0;
 
@@ -315,15 +347,9 @@ public class SignUpActivity extends AppCompatActivity {
             categories++;
         }
 
-        int characterCount =
-                password.codePointCount(
-                        0,
-                        password.length()
-                );
-
         int strength;
 
-        if (password.isEmpty()) {
+        if (password.length() == 0) {
 
             strength = 0;
 
@@ -457,7 +483,7 @@ public class SignUpActivity extends AppCompatActivity {
     }
 
     private boolean isObviouslyRepetitive(
-            String password
+            CharSequence password
     ) {
 
         if (password.length() < 2) {
@@ -465,18 +491,10 @@ public class SignUpActivity extends AppCompatActivity {
         }
 
         // Advisory strength warning only.
-        // Same character repeated:
-        // aaaaaaaa, 11111111, @@@@@@@@
-        if (password.matches(
-                "^(.)\\1+$"
-        )) {
-            return true;
-        }
-
-        // Short pattern repeated:
-        // 1a1a1a1a, abcabcabc, abcdabcd
+        // Detect repeated characters or short repeated patterns
+        // without creating immutable password Strings.
         for (
-                int unitLength = 2;
+                int unitLength = 1;
                 unitLength <= 4;
                 unitLength++
         ) {
@@ -488,25 +506,19 @@ public class SignUpActivity extends AppCompatActivity {
                 continue;
             }
 
-            String unit =
-                    password.substring(
-                            0,
-                            unitLength
-                    );
-
             boolean repeated = true;
 
             for (
                     int i = unitLength;
                     i < password.length();
-                    i += unitLength
+                    i++
             ) {
 
                 if (
-                        !password.substring(
-                                i,
-                                i + unitLength
-                        ).equals(unit)
+                        password.charAt(i)
+                                != password.charAt(
+                                i % unitLength
+                        )
                 ) {
 
                     repeated = false;
