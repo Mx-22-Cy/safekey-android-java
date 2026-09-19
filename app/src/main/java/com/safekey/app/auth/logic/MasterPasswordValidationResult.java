@@ -5,6 +5,7 @@ public enum MasterPasswordValidationResult {
     REQUIRED,
     TOO_SHORT,
     TOO_LONG,
+    EASILY_GUESSED,
     CONFIRMATION_REQUIRED,
     PASSWORDS_DO_NOT_MATCH
 }
