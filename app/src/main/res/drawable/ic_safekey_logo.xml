@@ -1,0 +1,40 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="40dp"
+    android:height="40dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+
+  <path
+      android:pathData="M20,2L36.9,11.5V28.5L20,38L3.1,28.5V11.5Z"
+      android:strokeWidth="2"
+      android:fillColor="@android:color/transparent"
+      android:strokeColor="@color/auth_logo_stroke" />
+
+  <path
+      android:pathData="M20,17m-5.5,0a5.5,5.5 0,1 1,11 0a5.5,5.5 0,1 1,-11 0"
+      android:strokeWidth="2"
+      android:fillColor="@android:color/transparent"
+      android:strokeColor="@color/auth_logo_stroke" />
+
+  <path
+      android:pathData="M20,22L20,29"
+      android:strokeWidth="2"
+      android:fillColor="@android:color/transparent"
+      android:strokeColor="@color/auth_logo_stroke"
+      android:strokeLineCap="round" />
+
+  <path
+      android:pathData="M20,22L16.5,25.5"
+      android:strokeWidth="2"
+      android:fillColor="@android:color/transparent"
+      android:strokeColor="@color/auth_logo_stroke"
+      android:strokeLineCap="round" />
+
+  <path
+      android:pathData="M20,25.5L17.7,27.8"
+      android:strokeWidth="2"
+      android:fillColor="@android:color/transparent"
+      android:strokeColor="@color/auth_logo_stroke"
+      android:strokeLineCap="round" />
+
+</vector>

@@ -1,5 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <color name="auth_logo_stroke">#2DD4B0</color>
+    <color name="auth_primary_button_background">#F2EFE6</color>
+    <color name="auth_input_background">#12161F</color>
+    <color name="auth_input_border">#2A3142</color>
+    <color name="auth_card_background">#171C2B</color>
+    <color name="auth_card_border">#262C40</color>
+
+    <!-- Authentication screen colors -->
+    <color name="auth_background">#10141F</color>
+
+    <color name="auth_text_primary">#ECEEF3</color>
+    <color name="auth_text_secondary">#8C93A8</color>
+    <color name="auth_text_hint">#5B6178</color>
+    <color name="auth_text_hint_signin">#65758A</color>
+
+    <color name="auth_accent">#3ECF8E</color>
+    <color name="auth_primary_button_text">#12261E</color>
+
+    <!-- Password strength colors -->
+    <color name="auth_strength_inactive">#2A3142</color>
+    <color name="auth_strength_weak">#EF4444</color>
+    <color name="auth_strength_medium">#EAB308</color>
+    <color name="auth_strength_strong">#2DD4B0</color>
+
 </resources>
