@@ -33,11 +33,11 @@ public class MasterPasswordPolicyTest {
     }
 
     @Test
-    public void validate_fifteenCharacters_returnsValid() {
+    public void validate_fifteenUniqueCharacters_returnsValid() {
         assertEquals(
                 MasterPasswordValidationResult.VALID,
                 MasterPasswordPolicy.validate(
-                        "123456789012345".toCharArray()
+                        "clouds drift by".toCharArray()
                 )
         );
     }
@@ -53,14 +53,30 @@ public class MasterPasswordPolicyTest {
     }
 
     @Test
-    public void validate_maximumLength_returnsValid() {
+    public void validate_lowercasePassphrase_returnsValid() {
         assertEquals(
                 MasterPasswordValidationResult.VALID,
                 MasterPasswordPolicy.validate(
-                        "a".repeat(
-                                MasterPasswordPolicy.MAX_LENGTH
-                        ).toCharArray()
+                        "clouds drift quietly over mountains".toCharArray()
                 )
+        );
+    }
+
+    @Test
+    public void validate_maximumLength_returnsValid() {
+        char[] password = (
+                "abcdefghijklmnopqrstuvwxyz".repeat(4)
+                        + "abcdefghijklmnopqrstuvwx"
+        ).toCharArray();
+
+        assertEquals(
+                MasterPasswordPolicy.MAX_LENGTH,
+                password.length
+        );
+
+        assertEquals(
+                MasterPasswordValidationResult.VALID,
+                MasterPasswordPolicy.validate(password)
         );
     }
 
@@ -78,12 +94,63 @@ public class MasterPasswordPolicyTest {
 
     @Test
     public void validate_unicodeCharacters_countsCodePoints() {
-        char[] password =
-                "\uD83D\uDE00".repeat(65).toCharArray();
+        char[] password = (
+                "\uD83D\uDE00".repeat(64) + "Z"
+        ).toCharArray();
 
         assertEquals(
                 MasterPasswordValidationResult.VALID,
                 MasterPasswordPolicy.validate(password)
+        );
+    }
+
+    @Test
+    public void validate_repeatedCharacter_returnsEasilyGuessed() {
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validate(
+                        "aaaaaaaaaaaaaaa".toCharArray()
+                )
+        );
+    }
+
+    @Test
+    public void validate_repeatedShortPattern_returnsEasilyGuessed() {
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validate(
+                        "abcabcabcabcabc".toCharArray()
+                )
+        );
+    }
+
+    @Test
+    public void validate_commonPassword_returnsEasilyGuessed() {
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validate(
+                        "passwordpassword".toCharArray()
+                )
+        );
+    }
+
+    @Test
+    public void validate_commonPasswordIgnoringCase_returnsEasilyGuessed() {
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validate(
+                        "PasswordPassword".toCharArray()
+                )
+        );
+    }
+
+    @Test
+    public void validate_numericSequence_returnsEasilyGuessed() {
+        assertEquals(
+                MasterPasswordValidationResult.EASILY_GUESSED,
+                MasterPasswordPolicy.validate(
+                        "123456789012345".toCharArray()
+                )
         );
     }
 }
