@@ -12,13 +12,14 @@
         android:theme="@style/Theme.SafeKey">
 
         <!--
-            MainActivity remains the launcher activity.
-            Do not change MainActivity.java on this branch.
+            Week 2 authentication UI.
+            SignUpActivity remains the temporary launcher
+            until the final authentication/navigation
+            integration is completed.
         -->
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:name=".auth.SignUpActivity"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -28,11 +29,23 @@
 
         </activity>
 
+        <activity
+            android:name=".auth.SignInActivity"
+            android:exported="false" />
+
         <!--
-            Week 3 Home / Dashboard screen.
+            Week 3 Home / Dashboard.
+            It is not externally launchable.
         -->
         <activity
             android:name=".home.HomeActivity"
+            android:exported="false" />
+
+        <!--
+            MainActivity is kept for later integration.
+        -->
+        <activity
+            android:name=".MainActivity"
             android:exported="false" />
 
     </application>
