@@ -50,6 +50,23 @@ public class SafeKeyDatabase {
             String databasePassphrase
     ) {
 
+        /*
+         * Reject a missing database passphrase
+         * before SQLCipher attempts to open or
+         * create the database.
+         *
+         * The production database passphrase will
+         * later come from the security/key-management
+         * layer. It must never be hard-coded here.
+         */
+        if (databasePassphrase == null
+                || databasePassphrase.isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    "Database passphrase cannot be null or empty."
+            );
+        }
+
         if (database != null
                 && database.isOpen()) {
 
@@ -68,6 +85,14 @@ public class SafeKeyDatabase {
             parent.mkdirs();
         }
 
+        /*
+         * Keep this connection local until all
+         * database initialization is complete.
+         *
+         * If opening succeeds but schema setup,
+         * version checking, or migration fails,
+         * this local connection must be closed.
+         */
         SQLiteDatabase db =
                 SQLiteDatabase.openOrCreateDatabase(
                         databaseFile,
@@ -77,35 +102,81 @@ public class SafeKeyDatabase {
                         null
                 );
 
-        db.execSQL(
-                "PRAGMA foreign_keys = ON"
-        );
+        try {
 
-        int currentVersion =
-                db.getVersion();
-
-        if (currentVersion == 0) {
-
-            createVersion1Schema(db);
-
-            db.setVersion(
-                    DATABASE_VERSION
+            db.execSQL(
+                    "PRAGMA foreign_keys = ON"
             );
 
-        } else if (
-                currentVersion < DATABASE_VERSION
+            int currentVersion =
+                    db.getVersion();
+
+            if (currentVersion == 0) {
+
+                createVersion1Schema(
+                        db
+                );
+
+                db.setVersion(
+                        DATABASE_VERSION
+                );
+
+            } else if (
+                    currentVersion < DATABASE_VERSION
+            ) {
+
+                migrateDatabase(
+                        db,
+                        currentVersion,
+                        DATABASE_VERSION
+                );
+            }
+
+            /*
+             * Only store the connection in the
+             * instance field after initialization
+             * has completed successfully.
+             */
+            database = db;
+
+            return database;
+
+        } catch (
+                RuntimeException
+                | Error initializationError
         ) {
 
-            migrateDatabase(
-                    db,
-                    currentVersion,
-                    DATABASE_VERSION
-            );
+            /*
+             * At this point the SQLCipher connection
+             * may already be open, but database has
+             * not yet been assigned.
+             *
+             * Close the local connection directly
+             * before rethrowing the original error.
+             */
+            try {
+
+                if (db.isOpen()) {
+                    db.close();
+                }
+
+            } catch (
+                    RuntimeException
+                    | Error closeError
+            ) {
+
+                /*
+                 * Preserve the original initialization
+                 * failure while also retaining information
+                 * about a possible close failure.
+                 */
+                initializationError.addSuppressed(
+                        closeError
+                );
+            }
+
+            throw initializationError;
         }
-
-        database = db;
-
-        return database;
     }
 
     private void createVersion1Schema(
@@ -116,8 +187,13 @@ public class SafeKeyDatabase {
 
         try {
 
-            createCredentialsTable(db);
-            createSecureNotesTable(db);
+            createCredentialsTable(
+                    db
+            );
+
+            createSecureNotesTable(
+                    db
+            );
 
             db.setTransactionSuccessful();
 
