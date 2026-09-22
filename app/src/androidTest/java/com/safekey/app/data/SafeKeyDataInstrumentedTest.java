@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import android.content.Context;
 
@@ -32,6 +33,15 @@ public class SafeKeyDataInstrumentedTest {
     private static final String TEST_DATABASE_NAME =
             "safekey_instrumented_test.db";
 
+    private static final String NULL_PASSPHRASE_DATABASE_NAME =
+            "safekey_null_passphrase_test.db";
+
+    private static final String EMPTY_PASSPHRASE_DATABASE_NAME =
+            "safekey_empty_passphrase_test.db";
+
+    private static final String WRONG_PASSPHRASE_DATABASE_NAME =
+            "safekey_wrong_passphrase_test.db";
+
     /*
      * Test-only SQLCipher passphrase.
      * This value exists only under src/androidTest.
@@ -39,6 +49,14 @@ public class SafeKeyDataInstrumentedTest {
      */
     private static final String TEST_DATABASE_PASSPHRASE =
             "SafeKey-Instrumented-Test-Passphrase-2026";
+
+    /*
+     * Test-only incorrect SQLCipher passphrase.
+     * Used only to verify that a database cannot
+     * be opened with the wrong key.
+     */
+    private static final String WRONG_DATABASE_PASSPHRASE =
+            "SafeKey-Incorrect-Test-Passphrase-2026";
 
     private Context context;
 
@@ -60,6 +78,18 @@ public class SafeKeyDataInstrumentedTest {
 
         deleteTestDatabase();
 
+        context.deleteDatabase(
+                NULL_PASSPHRASE_DATABASE_NAME
+        );
+
+        context.deleteDatabase(
+                EMPTY_PASSPHRASE_DATABASE_NAME
+        );
+
+        context.deleteDatabase(
+                WRONG_PASSPHRASE_DATABASE_NAME
+        );
+
         openTestDatabase();
     }
 
@@ -76,6 +106,18 @@ public class SafeKeyDataInstrumentedTest {
         databaseManager = null;
 
         deleteTestDatabase();
+
+        context.deleteDatabase(
+                NULL_PASSPHRASE_DATABASE_NAME
+        );
+
+        context.deleteDatabase(
+                EMPTY_PASSPHRASE_DATABASE_NAME
+        );
+
+        context.deleteDatabase(
+                WRONG_PASSPHRASE_DATABASE_NAME
+        );
     }
 
     private void openTestDatabase() {
@@ -107,6 +149,251 @@ public class SafeKeyDataInstrumentedTest {
         context.deleteDatabase(
                 TEST_DATABASE_NAME
         );
+    }
+
+    @Test
+    public void nullDatabasePassphraseIsRejected() {
+
+        SafeKeyDatabase nullPassphraseDatabase =
+                new SafeKeyDatabase(
+                        context,
+                        NULL_PASSPHRASE_DATABASE_NAME
+                );
+
+        assertFalse(
+                context
+                        .getDatabasePath(
+                                NULL_PASSPHRASE_DATABASE_NAME
+                        )
+                        .exists()
+        );
+
+        try {
+
+            nullPassphraseDatabase.open(
+                    null
+            );
+
+            fail(
+                    "Expected null database passphrase to be rejected."
+            );
+
+        } catch (IllegalArgumentException expected) {
+
+            assertEquals(
+                    "Database passphrase cannot be null or empty.",
+                    expected.getMessage()
+            );
+
+            assertFalse(
+                    nullPassphraseDatabase.isOpen()
+            );
+
+            assertFalse(
+                    context
+                            .getDatabasePath(
+                                    NULL_PASSPHRASE_DATABASE_NAME
+                            )
+                            .exists()
+            );
+
+        } finally {
+
+            nullPassphraseDatabase.close();
+
+            context.deleteDatabase(
+                    NULL_PASSPHRASE_DATABASE_NAME
+            );
+        }
+    }
+
+    @Test
+    public void emptyDatabasePassphraseIsRejected() {
+
+        SafeKeyDatabase emptyPassphraseDatabase =
+                new SafeKeyDatabase(
+                        context,
+                        EMPTY_PASSPHRASE_DATABASE_NAME
+                );
+
+        assertFalse(
+                context
+                        .getDatabasePath(
+                                EMPTY_PASSPHRASE_DATABASE_NAME
+                        )
+                        .exists()
+        );
+
+        try {
+
+            emptyPassphraseDatabase.open(
+                    ""
+            );
+
+            fail(
+                    "Expected empty database passphrase to be rejected."
+            );
+
+        } catch (IllegalArgumentException expected) {
+
+            assertEquals(
+                    "Database passphrase cannot be null or empty.",
+                    expected.getMessage()
+            );
+
+            assertFalse(
+                    emptyPassphraseDatabase.isOpen()
+            );
+
+            assertFalse(
+                    context
+                            .getDatabasePath(
+                                    EMPTY_PASSPHRASE_DATABASE_NAME
+                            )
+                            .exists()
+            );
+
+        } finally {
+
+            emptyPassphraseDatabase.close();
+
+            context.deleteDatabase(
+                    EMPTY_PASSPHRASE_DATABASE_NAME
+            );
+        }
+    }
+
+    @Test
+    public void wrongDatabasePassphraseIsRejectedAndCorrectPassphraseStillWorks() {
+
+        SafeKeyDatabase correctDatabaseManager =
+                new SafeKeyDatabase(
+                        context,
+                        WRONG_PASSPHRASE_DATABASE_NAME
+                );
+
+        SQLiteDatabase correctDatabase =
+                correctDatabaseManager.open(
+                        TEST_DATABASE_PASSPHRASE
+                );
+
+        CredentialRepository correctRepository =
+                new CredentialRepository(
+                        correctDatabase
+                );
+
+        Credential credential =
+                new Credential(
+                        "Wrong Passphrase Test",
+                        "wrong-passphrase-user",
+                        "wrong-passphrase-secret",
+                        "wrong-passphrase.test",
+                        "Work",
+                        "Wrong passphrase test note"
+                );
+
+        long credentialId =
+                correctRepository.insert(
+                        credential
+                );
+
+        assertTrue(
+                credentialId > 0
+        );
+
+        correctDatabaseManager.close();
+
+        assertFalse(
+                correctDatabaseManager.isOpen()
+        );
+
+        SafeKeyDatabase wrongDatabaseManager =
+                new SafeKeyDatabase(
+                        context,
+                        WRONG_PASSPHRASE_DATABASE_NAME
+                );
+
+        try {
+
+            wrongDatabaseManager.open(
+                    WRONG_DATABASE_PASSPHRASE
+            );
+
+            fail(
+                    "Expected the wrong database passphrase to fail."
+            );
+
+        } catch (RuntimeException expected) {
+
+            assertFalse(
+                    wrongDatabaseManager.isOpen()
+            );
+
+        } finally {
+
+            wrongDatabaseManager.close();
+        }
+
+        SafeKeyDatabase reopenedDatabaseManager =
+                new SafeKeyDatabase(
+                        context,
+                        WRONG_PASSPHRASE_DATABASE_NAME
+                );
+
+        try {
+
+            SQLiteDatabase reopenedDatabase =
+                    reopenedDatabaseManager.open(
+                            TEST_DATABASE_PASSPHRASE
+                    );
+
+            CredentialRepository reopenedRepository =
+                    new CredentialRepository(
+                            reopenedDatabase
+                    );
+
+            Credential reopenedCredential =
+                    reopenedRepository.getById(
+                            credentialId
+                    );
+
+            assertNotNull(
+                    reopenedCredential
+            );
+
+            assertEquals(
+                    credentialId,
+                    reopenedCredential.getId()
+            );
+
+            assertEquals(
+                    "Wrong Passphrase Test",
+                    reopenedCredential.getTitle()
+            );
+
+            assertEquals(
+                    "wrong-passphrase-user",
+                    reopenedCredential.getUsername()
+            );
+
+            assertEquals(
+                    "wrong-passphrase-secret",
+                    reopenedCredential.getPassword()
+            );
+
+            assertEquals(
+                    "Wrong passphrase test note",
+                    reopenedCredential.getNotes()
+            );
+
+        } finally {
+
+            reopenedDatabaseManager.close();
+
+            context.deleteDatabase(
+                    WRONG_PASSPHRASE_DATABASE_NAME
+            );
+        }
     }
 
     @Test
@@ -173,12 +460,40 @@ public class SafeKeyDataInstrumentedTest {
                 savedCredential.getUsername()
         );
 
+        assertEquals(
+                "test-secret",
+                savedCredential.getPassword()
+        );
+
+        assertEquals(
+                "Test-only note",
+                savedCredential.getNotes()
+        );
+
+        assertEquals(
+                "example.test",
+                savedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "Work",
+                savedCredential.getCategory()
+        );
+
         savedCredential.setTitle(
                 "Updated Credential CRUD Test"
         );
 
         savedCredential.setWebsite(
                 "updated.example.test"
+        );
+
+        savedCredential.setPassword(
+                "updated-test-secret"
+        );
+
+        savedCredential.setNotes(
+                "Updated test-only note"
         );
 
         int updatedRows =
@@ -208,6 +523,16 @@ public class SafeKeyDataInstrumentedTest {
         assertEquals(
                 "updated.example.test",
                 updatedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "updated-test-secret",
+                updatedCredential.getPassword()
+        );
+
+        assertEquals(
+                "Updated test-only note",
+                updatedCredential.getNotes()
         );
 
         int deletedRows =
@@ -370,6 +695,11 @@ public class SafeKeyDataInstrumentedTest {
                 savedNote.getTitle()
         );
 
+        assertEquals(
+                "Test-only secure note content",
+                savedNote.getContent()
+        );
+
         savedNote.setTitle(
                 "Updated Secure Note CRUD Test"
         );
@@ -402,6 +732,11 @@ public class SafeKeyDataInstrumentedTest {
                 updatedNote.getTitle()
         );
 
+        assertEquals(
+                "Updated test-only secure note content",
+                updatedNote.getContent()
+        );
+
         int deletedRows =
                 secureNoteRepository.delete(
                         noteId
@@ -423,6 +758,80 @@ public class SafeKeyDataInstrumentedTest {
     }
 
     @Test
+    public void secureNotesCanBeSearched() {
+
+        SecureNote firstNote =
+                new SecureNote(
+                        "Recovery Codes",
+                        "Backup recovery codes for testing"
+                );
+
+        SecureNote secondNote =
+                new SecureNote(
+                        "University Reminder",
+                        "Submit the project report"
+                );
+
+        long firstNoteId =
+                secureNoteRepository.insert(
+                        firstNote
+                );
+
+        long secondNoteId =
+                secureNoteRepository.insert(
+                        secondNote
+                );
+
+        assertTrue(
+                firstNoteId > 0
+        );
+
+        assertTrue(
+                secondNoteId > 0
+        );
+
+        List<SecureNote> titleResults =
+                secureNoteRepository.search(
+                        "Recovery"
+                );
+
+        assertEquals(
+                1,
+                titleResults.size()
+        );
+
+        assertEquals(
+                "Recovery Codes",
+                titleResults.get(0).getTitle()
+        );
+
+        assertEquals(
+                "Backup recovery codes for testing",
+                titleResults.get(0).getContent()
+        );
+
+        List<SecureNote> contentResults =
+                secureNoteRepository.search(
+                        "project report"
+                );
+
+        assertEquals(
+                1,
+                contentResults.size()
+        );
+
+        assertEquals(
+                "University Reminder",
+                contentResults.get(0).getTitle()
+        );
+
+        assertEquals(
+                "Submit the project report",
+                contentResults.get(0).getContent()
+        );
+    }
+
+    @Test
     public void dataRemainsAfterDatabaseIsClosedAndReopened() {
 
         Credential credential =
@@ -432,7 +841,7 @@ public class SafeKeyDataInstrumentedTest {
                         "persistence-test-secret",
                         "persistence.test",
                         "Work",
-                        ""
+                        "Persistence credential note"
                 );
 
         SecureNote secureNote =
@@ -491,8 +900,28 @@ public class SafeKeyDataInstrumentedTest {
         );
 
         assertEquals(
+                "persistence-user",
+                reopenedCredential.getUsername()
+        );
+
+        assertEquals(
+                "persistence-test-secret",
+                reopenedCredential.getPassword()
+        );
+
+        assertEquals(
+                "Persistence credential note",
+                reopenedCredential.getNotes()
+        );
+
+        assertEquals(
                 "Persistence Secure Note",
                 reopenedNote.getTitle()
+        );
+
+        assertEquals(
+                "Persistence test-only content",
+                reopenedNote.getContent()
         );
     }
 }
