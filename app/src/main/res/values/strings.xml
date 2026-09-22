@@ -50,4 +50,46 @@
     <!-- Accessibility -->
     <string name="show_password_content_description">Show password</string>
     <string name="hide_password_content_description">Hide password</string>
+
+    <!-- Week 3 Home / Dashboard -->
+    <string name="home_preview_data">PREVIEW DATA</string>
+    <string name="home_security_score_label">SECURITY SCORE</string>
+    <string name="home_security_score_max" translatable="false">/100</string>
+    <string name="home_security_good">Good Security</string>
+
+
+    <string name="home_credentials_at_risk">credentials at risk</string>
+    <string name="home_breach_alert_label">breach alert</string>
+
+    <string name="home_quick_actions">QUICK ACTIONS</string>
+    <string name="home_open_vault">Open Vault</string>
+    <string name="home_add_credential">Add Credential</string>
+
+    <string name="home_security_alert">Security Alert</string>
+    <string name="home_security_alert_preview">1 credential needs review</string>
+    <string name="home_review">Review ›</string>
+
+    <string name="home_vault_summary">VAULT SUMMARY</string>
+    <string name="home_credentials">Credentials</string>
+    <string name="home_favorites">Favorites</string>
+    <string name="home_secure_notes">Secure Notes</string>
+
+    <string name="home_nav_home">Home</string>
+    <string name="home_nav_vault">Vault</string>
+    <string name="home_nav_alerts">Alerts</string>
+    <string name="home_nav_settings">Settings</string>
+
+    <!-- Week 3 preview values -->
+    <string name="home_preview_at_risk_count" translatable="false">2</string>
+    <string name="home_preview_breach_count" translatable="false">1</string>
+    <string name="home_preview_credential_count" translatable="false">12</string>
+    <string name="home_preview_favorite_count" translatable="false">4</string>
+    <string name="home_preview_secure_note_count" translatable="false">3</string>
+
+    <!-- Home accessibility -->
+    <string name="home_security_score_accessibility">Security score is %1$d. Maximum score is 100.</string>
+
+    <!-- Temporary Week 3 integration messages -->
+    <string name="home_vault_navigation_pending">Vault navigation will be connected during integration.</string>
+    <string name="home_credential_creation_pending">Credential creation will be connected during integration.</string>
 </resources>

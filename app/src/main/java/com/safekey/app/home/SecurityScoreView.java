@@ -2,11 +2,12 @@ package com.safekey.app.home;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
+
+import com.safekey.app.R;
 
 public class SecurityScoreView extends View {
 
@@ -22,11 +23,14 @@ public class SecurityScoreView extends View {
     private final Paint labelPaint =
             new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private int score = 0;
+    // Reused instead of creating a new RectF inside onDraw().
+    private final RectF arcBounds = new RectF();
 
-    public SecurityScoreView(
-            Context context
-    ) {
+    private int score = 0;
+    private String scoreText = "0";
+    private String maxScoreText;
+
+    public SecurityScoreView(Context context) {
         super(context);
         initialize();
     }
@@ -50,92 +54,81 @@ public class SecurityScoreView extends View {
 
     private void initialize() {
 
-        backgroundPaint.setStyle(
-                Paint.Style.STROKE
-        );
-
-        backgroundPaint.setStrokeWidth(
-                dpToPx(14)
-        );
-
-        backgroundPaint.setStrokeCap(
-                Paint.Cap.ROUND
-        );
-
+        backgroundPaint.setStyle(Paint.Style.STROKE);
+        backgroundPaint.setStrokeWidth(dpToPx(10));
+        backgroundPaint.setStrokeCap(Paint.Cap.ROUND);
         backgroundPaint.setColor(
-                Color.parseColor("#223247")
+                getContext().getColor(R.color.auth_input_border)
         );
 
-        progressPaint.setStyle(
-                Paint.Style.STROKE
-        );
-
-        progressPaint.setStrokeWidth(
-                dpToPx(14)
-        );
-
-        progressPaint.setStrokeCap(
-                Paint.Cap.ROUND
-        );
-
+        progressPaint.setStyle(Paint.Style.STROKE);
+        progressPaint.setStrokeWidth(dpToPx(10));
+        progressPaint.setStrokeCap(Paint.Cap.ROUND);
         progressPaint.setColor(
-                Color.parseColor("#00FF88")
+                getContext().getColor(R.color.auth_accent)
         );
 
-        scorePaint.setTextAlign(
-                Paint.Align.CENTER
-        );
-
+        scorePaint.setTextAlign(Paint.Align.CENTER);
         scorePaint.setTypeface(
                 android.graphics.Typeface.DEFAULT_BOLD
         );
-
         scorePaint.setColor(
-                Color.WHITE
+                getContext().getColor(R.color.auth_text_primary)
         );
+        scorePaint.setTextSize(spToPx(32));
 
-        scorePaint.setTextSize(
-                spToPx(34)
-        );
-
-        labelPaint.setTextAlign(
-                Paint.Align.CENTER
-        );
-
+        labelPaint.setTextAlign(Paint.Align.CENTER);
         labelPaint.setColor(
-                Color.parseColor("#8FA1B7")
+                getContext().getColor(R.color.auth_text_secondary)
+        );
+        labelPaint.setTextSize(spToPx(11));
+
+        scoreText = Integer.toString(score);
+
+        maxScoreText =
+                getResources().getString(
+                        R.string.home_security_score_max
+                );
+
+        setImportantForAccessibility(
+                IMPORTANT_FOR_ACCESSIBILITY_YES
         );
 
-        labelPaint.setTextSize(
-                spToPx(12)
-        );
+        updateAccessibilityDescription();
     }
 
-    public void setScore(
-            int score
-    ) {
+    public void setScore(int score) {
 
         this.score =
                 Math.max(
                         0,
-                        Math.min(
-                                100,
-                                score
-                        )
+                        Math.min(100, score)
                 );
+
+        scoreText =
+                Integer.toString(this.score);
+
+        updateAccessibilityDescription();
 
         invalidate();
     }
 
+    private void updateAccessibilityDescription() {
+
+        setContentDescription(
+                getResources().getString(
+                        R.string.home_security_score_accessibility,
+                        score
+                )
+        );
+    }
+
     @Override
-    protected void onDraw(
-            Canvas canvas
-    ) {
+    protected void onDraw(Canvas canvas) {
 
         super.onDraw(canvas);
 
-        float padding =
-                dpToPx(18);
+        float padding = dpToPx(12);
 
         float size =
                 Math.min(
@@ -143,16 +136,21 @@ public class SecurityScoreView extends View {
                         getHeight()
                 );
 
-        RectF oval =
-                new RectF(
-                        padding,
-                        padding,
-                        size - padding,
-                        size - padding
-                );
+        float left =
+                (getWidth() - size) / 2f;
+
+        float top =
+                (getHeight() - size) / 2f;
+
+        arcBounds.set(
+                left + padding,
+                top + padding,
+                left + size - padding,
+                top + size - padding
+        );
 
         canvas.drawArc(
-                oval,
+                arcBounds,
                 -90,
                 360,
                 false,
@@ -160,7 +158,7 @@ public class SecurityScoreView extends View {
         );
 
         canvas.drawArc(
-                oval,
+                arcBounds,
                 -90,
                 360f * score / 100f,
                 false,
@@ -168,40 +166,35 @@ public class SecurityScoreView extends View {
         );
 
         float centerX =
-                size / 2f;
+                getWidth() / 2f;
 
         float centerY =
-                size / 2f;
-
-        Paint.FontMetrics scoreMetrics =
-                scorePaint.getFontMetrics();
+                getHeight() / 2f;
 
         float scoreY =
                 centerY
                         - (
-                        scoreMetrics.ascent
-                                + scoreMetrics.descent
+                        scorePaint.ascent()
+                                + scorePaint.descent()
                 ) / 2f
-                        - dpToPx(8);
+                        - dpToPx(7);
 
         canvas.drawText(
-                String.valueOf(score),
+                scoreText,
                 centerX,
                 scoreY,
                 scorePaint
         );
 
         canvas.drawText(
-                "Security Score",
+                maxScoreText,
                 centerX,
-                centerY + dpToPx(25),
+                centerY + dpToPx(23),
                 labelPaint
         );
     }
 
-    private float dpToPx(
-            float dp
-    ) {
+    private float dpToPx(float dp) {
 
         return dp
                 * getResources()
@@ -209,9 +202,7 @@ public class SecurityScoreView extends View {
                 .density;
     }
 
-    private float spToPx(
-            float sp
-    ) {
+    private float spToPx(float sp) {
 
         return sp
                 * getResources()

@@ -1,9 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <solid android:color="#00FF88" />
+    <!-- Disabled -->
+    <item android:state_enabled="false">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/auth_text_secondary" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
 
-    <corners android:radius="14dp" />
+    <!-- Pressed -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/auth_text_primary" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
 
-</shape>
+    <!-- Focused -->
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/auth_primary_button_background" />
+
+            <stroke
+                android:width="2dp"
+                android:color="@color/auth_accent" />
+
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+
+    <!-- Normal -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/auth_primary_button_background" />
+            <corners android:radius="14dp" />
+        </shape>
+    </item>
+
+</selector>

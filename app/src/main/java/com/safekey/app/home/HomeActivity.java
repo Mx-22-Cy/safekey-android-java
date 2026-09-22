@@ -1,6 +1,5 @@
 package com.safekey.app.home;
 
-import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.Button;
 import android.widget.TextView;
@@ -10,7 +9,15 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.safekey.app.R;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 public class HomeActivity extends AppCompatActivity {
+
+    private static final int PREVIEW_SECURITY_SCORE = 82;
 
     private SecurityScoreView securityScoreView;
 
@@ -26,17 +33,49 @@ public class HomeActivity extends AppCompatActivity {
     ) {
 
         super.onCreate(savedInstanceState);
-
-        getWindow().setStatusBarColor(
-                Color.parseColor("#050B15")
+        WindowCompat.enableEdgeToEdge(
+                getWindow()
         );
 
-        getWindow().setNavigationBarColor(
-                Color.parseColor("#050B15")
-        );
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(
+                        getWindow(),
+                        getWindow().getDecorView()
+                );
+
+        insetsController.setAppearanceLightStatusBars(false);
+        insetsController.setAppearanceLightNavigationBars(false);
 
         setContentView(
                 R.layout.activity_home
+        );
+        android.view.View rootHome =
+                findViewById(
+                        R.id.rootHome
+                );
+
+        ViewCompat.setOnApplyWindowInsetsListener(
+                rootHome,
+                (view, windowInsets) -> {
+
+                    Insets systemBars =
+                            windowInsets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                            );
+
+                    view.setPadding(
+                            systemBars.left,
+                            systemBars.top,
+                            systemBars.right,
+                            systemBars.bottom
+                    );
+
+                    return windowInsets;
+                }
+        );
+
+        ViewCompat.requestApplyInsets(
+                rootHome
         );
 
         securityScoreView =
@@ -85,7 +124,7 @@ public class HomeActivity extends AppCompatActivity {
                 view ->
                         Toast.makeText(
                                 this,
-                                "Vault navigation will be connected during integration.",
+                                R.string.home_vault_navigation_pending,
                                 Toast.LENGTH_SHORT
                         ).show()
         );
@@ -94,7 +133,7 @@ public class HomeActivity extends AppCompatActivity {
                 view ->
                         Toast.makeText(
                                 this,
-                                "Credential creation will be connected during integration.",
+                                R.string.home_credential_creation_pending,
                                 Toast.LENGTH_SHORT
                         ).show()
         );
@@ -110,31 +149,31 @@ public class HomeActivity extends AppCompatActivity {
          */
 
         securityScoreView.setScore(
-                82
+                PREVIEW_SECURITY_SCORE
         );
 
         textAtRiskCount.setText(
-                "2"
+                R.string.home_preview_at_risk_count
         );
 
         textBreachCount.setText(
-                "1"
+                R.string.home_preview_breach_count
         );
 
         textCredentialCount.setText(
-                "12"
+                R.string.home_preview_credential_count
         );
 
         textFavoriteCount.setText(
-                "4"
+                R.string.home_preview_favorite_count
         );
 
         textSecureNoteCount.setText(
-                "3"
+                R.string.home_preview_secure_note_count
         );
 
         /*
-         * TODO(Maryam/security integration):
+         * TODO(Security integration):
          *
          * Replace the preview Security Score,
          * at-risk count and breach-alert count

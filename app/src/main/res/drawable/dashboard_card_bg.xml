@@ -2,11 +2,11 @@
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 
-    <solid android:color="#0B1421" />
+    <solid android:color="@color/auth_card_background" />
 
     <stroke
         android:width="1dp"
-        android:color="#17283C" />
+        android:color="@color/auth_card_border" />
 
     <corners android:radius="20dp" />
 
