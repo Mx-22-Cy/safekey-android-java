@@ -42,6 +42,18 @@ public class SafeKeyDataInstrumentedTest {
     private static final String WRONG_PASSPHRASE_DATABASE_NAME =
             "safekey_wrong_passphrase_test.db";
 
+    private static final String FUTURE_VERSION_DATABASE_NAME =
+            "safekey_future_version_test.db";
+
+    /*
+     * The production database currently supports
+     * schema version 1.
+     *
+     * This value intentionally represents a database
+     * created by a newer, unsupported application.
+     */
+    private static final int FUTURE_DATABASE_VERSION = 2;
+
     /*
      * Test-only SQLCipher passphrase.
      * This value exists only under src/androidTest.
@@ -90,6 +102,10 @@ public class SafeKeyDataInstrumentedTest {
                 WRONG_PASSPHRASE_DATABASE_NAME
         );
 
+        context.deleteDatabase(
+                FUTURE_VERSION_DATABASE_NAME
+        );
+
         openTestDatabase();
     }
 
@@ -117,6 +133,10 @@ public class SafeKeyDataInstrumentedTest {
 
         context.deleteDatabase(
                 WRONG_PASSPHRASE_DATABASE_NAME
+        );
+
+        context.deleteDatabase(
+                FUTURE_VERSION_DATABASE_NAME
         );
     }
 
@@ -392,6 +412,98 @@ public class SafeKeyDataInstrumentedTest {
 
             context.deleteDatabase(
                     WRONG_PASSPHRASE_DATABASE_NAME
+            );
+        }
+    }
+
+    @Test
+    public void newerDatabaseVersionIsRejectedAndManagerRemainsClosed() {
+
+        /*
+         * First create a normal supported version-1
+         * SQLCipher database using the production
+         * database manager.
+         */
+        SafeKeyDatabase creatorDatabaseManager =
+                new SafeKeyDatabase(
+                        context,
+                        FUTURE_VERSION_DATABASE_NAME
+                );
+
+        SQLiteDatabase creatorDatabase =
+                creatorDatabaseManager.open(
+                        TEST_DATABASE_PASSPHRASE
+                );
+
+        assertTrue(
+                creatorDatabaseManager.isOpen()
+        );
+
+        /*
+         * Simulate a database written by a newer
+         * application version by changing its stored
+         * user_version to an unsupported schema version.
+         */
+        creatorDatabase.setVersion(
+                FUTURE_DATABASE_VERSION
+        );
+
+        assertEquals(
+                FUTURE_DATABASE_VERSION,
+                creatorDatabase.getVersion()
+        );
+
+        creatorDatabaseManager.close();
+
+        assertFalse(
+                creatorDatabaseManager.isOpen()
+        );
+
+        /*
+         * A fresh manager represents an older version
+         * of the application trying to open the newer
+         * database.
+         */
+        SafeKeyDatabase futureVersionDatabaseManager =
+                new SafeKeyDatabase(
+                        context,
+                        FUTURE_VERSION_DATABASE_NAME
+                );
+
+        try {
+
+            futureVersionDatabaseManager.open(
+                    TEST_DATABASE_PASSPHRASE
+            );
+
+            fail(
+                    "Expected a newer unsupported database version to be rejected."
+            );
+
+        } catch (IllegalStateException expected) {
+
+            assertEquals(
+                    "Database version "
+                            + FUTURE_DATABASE_VERSION
+                            + " is newer than supported version 1.",
+                    expected.getMessage()
+            );
+
+            /*
+             * SafeKeyDatabase.open() must close the
+             * temporary SQLCipher connection after
+             * initialization rejects the version.
+             */
+            assertFalse(
+                    futureVersionDatabaseManager.isOpen()
+            );
+
+        } finally {
+
+            futureVersionDatabaseManager.close();
+
+            context.deleteDatabase(
+                    FUTURE_VERSION_DATABASE_NAME
             );
         }
     }

@@ -111,6 +111,32 @@ public class SafeKeyDatabase {
             int currentVersion =
                     db.getVersion();
 
+            /*
+             * Never allow an older application build
+             * to silently open a database created by
+             * a newer schema version.
+             *
+             * Repositories in this application only
+             * understand schemas up to DATABASE_VERSION.
+             * Opening a newer schema could cause runtime
+             * failures or corrupt data.
+             *
+             * Throwing here also allows the existing
+             * initialization cleanup below to close
+             * the local SQLCipher connection before
+             * the error is returned to the caller.
+             */
+            if (currentVersion > DATABASE_VERSION) {
+
+                throw new IllegalStateException(
+                        "Database version "
+                                + currentVersion
+                                + " is newer than supported version "
+                                + DATABASE_VERSION
+                                + "."
+                );
+            }
+
             if (currentVersion == 0) {
 
                 createVersion1Schema(
