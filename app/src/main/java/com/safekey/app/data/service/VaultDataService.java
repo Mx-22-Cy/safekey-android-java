@@ -213,6 +213,49 @@ public class VaultDataService {
         });
     }
 
+    /*
+     * Returns one credential by database ID.
+     *
+     * This is used by credential-detail UI flows
+     * that need to load a specific vault item.
+     *
+     * A missing ID returns null through onSuccess,
+     * matching CredentialRepository.getById().
+     */
+    public void getCredential(
+            long id,
+            ResultCallback<Credential> callback
+    ) {
+
+        executorService.execute(() -> {
+
+            final Credential credential;
+
+            try {
+
+                credential =
+                        requireCredentialRepository()
+                                .getById(
+                                        id
+                                );
+
+            } catch (Exception exception) {
+
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
+            }
+
+            deliverResultSuccess(
+                    callback,
+                    credential
+            );
+        });
+    }
+
     public void updateCredential(
             Credential credential,
             ResultCallback<Integer> callback

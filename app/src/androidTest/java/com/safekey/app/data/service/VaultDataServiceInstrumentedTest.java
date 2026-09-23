@@ -3,6 +3,7 @@ package com.safekey.app.data.service;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -136,7 +137,7 @@ public class VaultDataServiceInstrumentedTest {
         );
 
         /*
-         * READ CREDENTIAL
+         * READ CREDENTIAL LIST
          */
         List<Credential> credentials =
                 awaitResultSuccess(
@@ -174,6 +175,47 @@ public class VaultDataServiceInstrumentedTest {
         assertEquals(
                 "Service credential note",
                 savedCredential.getNotes()
+        );
+
+        /*
+         * READ ONE CREDENTIAL BY ID
+         */
+        Credential credentialById =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                credentialById
+        );
+
+        assertEquals(
+                credentialId,
+                credentialById.getId()
+        );
+
+        assertEquals(
+                "Service Credential",
+                credentialById.getTitle()
+        );
+
+        assertEquals(
+                "service-user",
+                credentialById.getUsername()
+        );
+
+        assertEquals(
+                "service-password",
+                credentialById.getPassword()
+        );
+
+        assertEquals(
+                "Service credential note",
+                credentialById.getNotes()
         );
 
         /*
@@ -360,6 +402,23 @@ public class VaultDataServiceInstrumentedTest {
         assertEquals(
                 1,
                 credentialRowsDeleted
+        );
+
+        /*
+         * A deleted credential must no longer
+         * be available through getCredential().
+         */
+        Credential deletedCredential =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNull(
+                deletedCredential
         );
 
         /*
