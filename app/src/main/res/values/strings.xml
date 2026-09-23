@@ -68,7 +68,7 @@
 
     <string name="home_security_alert">Security Alert</string>
     <string name="home_security_alert_preview">1 credential needs review</string>
-    <string name="home_review">Review â€º</string>
+    <string name="home_review">Review ›</string>
 
     <string name="home_vault_summary">VAULT SUMMARY</string>
     <string name="home_credentials">Credentials</string>
@@ -96,4 +96,5 @@
     <string name="home_alerts_navigation_pending">Alerts screen will be connected in the next integration step.</string>
     <string name="home_settings_navigation_pending">Settings screen will be connected in the next integration step.</string>
     <string name="home_session_locked">Your vault is locked. Sign in to continue.</string>
+
 </resources>

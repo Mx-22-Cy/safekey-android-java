@@ -152,21 +152,11 @@ public class HomeActivity extends AppCompatActivity {
 
         showPreviewData();
 
-        /*
-         * Home is already the selected destination.
-         * Record the interaction if the vault session
-         * is still valid.
-         */
         navHome.setOnClickListener(
                 view ->
                         requireUnlockedSession()
         );
 
-        /*
-         * Vault UI is not implemented yet.
-         * We still enforce the active session before
-         * allowing the protected navigation action.
-         */
         navVault.setOnClickListener(
                 view ->
                         showProtectedPlaceholder(
@@ -174,9 +164,6 @@ public class HomeActivity extends AppCompatActivity {
                         )
         );
 
-        /*
-         * Alerts UI is not implemented yet.
-         */
         navAlerts.setOnClickListener(
                 view ->
                         showProtectedPlaceholder(
@@ -184,9 +171,6 @@ public class HomeActivity extends AppCompatActivity {
                         )
         );
 
-        /*
-         * Settings UI is not implemented yet.
-         */
         navSettings.setOnClickListener(
                 view ->
                         showProtectedPlaceholder(
@@ -194,10 +178,6 @@ public class HomeActivity extends AppCompatActivity {
                         )
         );
 
-        /*
-         * Open Vault follows the same protected
-         * navigation rule as the Vault tab.
-         */
         buttonOpenVault.setOnClickListener(
                 view ->
                         showProtectedPlaceholder(
@@ -205,11 +185,6 @@ public class HomeActivity extends AppCompatActivity {
                         )
         );
 
-        /*
-         * Credential creation is protected by the
-         * current vault session. The actual credential
-         * screen will be connected when that UI exists.
-         */
         buttonAddCredential.setOnClickListener(
                 view ->
                         showProtectedPlaceholder(
@@ -229,11 +204,15 @@ public class HomeActivity extends AppCompatActivity {
          * UNLOCKED -> HOME
          * LOCKED   -> LOCK_SCREEN
          *
-         * SignInActivity currently represents the
-         * lock-screen destination in the Android UI.
+         * SignInActivity currently represents the lock-screen
+         * destination in the Android UI.
+         *
+         * The real authentication/security integration is not
+         * connected yet, so production code intentionally does
+         * not call unlockAfterAuthentication() from the current
+         * placeholder Sign In actions.
          */
         if (!isSessionUnlocked()) {
-
             navigateToSignIn();
         }
     }
@@ -244,11 +223,13 @@ public class HomeActivity extends AppCompatActivity {
         super.onUserInteraction();
 
         /*
-         * Touch/key interaction refreshes Maryam's
-         * inactivity timer only while the session is
-         * still unlocked.
+         * recordActivity() performs the inactivity-timeout check.
+         * If it returns false, the session is locked or has expired,
+         * so Home must no longer remain visible.
          */
-        SafeKeySession.recordActivity();
+        if (!SafeKeySession.recordActivity()) {
+            navigateToSignIn();
+        }
     }
 
     private boolean isSessionUnlocked() {
@@ -264,14 +245,20 @@ public class HomeActivity extends AppCompatActivity {
 
     private boolean requireUnlockedSession() {
 
-        if (!isSessionUnlocked()) {
+        /*
+         * Use recordActivity() as the final session decision.
+         *
+         * It checks timeout state and returns false if the
+         * session is already locked or expires during the check.
+         */
+        if (!SafeKeySession.recordActivity()) {
 
             navigateToSignIn();
 
             return false;
         }
 
-        return SafeKeySession.recordActivity();
+        return true;
     }
 
     private void showProtectedPlaceholder(
