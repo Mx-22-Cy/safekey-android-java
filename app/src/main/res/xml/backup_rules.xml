@@ -1,13 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+
     <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+        Biometric vault-key metadata is bound to a
+        device-local Android Keystore key.
+
+        Do not restore or transfer this SharedPreferences
+        file to another device.
+    -->
+    <exclude
+        domain="sharedpref"
+        path="safekey_biometric_key_envelope.xml" />
+
 </full-backup-content>
