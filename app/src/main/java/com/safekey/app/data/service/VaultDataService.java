@@ -1,6 +1,8 @@
 package com.safekey.app.data.service;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
@@ -18,29 +20,67 @@ public class VaultDataService {
 
     private final SafeKeyDatabase databaseManager;
     private final ExecutorService executorService;
+    private final Handler mainHandler;
 
     private CredentialRepository credentialRepository;
     private SecureNoteRepository secureNoteRepository;
 
-    public VaultDataService(Context context) {
-        databaseManager =
+    public VaultDataService(
+            Context context
+    ) {
+
+        this(
                 new SafeKeyDatabase(
                         context.getApplicationContext()
-                );
+                )
+        );
+    }
+
+    /*
+     * Package-private constructor used by
+     * instrumented tests so they can supply
+     * an isolated test database.
+     */
+    VaultDataService(
+            SafeKeyDatabase databaseManager
+    ) {
+
+        if (databaseManager == null) {
+
+            throw new IllegalArgumentException(
+                    "Database manager cannot be null."
+            );
+        }
+
+        this.databaseManager =
+                databaseManager;
 
         executorService =
                 Executors.newSingleThreadExecutor();
+
+        /*
+         * Callbacks are delivered on Android's
+         * main thread so UI callers can safely
+         * update views.
+         */
+        mainHandler =
+                new Handler(
+                        Looper.getMainLooper()
+                );
     }
 
     public void openVault(
-            String databasePassword,
+            String databasePassphrase,
             SimpleCallback callback
     ) {
+
         executorService.execute(() -> {
+
             try {
+
                 SQLiteDatabase database =
                         databaseManager.open(
-                                databasePassword
+                                databasePassphrase
                         );
 
                 credentialRepository =
@@ -53,72 +93,123 @@ public class VaultDataService {
                                 database
                         );
 
-                callback.onSuccess();
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverSimpleError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            /*
+             * Callback delivery is outside the
+             * database try/catch so callback errors
+             * are not reported as database errors.
+             */
+            deliverSimpleSuccess(
+                    callback
+            );
         });
     }
 
     public void closeVault(
             SimpleCallback callback
     ) {
+
         executorService.execute(() -> {
+
             try {
+
                 databaseManager.close();
 
                 credentialRepository = null;
                 secureNoteRepository = null;
 
-                callback.onSuccess();
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverSimpleError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverSimpleSuccess(
+                    callback
+            );
         });
     }
 
     public boolean isVaultOpen() {
+
         return databaseManager.isOpen();
     }
-
-    // =========================================================
-    // CREDENTIALS
-    // =========================================================
 
     public void addCredential(
             Credential credential,
             ResultCallback<Long> callback
     ) {
+
         executorService.execute(() -> {
+
+            final long id;
+
             try {
-                long id =
+
+                id =
                         requireCredentialRepository()
-                                .insert(credential);
+                                .insert(
+                                        credential
+                                );
 
-                callback.onSuccess(id);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    id
+            );
         });
     }
 
     public void getCredentials(
             ResultCallback<List<Credential>> callback
     ) {
+
         executorService.execute(() -> {
+
+            final List<Credential> credentials;
+
             try {
-                List<Credential> credentials =
+
+                credentials =
                         requireCredentialRepository()
                                 .getAll();
 
-                callback.onSuccess(credentials);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    credentials
+            );
         });
     }
 
@@ -126,17 +217,33 @@ public class VaultDataService {
             Credential credential,
             ResultCallback<Integer> callback
     ) {
+
         executorService.execute(() -> {
+
+            final int rows;
+
             try {
-                int rows =
+
+                rows =
                         requireCredentialRepository()
-                                .update(credential);
+                                .update(
+                                        credential
+                                );
 
-                callback.onSuccess(rows);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    rows
+            );
         });
     }
 
@@ -144,17 +251,33 @@ public class VaultDataService {
             long id,
             ResultCallback<Integer> callback
     ) {
+
         executorService.execute(() -> {
+
+            final int rows;
+
             try {
-                int rows =
+
+                rows =
                         requireCredentialRepository()
-                                .delete(id);
+                                .delete(
+                                        id
+                                );
 
-                callback.onSuccess(rows);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    rows
+            );
         });
     }
 
@@ -162,17 +285,33 @@ public class VaultDataService {
             String query,
             ResultCallback<List<Credential>> callback
     ) {
+
         executorService.execute(() -> {
+
+            final List<Credential> results;
+
             try {
-                List<Credential> results =
+
+                results =
                         requireCredentialRepository()
-                                .search(query);
+                                .search(
+                                        query
+                                );
 
-                callback.onSuccess(results);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    results
+            );
         });
     }
 
@@ -181,59 +320,99 @@ public class VaultDataService {
             boolean favorite,
             ResultCallback<Integer> callback
     ) {
+
         executorService.execute(() -> {
+
+            final int rows;
+
             try {
-                int rows =
+
+                rows =
                         requireCredentialRepository()
                                 .setFavorite(
                                         id,
                                         favorite
                                 );
 
-                callback.onSuccess(rows);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    rows
+            );
         });
     }
-
-    // =========================================================
-    // SECURE NOTES
-    // =========================================================
 
     public void addSecureNote(
             SecureNote note,
             ResultCallback<Long> callback
     ) {
+
         executorService.execute(() -> {
+
+            final long id;
+
             try {
-                long id =
+
+                id =
                         requireSecureNoteRepository()
-                                .insert(note);
+                                .insert(
+                                        note
+                                );
 
-                callback.onSuccess(id);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    id
+            );
         });
     }
 
     public void getSecureNotes(
             ResultCallback<List<SecureNote>> callback
     ) {
+
         executorService.execute(() -> {
+
+            final List<SecureNote> notes;
+
             try {
-                List<SecureNote> notes =
+
+                notes =
                         requireSecureNoteRepository()
                                 .getAll();
 
-                callback.onSuccess(notes);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    notes
+            );
         });
     }
 
@@ -241,17 +420,33 @@ public class VaultDataService {
             SecureNote note,
             ResultCallback<Integer> callback
     ) {
+
         executorService.execute(() -> {
+
+            final int rows;
+
             try {
-                int rows =
+
+                rows =
                         requireSecureNoteRepository()
-                                .update(note);
+                                .update(
+                                        note
+                                );
 
-                callback.onSuccess(rows);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    rows
+            );
         });
     }
 
@@ -259,17 +454,33 @@ public class VaultDataService {
             long id,
             ResultCallback<Integer> callback
     ) {
+
         executorService.execute(() -> {
+
+            final int rows;
+
             try {
-                int rows =
+
+                rows =
                         requireSecureNoteRepository()
-                                .delete(id);
+                                .delete(
+                                        id
+                                );
 
-                callback.onSuccess(rows);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    rows
+            );
         });
     }
 
@@ -277,28 +488,41 @@ public class VaultDataService {
             String query,
             ResultCallback<List<SecureNote>> callback
     ) {
+
         executorService.execute(() -> {
+
+            final List<SecureNote> results;
+
             try {
-                List<SecureNote> results =
+
+                results =
                         requireSecureNoteRepository()
-                                .search(query);
+                                .search(
+                                        query
+                                );
 
-                callback.onSuccess(results);
+            } catch (Exception exception) {
 
-            } catch (Exception e) {
-                callback.onError(e);
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
             }
+
+            deliverResultSuccess(
+                    callback,
+                    results
+            );
         });
     }
-
-    // =========================================================
-    // INTERNAL HELPERS
-    // =========================================================
 
     private CredentialRepository
     requireCredentialRepository() {
 
         if (credentialRepository == null) {
+
             throw new IllegalStateException(
                     "Vault is not open."
             );
@@ -311,6 +535,7 @@ public class VaultDataService {
     requireSecureNoteRepository() {
 
         if (secureNoteRepository == null) {
+
             throw new IllegalStateException(
                     "Vault is not open."
             );
@@ -319,25 +544,94 @@ public class VaultDataService {
         return secureNoteRepository;
     }
 
-    public void shutdown() {
-        executorService.shutdown();
+    private void deliverSimpleSuccess(
+            SimpleCallback callback
+    ) {
+
+        mainHandler.post(
+                callback::onSuccess
+        );
     }
 
-    // =========================================================
-    // CALLBACKS
-    // =========================================================
+    private void deliverSimpleError(
+            SimpleCallback callback,
+            Exception exception
+    ) {
+
+        mainHandler.post(
+                () -> callback.onError(
+                        exception
+                )
+        );
+    }
+
+    private <T> void deliverResultSuccess(
+            ResultCallback<T> callback,
+            T result
+    ) {
+
+        mainHandler.post(
+                () -> callback.onSuccess(
+                        result
+                )
+        );
+    }
+
+    private <T> void deliverResultError(
+            ResultCallback<T> callback,
+            Exception exception
+    ) {
+
+        mainHandler.post(
+                () -> callback.onError(
+                        exception
+                )
+        );
+    }
+
+    /*
+     * Queue database cleanup before shutting down
+     * the executor.
+     */
+    public synchronized void shutdown() {
+
+        if (executorService.isShutdown()) {
+            return;
+        }
+
+        executorService.execute(() -> {
+
+            try {
+
+                databaseManager.close();
+
+            } finally {
+
+                credentialRepository = null;
+                secureNoteRepository = null;
+            }
+        });
+
+        executorService.shutdown();
+    }
 
     public interface SimpleCallback {
 
         void onSuccess();
 
-        void onError(Exception exception);
+        void onError(
+                Exception exception
+        );
     }
 
     public interface ResultCallback<T> {
 
-        void onSuccess(T result);
+        void onSuccess(
+                T result
+        );
 
-        void onError(Exception exception);
+        void onError(
+                Exception exception
+        );
     }
 }
