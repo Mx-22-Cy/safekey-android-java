@@ -13,8 +13,9 @@
 
         <!--
             Week 2 authentication UI.
-            Maryam's security/key-management integration
-            will be connected later.
+            SignUpActivity remains the temporary launcher
+            until the final authentication/navigation
+            integration is completed.
         -->
         <activity
             android:name=".auth.SignUpActivity"
@@ -22,6 +23,7 @@
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
@@ -32,8 +34,15 @@
             android:exported="false" />
 
         <!--
+            Week 3 Home / Dashboard.
+            It is not externally launchable.
+        -->
+        <activity
+            android:name=".home.HomeActivity"
+            android:exported="false" />
+
+        <!--
             MainActivity is kept for later integration.
-            SignUpActivity is the temporary launcher for Week 2 UI testing.
         -->
         <activity
             android:name=".MainActivity"

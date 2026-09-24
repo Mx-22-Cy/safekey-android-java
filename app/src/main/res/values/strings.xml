@@ -29,6 +29,7 @@
     <!-- Validation -->
     <string name="error_master_password_required">Enter your master password.</string>
     <string name="error_password_easily_guessed">Choose a less common and less repetitive master password.</string>
+
     <plurals name="error_password_too_short">
         <item quantity="one">Use at least %1$d character.</item>
         <item quantity="other">Use at least %1$d characters.</item>
@@ -38,10 +39,11 @@
         <item quantity="one">Use %1$d character or fewer.</item>
         <item quantity="other">Use %1$d characters or fewer.</item>
     </plurals>
+
     <string name="error_confirmation_required">Confirm the master password.</string>
     <string name="error_passwords_do_not_match">Passwords do not match.</string>
 
-    <!-- Temporary integration messages -->
+    <!-- Temporary authentication integration messages -->
     <string name="signup_pending_integration">Sign-up UI is ready. Security integration is pending.</string>
     <string name="signup_pending_integration_toast">Sign-up screen ready for security integration.</string>
     <string name="signin_pending_integration">Sign-in UI is ready. Vault security integration is pending.</string>
@@ -50,4 +52,49 @@
     <!-- Accessibility -->
     <string name="show_password_content_description">Show password</string>
     <string name="hide_password_content_description">Hide password</string>
+
+    <!-- Week 3 Home / Dashboard -->
+    <string name="home_preview_data">PREVIEW DATA</string>
+    <string name="home_security_score_label">SECURITY SCORE</string>
+    <string name="home_security_score_max" translatable="false">/100</string>
+    <string name="home_security_good">Good Security</string>
+
+    <string name="home_credentials_at_risk">credentials at risk</string>
+    <string name="home_breach_alert_label">breach alert</string>
+
+    <string name="home_quick_actions">QUICK ACTIONS</string>
+    <string name="home_open_vault">Open Vault</string>
+    <string name="home_add_credential">Add Credential</string>
+
+    <string name="home_security_alert">Security Alert</string>
+    <string name="home_security_alert_preview">1 credential needs review</string>
+    <string name="home_review">Review ›</string>
+
+    <string name="home_vault_summary">VAULT SUMMARY</string>
+    <string name="home_credentials">Credentials</string>
+    <string name="home_favorites">Favorites</string>
+    <string name="home_secure_notes">Secure Notes</string>
+
+    <string name="home_nav_home">Home</string>
+    <string name="home_nav_vault">Vault</string>
+    <string name="home_nav_alerts">Alerts</string>
+    <string name="home_nav_settings">Settings</string>
+
+    <!-- Week 3 preview values -->
+    <string name="home_preview_at_risk_count" translatable="false">2</string>
+    <string name="home_preview_breach_count" translatable="false">1</string>
+    <string name="home_preview_credential_count" translatable="false">12</string>
+    <string name="home_preview_favorite_count" translatable="false">4</string>
+    <string name="home_preview_secure_note_count" translatable="false">3</string>
+
+    <!-- Home accessibility -->
+    <string name="home_security_score_accessibility">Security score is %1$d. Maximum score is 100.</string>
+
+    <!-- Week 3 integration messages -->
+    <string name="home_vault_navigation_pending">Vault screen will be connected in the next integration step.</string>
+    <string name="home_credential_creation_pending">Credential creation will be connected in the next integration step.</string>
+    <string name="home_alerts_navigation_pending">Alerts screen will be connected in the next integration step.</string>
+    <string name="home_settings_navigation_pending">Settings screen will be connected in the next integration step.</string>
+    <string name="home_session_locked">Your vault is locked. Sign in to continue.</string>
+
 </resources>

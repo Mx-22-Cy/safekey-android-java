@@ -24,4 +24,14 @@
     <color name="auth_strength_medium">#EAB308</color>
     <color name="auth_strength_strong">#2DD4B0</color>
 
+    <!-- Week 3 Home / Dashboard -->
+    <color name="dashboard_alert">#FF4D5A</color>
+    <color name="dashboard_alert_text">#FF9AA3</color>
+    <color name="dashboard_alert_surface">#3A1F24</color>
+    <color name="dashboard_alert_border">#652C35</color>
+
+    <color name="dashboard_warning">#F4B942</color>
+
+    <color name="dashboard_nav_inactive">#68738A</color>
+
 </resources>
