@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootSecureNoteDetails"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vault_background">
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="28dp"
+            android:paddingTop="28dp"
+            android:paddingEnd="28dp"
+            android:paddingBottom="32dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/buttonBackSecureNoteDetails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:gravity="center"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="@string/secure_note_details_back"
+                    android:textColor="@color/vault_accent"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="end"
+                    android:text="@string/secure_note_details_title"
+                    android:textColor="@color/vault_text_secondary"
+                    android:textSize="13sp" />
+
+            </LinearLayout>
+
+            <!-- Note identity -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:layout_marginBottom="28dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/textSecureNoteDetailsLogo"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:background="@drawable/vault_logo_bg"
+                    android:gravity="center"
+                    android:text="@string/secure_note_icon_letter"
+                    android:textColor="@color/vault_chip_text_dark"
+                    android:textSize="19sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/textSecureNoteDetailsTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:textColor="@color/vault_text_primary"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    tools:text="Home Wi-Fi" />
+
+            </LinearLayout>
+
+            <!-- Content label -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/secure_note_details_content"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- Note content -->
+            <TextView
+                android:id="@+id/textSecureNoteDetailsContent"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="150dp"
+                android:layout_marginTop="7dp"
+                android:layout_marginBottom="28dp"
+                android:background="@drawable/vault_field_bg"
+                android:gravity="top|start"
+                android:padding="14dp"
+                android:textColor="@color/vault_text_primary"
+                android:textSize="14sp"
+                tools:text="Router login and guest network details." />
+
+            <!-- Edit -->
+            <TextView
+                android:id="@+id/buttonEditSecureNote"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/vault_add_credential_bg"
+                android:gravity="center"
+                android:text="@string/secure_note_details_edit"
+                android:textColor="@color/vault_accent"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <!-- Delete -->
+            <TextView
+                android:id="@+id/buttonDeleteSecureNote"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="@string/secure_note_details_delete"
+                android:textColor="@android:color/holo_red_light"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
