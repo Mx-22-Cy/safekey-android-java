@@ -1,5 +1,6 @@
 package com.safekey.app.vault;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
@@ -286,11 +287,7 @@ public class CredentialDetailsActivity extends AppCompatActivity {
 
         buttonEdit.setOnClickListener(
                 view ->
-                        Toast.makeText(
-                                this,
-                                R.string.credential_details_edit_pending,
-                                Toast.LENGTH_SHORT
-                        ).show()
+                        openEditCredentialScreen()
         );
 
         buttonDelete.setOnClickListener(
@@ -300,6 +297,66 @@ public class CredentialDetailsActivity extends AppCompatActivity {
                                 R.string.credential_details_delete_pending,
                                 Toast.LENGTH_SHORT
                         ).show()
+        );
+    }
+
+    private void openEditCredentialScreen() {
+
+        Intent intent =
+                new Intent(
+                        CredentialDetailsActivity.this,
+                        AddCredentialActivity.class
+                );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_EDIT_MODE,
+                true
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_NAME,
+                getIntent().getStringExtra(
+                        EXTRA_NAME
+                )
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_USERNAME,
+                getIntent().getStringExtra(
+                        EXTRA_USERNAME
+                )
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_PASSWORD,
+                getIntent().getStringExtra(
+                        EXTRA_PASSWORD
+                )
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_WEBSITE,
+                getIntent().getStringExtra(
+                        EXTRA_WEBSITE
+                )
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_CATEGORY,
+                getIntent().getStringExtra(
+                        EXTRA_CATEGORY
+                )
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_NOTES,
+                getIntent().getStringExtra(
+                        EXTRA_NOTES
+                )
+        );
+
+        startActivity(
+                intent
         );
     }
 

@@ -165,7 +165,6 @@
     <string name="credential_details_delete">Delete Credential</string>
 
     <string name="credential_details_not_provided">Not provided</string>
-    <string name="credential_details_edit_pending">Credential editing will be connected during data integration.</string>
     <string name="credential_details_delete_pending">Credential deletion will be connected during data integration.</string>
 
     <!-- Week 4 Secure Note Details -->
@@ -199,5 +198,10 @@
     <!-- Week 4 Vault UI reusable text -->
     <string name="vault_preview_dot">•</string>
     <string name="secure_note_icon_letter">N</string>
+
+    <string name="edit_credential_title">Edit Credential</string>
+    <string name="edit_credential_subtitle">Update this login in your vault.</string>
+    <string name="edit_credential_save">Save Changes</string>
+    <string name="edit_credential_save_pending">Credential changes are ready. Secure database updating will be connected during data integration.</string>
 
 </resources>

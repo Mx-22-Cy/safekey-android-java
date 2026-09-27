@@ -30,6 +30,28 @@ public class AddCredentialActivity extends AppCompatActivity {
     private AppCompatImageButton buttonToggleCredentialPassword;
 
     private boolean passwordVisible = false;
+    private boolean editMode = false;
+
+    public static final String EXTRA_EDIT_MODE =
+            "edit_mode";
+
+    public static final String EXTRA_NAME =
+            "edit_credential_name";
+
+    public static final String EXTRA_USERNAME =
+            "edit_credential_username";
+
+    public static final String EXTRA_PASSWORD =
+            "edit_credential_password";
+
+    public static final String EXTRA_WEBSITE =
+            "edit_credential_website";
+
+    public static final String EXTRA_CATEGORY =
+            "edit_credential_category";
+
+    public static final String EXTRA_NOTES =
+            "edit_credential_notes";
 
     @Override
     protected void onCreate(
@@ -92,6 +114,7 @@ public class AddCredentialActivity extends AppCompatActivity {
         );
 
         bindViews();
+        loadEditData();
         setupActions();
     }
 
@@ -131,6 +154,82 @@ public class AddCredentialActivity extends AppCompatActivity {
                 findViewById(
                         R.id.editCredentialNotes
                 );
+    }
+
+    private void loadEditData() {
+
+        editMode =
+                getIntent().getBooleanExtra(
+                        EXTRA_EDIT_MODE,
+                        false
+                );
+
+        if (!editMode) {
+            return;
+        }
+
+        TextView textTitle =
+                findViewById(
+                        R.id.textAddCredentialTitle
+                );
+
+        TextView textSubtitle =
+                findViewById(
+                        R.id.textAddCredentialSubtitle
+                );
+
+        TextView buttonSave =
+                findViewById(
+                        R.id.buttonSaveCredential
+                );
+
+        textTitle.setText(
+                R.string.edit_credential_title
+        );
+
+        textSubtitle.setText(
+                R.string.edit_credential_subtitle
+        );
+
+        buttonSave.setText(
+                R.string.edit_credential_save
+        );
+
+        editCredentialName.setText(
+                getIntent().getStringExtra(
+                        EXTRA_NAME
+                )
+        );
+
+        editCredentialUsername.setText(
+                getIntent().getStringExtra(
+                        EXTRA_USERNAME
+                )
+        );
+
+        editCredentialPassword.setText(
+                getIntent().getStringExtra(
+                        EXTRA_PASSWORD
+                )
+        );
+
+        editCredentialWebsite.setText(
+                getIntent().getStringExtra(
+                        EXTRA_WEBSITE
+                )
+        );
+
+        editCredentialCategory.setText(
+                getIntent().getStringExtra(
+                        EXTRA_CATEGORY
+                )
+        );
+
+        editCredentialNotes.setText(
+                getIntent().getStringExtra(
+                        EXTRA_NOTES
+                )
+        );
     }
 
     private void setupActions() {
@@ -273,9 +372,14 @@ public class AddCredentialActivity extends AppCompatActivity {
          * Real saving will be connected through the
          * approved encrypted VaultDataService flow.
          */
+        int messageResource =
+                editMode
+                        ? R.string.edit_credential_save_pending
+                        : R.string.add_credential_save_pending;
+
         Toast.makeText(
                 this,
-                R.string.add_credential_save_pending,
+                messageResource,
                 Toast.LENGTH_SHORT
         ).show();
     }
