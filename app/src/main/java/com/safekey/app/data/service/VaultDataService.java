@@ -416,6 +416,40 @@ public class VaultDataService {
         });
     }
 
+    public void getSecureNote(
+            long id,
+            ResultCallback<SecureNote> callback
+    ) {
+
+        executorService.execute(() -> {
+
+            final SecureNote note;
+
+            try {
+
+                note =
+                        requireSecureNoteRepository()
+                                .getById(
+                                        id
+                                );
+
+            } catch (Exception exception) {
+
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
+            }
+
+            deliverResultSuccess(
+                    callback,
+                    note
+            );
+        });
+    }
+
     public void updateSecureNote(
             SecureNote note,
             ResultCallback<Integer> callback

@@ -3,6 +3,7 @@ package com.safekey.app.data.service;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -259,7 +260,38 @@ public class VaultDataServiceInstrumentedTest {
         );
 
         /*
-         * READ SECURE NOTE
+         * READ SECURE NOTE BY ID
+         */
+        SecureNote noteById =
+                awaitResultSuccess(
+                        callback ->
+                                service.getSecureNote(
+                                        noteId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                noteById
+        );
+
+        assertEquals(
+                noteId,
+                noteById.getId()
+        );
+
+        assertEquals(
+                "Service Secure Note",
+                noteById.getTitle()
+        );
+
+        assertEquals(
+                "Service secure note content",
+                noteById.getContent()
+        );
+
+        /*
+         * READ ALL SECURE NOTES
          */
         List<SecureNote> secureNotes =
                 awaitResultSuccess(
@@ -312,6 +344,32 @@ public class VaultDataServiceInstrumentedTest {
         assertEquals(
                 1,
                 noteRowsUpdated
+        );
+
+        /*
+         * VERIFY UPDATED SECURE NOTE BY ID
+         */
+        SecureNote updatedNoteById =
+                awaitResultSuccess(
+                        callback ->
+                                service.getSecureNote(
+                                        noteId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                updatedNoteById
+        );
+
+        assertEquals(
+                "Updated Service Secure Note",
+                updatedNoteById.getTitle()
+        );
+
+        assertEquals(
+                "Updated service secure note content",
+                updatedNoteById.getContent()
         );
 
         /*
@@ -377,6 +435,22 @@ public class VaultDataServiceInstrumentedTest {
         assertEquals(
                 1,
                 noteRowsDeleted
+        );
+
+        /*
+         * DELETED SECURE NOTE MUST NOT BE RETURNED BY ID
+         */
+        SecureNote deletedNote =
+                awaitResultSuccess(
+                        callback ->
+                                service.getSecureNote(
+                                        noteId,
+                                        callback
+                                )
+                );
+
+        assertNull(
+                deletedNote
         );
 
         List<Credential> credentialsAfterDelete =
