@@ -8,8 +8,18 @@ import javax.crypto.Cipher;
 
 public class BiometricVaultKeyProtector {
 
-    private static final int GCM_IV_LENGTH_BYTES =
+    public static final int VAULT_KEY_LENGTH_BYTES =
+            32;
+
+    static final int GCM_IV_LENGTH_BYTES =
             12;
+
+    static final int GCM_TAG_LENGTH_BYTES =
+            16;
+
+    static final int WRAPPED_CIPHERTEXT_LENGTH_BYTES =
+            VAULT_KEY_LENGTH_BYTES
+                    + GCM_TAG_LENGTH_BYTES;
 
     /*
      * Versioned associated data binds the encrypted
@@ -23,18 +33,28 @@ public class BiometricVaultKeyProtector {
                             StandardCharsets.UTF_8
                     );
 
+    public static void validateVaultKey(
+            byte[] vaultKey
+    ) {
+
+        if (vaultKey == null
+                || vaultKey.length
+                != VAULT_KEY_LENGTH_BYTES) {
+
+            throw new IllegalArgumentException(
+                    "Vault key must contain exactly 32 bytes."
+            );
+        }
+    }
+
     public WrappedKey wrap(
             byte[] vaultKey,
             Cipher authenticatedEncryptionCipher
     ) throws GeneralSecurityException {
 
-        if (vaultKey == null
-                || vaultKey.length == 0) {
-
-            throw new IllegalArgumentException(
-                    "Vault key cannot be null or empty."
-            );
-        }
+        validateVaultKey(
+                vaultKey
+        );
 
         if (authenticatedEncryptionCipher == null) {
 
@@ -106,9 +126,25 @@ public class BiometricVaultKeyProtector {
                 VAULT_KEY_AAD
         );
 
-        return authenticatedDecryptionCipher.doFinal(
-                wrappedKey.getCiphertext()
-        );
+        byte[] vaultKey =
+                authenticatedDecryptionCipher.doFinal(
+                        wrappedKey.getCiphertext()
+                );
+
+        if (vaultKey.length
+                != VAULT_KEY_LENGTH_BYTES) {
+
+            Arrays.fill(
+                    vaultKey,
+                    (byte) 0
+            );
+
+            throw new GeneralSecurityException(
+                    "Unwrapped vault key must contain exactly 32 bytes."
+            );
+        }
+
+        return vaultKey;
     }
 
     public static final class WrappedKey {
@@ -122,7 +158,8 @@ public class BiometricVaultKeyProtector {
         ) {
 
             if (iv == null
-                    || iv.length != GCM_IV_LENGTH_BYTES) {
+                    || iv.length
+                    != GCM_IV_LENGTH_BYTES) {
 
                 throw new IllegalArgumentException(
                         "Wrapped key IV must contain exactly 12 bytes."
@@ -130,10 +167,11 @@ public class BiometricVaultKeyProtector {
             }
 
             if (ciphertext == null
-                    || ciphertext.length == 0) {
+                    || ciphertext.length
+                    != WRAPPED_CIPHERTEXT_LENGTH_BYTES) {
 
                 throw new IllegalArgumentException(
-                        "Wrapped key ciphertext cannot be null or empty."
+                        "Wrapped key ciphertext must contain exactly 48 bytes."
                 );
             }
 

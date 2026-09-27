@@ -1,5 +1,7 @@
 package com.safekey.app.security.biometric;
 
+import android.security.keystore.KeyPermanentlyInvalidatedException;
+
 import androidx.fragment.app.FragmentActivity;
 
 import com.safekey.app.security.keystore.BiometricKeyEnvelopeStore;
@@ -12,6 +14,12 @@ import java.util.Arrays;
 import javax.crypto.Cipher;
 
 public class BiometricVaultKeyManager {
+
+    private static final String RE_ENROLL_MISSING_KEY_MESSAGE =
+            "Biometric unlock key is missing. Re-enroll biometric unlock.";
+
+    private static final String RE_ENROLL_INVALIDATED_KEY_MESSAGE =
+            "Biometric unlock key is no longer valid. Re-enroll biometric unlock.";
 
     private final BiometricAuthenticator authenticator;
     private final BiometricKeyStore keyStore;
@@ -65,13 +73,9 @@ public class BiometricVaultKeyManager {
             SetupCallback callback
     ) {
 
-        if (vaultKey == null
-                || vaultKey.length == 0) {
-
-            throw new IllegalArgumentException(
-                    "Vault key cannot be null or empty."
-            );
-        }
+        BiometricVaultKeyProtector.validateVaultKey(
+                vaultKey
+        );
 
         if (callback == null) {
 
@@ -169,6 +173,17 @@ public class BiometricVaultKeyManager {
                             callback.onFailed();
                         }
                     }
+            );
+
+        } catch (KeyPermanentlyInvalidatedException exception) {
+
+            Arrays.fill(
+                    vaultKeyCopy,
+                    (byte) 0
+            );
+
+            callback.onError(
+                    RE_ENROLL_INVALIDATED_KEY_MESSAGE
             );
 
         } catch (Exception exception) {
@@ -294,6 +309,18 @@ public class BiometricVaultKeyManager {
                             callback.onFailed();
                         }
                     }
+            );
+
+        } catch (BiometricKeyStore.BiometricKeyMissingException exception) {
+
+            callback.onError(
+                    RE_ENROLL_MISSING_KEY_MESSAGE
+            );
+
+        } catch (KeyPermanentlyInvalidatedException exception) {
+
+            callback.onError(
+                    RE_ENROLL_INVALIDATED_KEY_MESSAGE
             );
 
         } catch (Exception exception) {

@@ -2,23 +2,24 @@ package com.safekey.app.security.keystore;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.util.Base64;
+
+import java.util.Base64;
 
 public class BiometricKeyEnvelopeStore {
 
-    private static final String PREFERENCES_NAME =
+    static final String PREFERENCES_NAME =
             "safekey_biometric_key_envelope";
 
-    private static final String KEY_VERSION =
+    static final String KEY_VERSION =
             "version";
 
-    private static final String KEY_IV =
+    static final String KEY_IV =
             "iv";
 
-    private static final String KEY_CIPHERTEXT =
+    static final String KEY_CIPHERTEXT =
             "ciphertext";
 
-    private static final int ENVELOPE_VERSION =
+    static final int ENVELOPE_VERSION =
             1;
 
     private final SharedPreferences preferences;
@@ -54,16 +55,16 @@ public class BiometricKeyEnvelopeStore {
         }
 
         String encodedIv =
-                Base64.encodeToString(
-                        wrappedKey.getIv(),
-                        Base64.NO_WRAP
-                );
+                Base64.getEncoder()
+                        .encodeToString(
+                                wrappedKey.getIv()
+                        );
 
         String encodedCiphertext =
-                Base64.encodeToString(
-                        wrappedKey.getCiphertext(),
-                        Base64.NO_WRAP
-                );
+                Base64.getEncoder()
+                        .encodeToString(
+                                wrappedKey.getCiphertext()
+                        );
 
         boolean saved =
                 preferences.edit()
@@ -104,16 +105,76 @@ public class BiometricKeyEnvelopeStore {
 
     public BiometricVaultKeyProtector.WrappedKey load() {
 
-        if (!hasEnvelope()) {
+        boolean hasVersion =
+                preferences.contains(
+                        KEY_VERSION
+                );
+
+        boolean hasIv =
+                preferences.contains(
+                        KEY_IV
+                );
+
+        boolean hasCiphertext =
+                preferences.contains(
+                        KEY_CIPHERTEXT
+                );
+
+        /*
+         * No stored fields means biometric unlock
+         * has never been configured.
+         */
+        if (!hasVersion
+                && !hasIv
+                && !hasCiphertext) {
 
             return null;
         }
 
-        int version =
-                preferences.getInt(
-                        KEY_VERSION,
-                        -1
-                );
+        /*
+         * If any field exists, all version-1 envelope
+         * fields must be present.
+         */
+        if (!hasVersion
+                || !hasIv
+                || !hasCiphertext) {
+
+            throw new IllegalStateException(
+                    "Biometric key envelope is incomplete."
+            );
+        }
+
+        final int version;
+        final String encodedIv;
+        final String encodedCiphertext;
+
+        try {
+
+            version =
+                    preferences.getInt(
+                            KEY_VERSION,
+                            -1
+                    );
+
+            encodedIv =
+                    preferences.getString(
+                            KEY_IV,
+                            null
+                    );
+
+            encodedCiphertext =
+                    preferences.getString(
+                            KEY_CIPHERTEXT,
+                            null
+                    );
+
+        } catch (ClassCastException exception) {
+
+            throw new IllegalStateException(
+                    "Biometric key envelope contains invalid stored field types.",
+                    exception
+            );
+        }
 
         if (version != ENVELOPE_VERSION) {
 
@@ -123,23 +184,13 @@ public class BiometricKeyEnvelopeStore {
             );
         }
 
-        String encodedIv =
-                preferences.getString(
-                        KEY_IV,
-                        null
-                );
-
-        String encodedCiphertext =
-                preferences.getString(
-                        KEY_CIPHERTEXT,
-                        null
-                );
-
         if (encodedIv == null
-                || encodedCiphertext == null) {
+                || encodedIv.isEmpty()
+                || encodedCiphertext == null
+                || encodedCiphertext.isEmpty()) {
 
             throw new IllegalStateException(
-                    "Biometric key envelope is incomplete."
+                    "Biometric key envelope contains empty data."
             );
         }
 
@@ -149,21 +200,21 @@ public class BiometricKeyEnvelopeStore {
         try {
 
             iv =
-                    Base64.decode(
-                            encodedIv,
-                            Base64.NO_WRAP
-                    );
+                    Base64.getDecoder()
+                            .decode(
+                                    encodedIv
+                            );
 
             ciphertext =
-                    Base64.decode(
-                            encodedCiphertext,
-                            Base64.NO_WRAP
-                    );
+                    Base64.getDecoder()
+                            .decode(
+                                    encodedCiphertext
+                            );
 
         } catch (IllegalArgumentException exception) {
 
             throw new IllegalStateException(
-                    "Biometric key envelope contains invalid encoded data.",
+                    "Biometric key envelope contains invalid Base64 data.",
                     exception
             );
         }
@@ -178,7 +229,7 @@ public class BiometricKeyEnvelopeStore {
         } catch (IllegalArgumentException exception) {
 
             throw new IllegalStateException(
-                    "Biometric key envelope contains invalid data.",
+                    "Biometric key envelope contains invalid version-1 data.",
                     exception
             );
         }
