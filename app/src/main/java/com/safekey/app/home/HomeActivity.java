@@ -16,6 +16,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
 import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionDestination;
 import com.safekey.app.session.logic.SessionNavigation;
@@ -159,9 +160,7 @@ public class HomeActivity extends AppCompatActivity {
 
         navVault.setOnClickListener(
                 view ->
-                        showProtectedPlaceholder(
-                                R.string.home_vault_navigation_pending
-                        )
+                        navigateToVault()
         );
 
         navAlerts.setOnClickListener(
@@ -180,9 +179,7 @@ public class HomeActivity extends AppCompatActivity {
 
         buttonOpenVault.setOnClickListener(
                 view ->
-                        showProtectedPlaceholder(
-                                R.string.home_vault_navigation_pending
-                        )
+                        navigateToVault()
         );
 
         buttonAddCredential.setOnClickListener(
@@ -274,6 +271,23 @@ public class HomeActivity extends AppCompatActivity {
                 messageResource,
                 Toast.LENGTH_SHORT
         ).show();
+    }
+
+    private void navigateToVault() {
+
+        if (!requireUnlockedSession()) {
+            return;
+        }
+
+        Intent intent =
+                new Intent(
+                        HomeActivity.this,
+                        VaultActivity.class
+                );
+
+        startActivity(
+                intent
+        );
     }
 
     private void navigateToSignIn() {

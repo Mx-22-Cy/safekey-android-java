@@ -41,6 +41,27 @@
             android:name=".home.HomeActivity"
             android:exported="false" />
 
+        <!-- Week 4 Vault -->
+        <activity
+            android:name=".vault.VaultActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.AddCredentialActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.CredentialDetailsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.SecureNoteDetailsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.AddSecureNoteActivity"
+            android:exported="false" />
+
         <!--
             MainActivity is kept for later integration.
         -->

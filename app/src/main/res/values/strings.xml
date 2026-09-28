@@ -91,10 +91,117 @@
     <string name="home_security_score_accessibility">Security score is %1$d. Maximum score is 100.</string>
 
     <!-- Week 3 integration messages -->
-    <string name="home_vault_navigation_pending">Vault screen will be connected in the next integration step.</string>
     <string name="home_credential_creation_pending">Credential creation will be connected in the next integration step.</string>
     <string name="home_alerts_navigation_pending">Alerts screen will be connected in the next integration step.</string>
     <string name="home_settings_navigation_pending">Settings screen will be connected in the next integration step.</string>
     <string name="home_session_locked">Your vault is locked. Sign in to continue.</string>
+
+    <!-- Week 4 Vault -->
+    <string name="vault_title">Vault</string>
+    <string name="vault_subtitle">Your saved credentials</string>
+    <string name="vault_preview">Preview</string>
+
+    <string name="vault_search_hint">Search vault…</string>
+
+    <string name="vault_filter_all">All</string>
+    <string name="vault_filter_favorites">Favorites</string>
+    <string name="vault_filter_notes">Notes</string>
+
+    <string name="vault_add_credential">Add Credential</string>
+    <string name="vault_add_secure_note">Add Secure Note</string>
+
+    <string name="vault_risk_breach">Breach detected</string>
+    <string name="vault_risk_at_risk">At risk</string>
+
+    <!-- Vault accessibility -->
+    <string name="vault_quick_add_content_description">Add credential or secure note</string>
+    <string name="vault_add_credential_content_description">Add a new credential</string>
+    <string name="vault_favorite_content_description">Mark credential as favorite</string>
+    <string name="vault_unfavorite_content_description">Remove credential from favorites</string>
+    <string name="vault_breach_content_description">Credential has a breach warning</string>
+    <string name="vault_at_risk_content_description">Credential is at risk</string>
+
+    <!-- Week 4 Add Credential -->
+    <string name="add_credential_title">Add Credential</string>
+    <string name="add_credential_subtitle">Save a login to your vault.</string>
+    <string name="add_credential_cancel">Cancel</string>
+
+    <string name="add_credential_name_label">Name</string>
+    <string name="add_credential_name_hint">e.g. Google</string>
+
+    <string name="add_credential_username_label">Username or email</string>
+    <string name="add_credential_username_hint">Enter username or email</string>
+
+    <string name="add_credential_password_label">Password</string>
+    <string name="add_credential_password_hint">Enter password</string>
+
+    <string name="add_credential_website_label">Website</string>
+    <string name="add_credential_website_hint">e.g. accounts.google.com</string>
+
+    <string name="add_credential_category_label">Category</string>
+    <string name="add_credential_category_hint">e.g. Login</string>
+
+    <string name="add_credential_notes_label">Notes</string>
+    <string name="add_credential_notes_hint">Optional notes</string>
+
+    <string name="add_credential_save">Save Credential</string>
+
+    <string name="add_credential_error_name_required">Enter a name.</string>
+    <string name="add_credential_error_username_required">Enter a username or email.</string>
+    <string name="add_credential_error_password_required">Enter a password.</string>
+    <string name="add_credential_save_pending">Credential form is ready. Secure database saving will be connected during data integration.</string>
+
+    <!-- Week 4 Credential Details -->
+    <string name="credential_details_title">Credential Details</string>
+    <string name="credential_details_back">Back</string>
+
+    <string name="credential_details_username">Username or email</string>
+    <string name="credential_details_password">Password</string>
+    <string name="credential_details_website">Website</string>
+    <string name="credential_details_category">Category</string>
+    <string name="credential_details_notes">Notes</string>
+
+    <string name="credential_details_edit">Edit Credential</string>
+    <string name="credential_details_delete">Delete Credential</string>
+
+    <string name="credential_details_not_provided">Not provided</string>
+    <string name="credential_details_delete_pending">Credential deletion will be connected during data integration.</string>
+
+    <!-- Week 4 Secure Note Details -->
+    <string name="secure_note_details_title">Secure Note</string>
+    <string name="secure_note_details_back">Back</string>
+    <string name="secure_note_details_content">Note</string>
+    <string name="secure_note_details_edit">Edit Note</string>
+    <string name="secure_note_details_delete">Delete Note</string>
+    <string name="secure_note_details_not_provided">No note content provided.</string>
+    <string name="secure_note_details_edit_pending">Secure note editing will be connected during data integration.</string>
+    <string name="secure_note_details_delete_pending">Secure note deletion will be connected during data integration.</string>
+
+    <!-- Week 4 Add Secure Note -->
+    <string name="add_secure_note_title">Add Secure Note</string>
+    <string name="add_secure_note_subtitle">Save private information to your vault.</string>
+    <string name="add_secure_note_cancel">Cancel</string>
+
+    <string name="add_secure_note_title_label">Title</string>
+    <string name="add_secure_note_title_hint">e.g. Home Wi-Fi</string>
+
+    <string name="add_secure_note_content_label">Note</string>
+    <string name="add_secure_note_content_hint">Enter your secure note</string>
+
+    <string name="add_secure_note_save">Save Secure Note</string>
+
+    <string name="add_secure_note_error_title_required">Enter a title.</string>
+    <string name="add_secure_note_error_content_required">Enter note content.</string>
+
+    <string name="add_secure_note_save_pending">Secure note form is ready. Encrypted database saving will be connected during data integration.</string>
+
+    <!-- Week 4 Vault UI reusable text -->
+    <string name="vault_preview_dot">•</string>
+    <string name="secure_note_icon_letter">N</string>
+
+    <string name="edit_credential_title">Edit Credential</string>
+    <string name="edit_credential_subtitle">Update this login in your vault.</string>
+    <string name="edit_credential_save">Save Changes</string>
+    <string name="edit_credential_save_pending">Credential changes are ready. Secure database updating will be connected during data integration.</string>
 
 </resources>

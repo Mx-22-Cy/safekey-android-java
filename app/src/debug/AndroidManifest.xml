@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+            DEBUG BUILD ONLY.
+            Allows direct launching of the Vault UI for testing
+            before real authentication integration is complete.
+        -->
+        <activity
+            android:name=".debug.DebugVaultLauncherActivity"
+            android:exported="true" />
+
+    </application>
+
+</manifest>
