@@ -35,11 +35,28 @@ public class VaultDataServiceInstrumentedTest {
             "safekey_service_instrumented_test.db";
 
     /*
-     * Test-only SQLCipher passphrase.
-     * This remains under src/androidTest only.
+     * Creates a fresh 32-byte test database key.
      */
-    private static final String TEST_DATABASE_PASSPHRASE =
-            "SafeKey-Service-Test-Passphrase-2026";
+    private static byte[] newTestDatabaseKey() {
+
+        byte[] databaseKey =
+                new byte[
+                        SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
+                        ];
+
+        for (
+                int index = 0;
+                index < databaseKey.length;
+                index++
+        ) {
+            databaseKey[index] =
+                    (byte) (
+                            index + 1
+                    );
+        }
+
+        return databaseKey;
+    }
 
     private static final long CALLBACK_TIMEOUT_SECONDS =
             5;
@@ -100,7 +117,7 @@ public class VaultDataServiceInstrumentedTest {
         awaitSimpleSuccess(
                 callback ->
                         service.openVault(
-                                TEST_DATABASE_PASSPHRASE,
+                                newTestDatabaseKey(),
                                 callback
                         )
         );
@@ -429,7 +446,7 @@ public class VaultDataServiceInstrumentedTest {
         awaitSimpleSuccess(
                 callback ->
                         service.openVault(
-                                TEST_DATABASE_PASSPHRASE,
+                                newTestDatabaseKey(),
                                 callback
                         )
         );

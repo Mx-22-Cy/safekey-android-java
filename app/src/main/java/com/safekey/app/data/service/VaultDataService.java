@@ -12,6 +12,7 @@ import com.safekey.app.data.repository.SecureNoteRepository;
 
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -70,48 +71,107 @@ public class VaultDataService {
     }
 
     public void openVault(
-            String databasePassphrase,
+            byte[] databaseKey,
             SimpleCallback callback
     ) {
 
-        executorService.execute(() -> {
+        if (databaseKey == null) {
 
-            try {
+            throw new IllegalArgumentException(
+                    "Database key cannot be null."
+            );
+        }
 
-                SQLiteDatabase database =
-                        databaseManager.open(
-                                databasePassphrase
-                        );
+        if (
+                databaseKey.length
+                        != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
+        ) {
 
-                credentialRepository =
-                        new CredentialRepository(
-                                database
-                        );
+            throw new IllegalArgumentException(
+                    "Database key must contain exactly "
+                            + SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
+                            + " bytes."
+            );
+        }
 
-                secureNoteRepository =
-                        new SecureNoteRepository(
-                                database
-                        );
-
-            } catch (Exception exception) {
-
-                deliverSimpleError(
-                        callback,
-                        exception
+        /*
+         * Copy before scheduling asynchronous work.
+         * The caller may clear its original array as
+         * soon as this method returns.
+         */
+        final byte[] databaseKeyCopy =
+                Arrays.copyOf(
+                        databaseKey,
+                        databaseKey.length
                 );
 
-                return;
-            }
+        try {
 
-            /*
-             * Callback delivery is outside the
-             * database try/catch so callback errors
-             * are not reported as database errors.
-             */
-            deliverSimpleSuccess(
-                    callback
+            executorService.execute(() -> {
+
+                Exception openingError =
+                        null;
+
+                try {
+
+                    SQLiteDatabase database =
+                            databaseManager.open(
+                                    databaseKeyCopy
+                            );
+
+                    CredentialRepository openedCredentialRepository =
+                            new CredentialRepository(
+                                    database
+                            );
+
+                    SecureNoteRepository openedSecureNoteRepository =
+                            new SecureNoteRepository(
+                                    database
+                            );
+
+                    credentialRepository =
+                            openedCredentialRepository;
+
+                    secureNoteRepository =
+                            openedSecureNoteRepository;
+
+                } catch (Exception exception) {
+
+                    openingError =
+                            exception;
+
+                } finally {
+
+                    Arrays.fill(
+                            databaseKeyCopy,
+                            (byte) 0
+                    );
+                }
+
+                if (openingError != null) {
+
+                    deliverSimpleError(
+                            callback,
+                            openingError
+                    );
+
+                    return;
+                }
+
+                deliverSimpleSuccess(
+                        callback
+                );
+            });
+
+        } catch (RuntimeException schedulingError) {
+
+            Arrays.fill(
+                    databaseKeyCopy,
+                    (byte) 0
             );
-        });
+
+            throw schedulingError;
+        }
     }
 
     public void closeVault(
@@ -596,6 +656,7 @@ public class VaultDataService {
     public synchronized void shutdown() {
 
         if (executorService.isShutdown()) {
+
             return;
         }
 
