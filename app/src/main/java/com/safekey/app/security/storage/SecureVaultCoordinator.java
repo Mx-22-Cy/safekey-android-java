@@ -5,6 +5,8 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
+import com.safekey.app.data.model.Credential;
+import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.Argon2idMasterKeyDeriver;
@@ -15,6 +17,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.List;
 
 public final class SecureVaultCoordinator {
 
@@ -74,6 +77,22 @@ public final class SecureVaultCoordinator {
 
     public boolean isVaultOpen() {
         return vaultDataService.isVaultOpen();
+    }
+
+    public void getCredentials(
+            VaultDataService.ResultCallback<List<Credential>> callback
+    ) {
+        vaultDataService.getCredentials(
+                callback
+        );
+    }
+
+    public void getSecureNotes(
+            VaultDataService.ResultCallback<List<SecureNote>> callback
+    ) {
+        vaultDataService.getSecureNotes(
+                callback
+        );
     }
 
     public void createVault(

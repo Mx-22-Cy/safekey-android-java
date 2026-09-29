@@ -48,6 +48,8 @@
     <string name="signup_pending_integration_toast">Sign-up screen ready for security integration.</string>
     <string name="signin_pending_integration">Sign-in UI is ready. Vault security integration is pending.</string>
     <string name="signin_pending_integration_toast">Sign-in screen ready for security integration.</string>
+    <string name="signup_vault_creation_error">Couldn’t create your vault. Please try again.</string>
+    <string name="signin_vault_unlock_error">Couldn’t unlock your vault. Check your master password and try again.</string>
 
     <!-- Accessibility -->
     <string name="show_password_content_description">Show password</string>

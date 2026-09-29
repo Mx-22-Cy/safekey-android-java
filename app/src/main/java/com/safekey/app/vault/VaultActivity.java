@@ -35,6 +35,9 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionDestination;
 import com.safekey.app.session.logic.SessionNavigation;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +46,7 @@ import java.util.Locale;
 public class VaultActivity extends AppCompatActivity {
 
     private VaultCredentialAdapter adapter;
-
+    private SecureVaultCoordinator secureVaultCoordinator;
     private VaultSecureNoteAdapter noteAdapter;
     private RecyclerView recyclerVault;
 
@@ -86,6 +89,10 @@ public class VaultActivity extends AppCompatActivity {
         super.onCreate(
                 savedInstanceState
         );
+
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -246,8 +253,6 @@ public class VaultActivity extends AppCompatActivity {
         recyclerVault.setAdapter(
                 allItemsAdapter
         );
-
-        refreshVaultData();
     }
 
     private void showVaultLoadingState() {
@@ -346,18 +351,81 @@ public class VaultActivity extends AppCompatActivity {
 
         showVaultLoadingState();
 
-        showPreviewCredentials();
-        showPreviewNotes();
+        secureVaultCoordinator.getCredentials(
+                new VaultDataService.ResultCallback<List<Credential>>() {
 
-        if (allCredentials.isEmpty()
-                && allNotes.isEmpty()) {
+                    @Override
+                    public void onSuccess(
+                            List<Credential> credentials
+                    ) {
 
-            showVaultEmptyState();
+                        allCredentials.clear();
+                        allCredentials.addAll(
+                                credentials
+                        );
 
-        } else {
+                        allRiskStatuses.clear();
 
-            showVaultContentState();
-        }
+                        for (int i = 0;
+                             i < allCredentials.size();
+                             i++) {
+
+                            allRiskStatuses.add(
+                                    VaultCredentialAdapter.RiskStatus.NONE
+                            );
+                        }
+
+                        loadSecureNotes();
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        showVaultErrorState();
+                    }
+                }
+        );
+    }
+
+    private void loadSecureNotes() {
+
+        secureVaultCoordinator.getSecureNotes(
+                new VaultDataService.ResultCallback<List<SecureNote>>() {
+
+                    @Override
+                    public void onSuccess(
+                            List<SecureNote> notes
+                    ) {
+
+                        allNotes.clear();
+                        allNotes.addAll(
+                                notes
+                        );
+
+                        applyFilters();
+
+                        if (allCredentials.isEmpty()
+                                && allNotes.isEmpty()) {
+
+                            showVaultEmptyState();
+
+                        } else {
+
+                            showVaultContentState();
+                        }
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        showVaultErrorState();
+                    }
+                }
+        );
     }
 
     private void openCredentialDetails(
@@ -1222,12 +1290,13 @@ public class VaultActivity extends AppCompatActivity {
 
         super.onResume();
 
-        if (adapter != null && noteAdapter != null) {
-            refreshVaultData();
-        }
-
         if (!isSessionUnlocked()) {
             navigateToSignIn();
+            return;
+        }
+
+        if (adapter != null && noteAdapter != null) {
+            refreshVaultData();
         }
     }
 
