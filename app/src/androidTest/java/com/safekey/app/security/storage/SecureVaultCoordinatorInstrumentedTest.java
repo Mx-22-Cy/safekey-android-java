@@ -3,6 +3,7 @@ package com.safekey.app.security.storage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -60,6 +61,52 @@ public class SecureVaultCoordinatorInstrumentedTest {
         clearStoredVault();
 
         context = null;
+    }
+
+    @Test
+    public void createVaultWithNullCallbackIsRejected() {
+
+        char[] masterPassword =
+                "Correct-Horse-Battery-Staple-2026"
+                        .toCharArray();
+
+        NullPointerException exception =
+                assertThrows(
+                        NullPointerException.class,
+                        () ->
+                                coordinator.createVault(
+                                        masterPassword,
+                                        null
+                                )
+                );
+
+        assertEquals(
+                "callback",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    public void unlockVaultWithNullCallbackIsRejected() {
+
+        char[] masterPassword =
+                "Correct-Horse-Battery-Staple-2026"
+                        .toCharArray();
+
+        NullPointerException exception =
+                assertThrows(
+                        NullPointerException.class,
+                        () ->
+                                coordinator.unlockVault(
+                                        masterPassword,
+                                        null
+                                )
+                );
+
+        assertEquals(
+                "callback",
+                exception.getMessage()
+        );
     }
 
     @Test

@@ -126,25 +126,25 @@ public final class VaultKeyEnvelopeStore {
             );
         }
 
-        int formatVersion =
-                preferences.getInt(
-                        KEY_FORMAT_VERSION,
-                        -1
-                );
-
-        String encodedSalt =
-                preferences.getString(
-                        KEY_SALT,
-                        null
-                );
-
-        String wrappedDatabaseKey =
-                preferences.getString(
-                        KEY_WRAPPED_DATABASE_KEY,
-                        null
-                );
-
         try {
+            int formatVersion =
+                    preferences.getInt(
+                            KEY_FORMAT_VERSION,
+                            -1
+                    );
+
+            String encodedSalt =
+                    preferences.getString(
+                            KEY_SALT,
+                            null
+                    );
+
+            String wrappedDatabaseKey =
+                    preferences.getString(
+                            KEY_WRAPPED_DATABASE_KEY,
+                            null
+                    );
+
             if (encodedSalt == null
                     || wrappedDatabaseKey == null) {
 
@@ -168,7 +168,8 @@ public final class VaultKeyEnvelopeStore {
             );
 
         } catch (
-                IllegalArgumentException
+                ClassCastException
+                | IllegalArgumentException
                 | NullPointerException invalidEnvelope
         ) {
             throw new IllegalStateException(

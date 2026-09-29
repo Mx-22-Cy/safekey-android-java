@@ -80,15 +80,15 @@ public final class SecureVaultCoordinator {
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
-        char[] passwordCopy =
-                copyAndValidatePassword(
-                        masterPassword
-                );
-
         Objects.requireNonNull(
                 callback,
                 "callback"
         );
+
+        char[] passwordCopy =
+                copyAndValidatePassword(
+                        masterPassword
+                );
 
         try {
             securityExecutor.execute(
@@ -227,15 +227,15 @@ public final class SecureVaultCoordinator {
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
-        char[] passwordCopy =
-                copyAndValidatePassword(
-                        masterPassword
-                );
-
         Objects.requireNonNull(
                 callback,
                 "callback"
         );
+
+        char[] passwordCopy =
+                copyAndValidatePassword(
+                        masterPassword
+                );
 
         try {
             securityExecutor.execute(

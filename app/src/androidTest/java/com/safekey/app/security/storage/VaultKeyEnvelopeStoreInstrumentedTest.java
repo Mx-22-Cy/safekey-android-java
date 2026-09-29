@@ -65,6 +65,47 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
     }
 
     @Test
+    public void load_withIncorrectStoredFieldType_reportsInvalidEnvelope() {
+
+        store.save(
+                new VaultKeyEnvelope(
+                        createSalt(),
+                        WRAPPED_DATABASE_KEY
+                )
+        );
+
+        SharedPreferences preferences =
+                context.getSharedPreferences(
+                        VaultKeyEnvelopeStore.PREFERENCES_NAME,
+                        Context.MODE_PRIVATE
+                );
+
+        boolean corrupted =
+                preferences
+                        .edit()
+                        .putString(
+                                VaultKeyEnvelopeStore.KEY_FORMAT_VERSION,
+                                "not-an-integer"
+                        )
+                        .commit();
+
+        assertTrue(
+                corrupted
+        );
+
+        IllegalStateException exception =
+                assertThrows(
+                        IllegalStateException.class,
+                        store::load
+                );
+
+        assertEquals(
+                "Stored vault key envelope is invalid.",
+                exception.getMessage()
+        );
+    }
+
+    @Test
     public void saveAndLoad_preservesEnvelope() {
         byte[] salt =
                 createSalt();
