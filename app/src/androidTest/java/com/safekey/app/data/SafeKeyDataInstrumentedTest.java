@@ -33,14 +33,14 @@ public class SafeKeyDataInstrumentedTest {
     private static final String TEST_DATABASE_NAME =
             "safekey_instrumented_test.db";
 
-    private static final String NULL_PASSPHRASE_DATABASE_NAME =
-            "safekey_null_passphrase_test.db";
+    private static final String NULL_KEY_DATABASE_NAME =
+            "safekey_null_key_test.db";
 
-    private static final String EMPTY_PASSPHRASE_DATABASE_NAME =
-            "safekey_empty_passphrase_test.db";
+    private static final String EMPTY_KEY_DATABASE_NAME =
+            "safekey_empty_key_test.db";
 
-    private static final String WRONG_PASSPHRASE_DATABASE_NAME =
-            "safekey_wrong_passphrase_test.db";
+    private static final String WRONG_KEY_DATABASE_NAME =
+            "safekey_wrong_key_test.db";
 
     private static final String FUTURE_VERSION_DATABASE_NAME =
             "safekey_future_version_test.db";
@@ -55,20 +55,53 @@ public class SafeKeyDataInstrumentedTest {
     private static final int FUTURE_DATABASE_VERSION = 2;
 
     /*
-     * Test-only SQLCipher passphrase.
-     * This value exists only under src/androidTest.
-     * It must never be moved into src/main.
+     * Returns fresh deterministic test key material.
+     * These values exist only under src/androidTest
+     * and are not production secrets.
      */
-    private static final String TEST_DATABASE_PASSPHRASE =
-            "SafeKey-Instrumented-Test-Passphrase-2026";
+    private static byte[] newTestDatabaseKey() {
 
-    /*
-     * Test-only incorrect SQLCipher passphrase.
-     * Used only to verify that a database cannot
-     * be opened with the wrong key.
-     */
-    private static final String WRONG_DATABASE_PASSPHRASE =
-            "SafeKey-Incorrect-Test-Passphrase-2026";
+        byte[] databaseKey =
+                new byte[
+                        SafeKeyDatabase
+                                .DATABASE_KEY_LENGTH_BYTES
+                        ];
+
+        for (
+                int index = 0;
+                index < databaseKey.length;
+                index++
+        ) {
+            databaseKey[index] =
+                    (byte) (
+                            index + 1
+                    );
+        }
+
+        return databaseKey;
+    }
+
+    private static byte[] newWrongDatabaseKey() {
+
+        byte[] databaseKey =
+                new byte[
+                        SafeKeyDatabase
+                                .DATABASE_KEY_LENGTH_BYTES
+                        ];
+
+        for (
+                int index = 0;
+                index < databaseKey.length;
+                index++
+        ) {
+            databaseKey[index] =
+                    (byte) (
+                            0xA5 ^ index
+                    );
+        }
+
+        return databaseKey;
+    }
 
     private Context context;
 
@@ -91,15 +124,15 @@ public class SafeKeyDataInstrumentedTest {
         deleteTestDatabase();
 
         context.deleteDatabase(
-                NULL_PASSPHRASE_DATABASE_NAME
+                NULL_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
-                EMPTY_PASSPHRASE_DATABASE_NAME
+                EMPTY_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
-                WRONG_PASSPHRASE_DATABASE_NAME
+                WRONG_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
@@ -124,15 +157,15 @@ public class SafeKeyDataInstrumentedTest {
         deleteTestDatabase();
 
         context.deleteDatabase(
-                NULL_PASSPHRASE_DATABASE_NAME
+                NULL_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
-                EMPTY_PASSPHRASE_DATABASE_NAME
+                EMPTY_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
-                WRONG_PASSPHRASE_DATABASE_NAME
+                WRONG_KEY_DATABASE_NAME
         );
 
         context.deleteDatabase(
@@ -150,7 +183,7 @@ public class SafeKeyDataInstrumentedTest {
 
         database =
                 databaseManager.open(
-                        TEST_DATABASE_PASSPHRASE
+                        newTestDatabaseKey()
                 );
 
         credentialRepository =
@@ -172,129 +205,129 @@ public class SafeKeyDataInstrumentedTest {
     }
 
     @Test
-    public void nullDatabasePassphraseIsRejected() {
+    public void nullDatabaseKeyIsRejected() {
 
-        SafeKeyDatabase nullPassphraseDatabase =
+        SafeKeyDatabase nullKeyDatabase =
                 new SafeKeyDatabase(
                         context,
-                        NULL_PASSPHRASE_DATABASE_NAME
+                        NULL_KEY_DATABASE_NAME
                 );
 
         assertFalse(
                 context
                         .getDatabasePath(
-                                NULL_PASSPHRASE_DATABASE_NAME
+                                NULL_KEY_DATABASE_NAME
                         )
                         .exists()
         );
 
         try {
 
-            nullPassphraseDatabase.open(
-                    null
+            nullKeyDatabase.open(
+                    (byte[]) null
             );
 
             fail(
-                    "Expected null database passphrase to be rejected."
+                    "Expected null database key to be rejected."
             );
 
         } catch (IllegalArgumentException expected) {
 
             assertEquals(
-                    "Database passphrase cannot be null or empty.",
+                    "Database key cannot be null.",
                     expected.getMessage()
             );
 
             assertFalse(
-                    nullPassphraseDatabase.isOpen()
+                    nullKeyDatabase.isOpen()
             );
 
             assertFalse(
                     context
                             .getDatabasePath(
-                                    NULL_PASSPHRASE_DATABASE_NAME
+                                    NULL_KEY_DATABASE_NAME
                             )
                             .exists()
             );
 
         } finally {
 
-            nullPassphraseDatabase.close();
+            nullKeyDatabase.close();
 
             context.deleteDatabase(
-                    NULL_PASSPHRASE_DATABASE_NAME
+                    NULL_KEY_DATABASE_NAME
             );
         }
     }
 
     @Test
-    public void emptyDatabasePassphraseIsRejected() {
+    public void emptyDatabaseKeyIsRejected() {
 
-        SafeKeyDatabase emptyPassphraseDatabase =
+        SafeKeyDatabase emptyKeyDatabase =
                 new SafeKeyDatabase(
                         context,
-                        EMPTY_PASSPHRASE_DATABASE_NAME
+                        EMPTY_KEY_DATABASE_NAME
                 );
 
         assertFalse(
                 context
                         .getDatabasePath(
-                                EMPTY_PASSPHRASE_DATABASE_NAME
+                                EMPTY_KEY_DATABASE_NAME
                         )
                         .exists()
         );
 
         try {
 
-            emptyPassphraseDatabase.open(
-                    ""
+            emptyKeyDatabase.open(
+                    new byte[0]
             );
 
             fail(
-                    "Expected empty database passphrase to be rejected."
+                    "Expected an empty database key to be rejected."
             );
 
         } catch (IllegalArgumentException expected) {
 
             assertEquals(
-                    "Database passphrase cannot be null or empty.",
+                    "Database key must contain exactly 32 bytes.",
                     expected.getMessage()
             );
 
             assertFalse(
-                    emptyPassphraseDatabase.isOpen()
+                    emptyKeyDatabase.isOpen()
             );
 
             assertFalse(
                     context
                             .getDatabasePath(
-                                    EMPTY_PASSPHRASE_DATABASE_NAME
+                                    EMPTY_KEY_DATABASE_NAME
                             )
                             .exists()
             );
 
         } finally {
 
-            emptyPassphraseDatabase.close();
+            emptyKeyDatabase.close();
 
             context.deleteDatabase(
-                    EMPTY_PASSPHRASE_DATABASE_NAME
+                    EMPTY_KEY_DATABASE_NAME
             );
         }
     }
 
     @Test
-    public void wrongDatabasePassphraseIsRejectedAndCorrectPassphraseStillWorks() {
+    public void wrongDatabaseKeyIsRejectedAndCorrectKeyStillWorks() {
 
         SafeKeyDatabase correctDatabaseManager =
                 new SafeKeyDatabase(
                         context,
-                        WRONG_PASSPHRASE_DATABASE_NAME
+                        WRONG_KEY_DATABASE_NAME
                 );
 
         SQLiteDatabase correctDatabase =
                 correctDatabaseManager.open(
-                        TEST_DATABASE_PASSPHRASE
+                        newTestDatabaseKey()
                 );
 
         CredentialRepository correctRepository =
@@ -304,12 +337,12 @@ public class SafeKeyDataInstrumentedTest {
 
         Credential credential =
                 new Credential(
-                        "Wrong Passphrase Test",
-                        "wrong-passphrase-user",
-                        "wrong-passphrase-secret",
-                        "wrong-passphrase.test",
+                        "Wrong Key Test",
+                        "wrong-key-user",
+                        "wrong-key-secret",
+                        "wrong-key.test",
                         "Work",
-                        "Wrong passphrase test note"
+                        "Wrong key test note"
                 );
 
         long credentialId =
@@ -330,17 +363,17 @@ public class SafeKeyDataInstrumentedTest {
         SafeKeyDatabase wrongDatabaseManager =
                 new SafeKeyDatabase(
                         context,
-                        WRONG_PASSPHRASE_DATABASE_NAME
+                        WRONG_KEY_DATABASE_NAME
                 );
 
         try {
 
             wrongDatabaseManager.open(
-                    WRONG_DATABASE_PASSPHRASE
+                    newWrongDatabaseKey()
             );
 
             fail(
-                    "Expected the wrong database passphrase to fail."
+                    "Expected the wrong database key to fail."
             );
 
         } catch (RuntimeException expected) {
@@ -357,14 +390,14 @@ public class SafeKeyDataInstrumentedTest {
         SafeKeyDatabase reopenedDatabaseManager =
                 new SafeKeyDatabase(
                         context,
-                        WRONG_PASSPHRASE_DATABASE_NAME
+                        WRONG_KEY_DATABASE_NAME
                 );
 
         try {
 
             SQLiteDatabase reopenedDatabase =
                     reopenedDatabaseManager.open(
-                            TEST_DATABASE_PASSPHRASE
+                            newTestDatabaseKey()
                     );
 
             CredentialRepository reopenedRepository =
@@ -387,22 +420,22 @@ public class SafeKeyDataInstrumentedTest {
             );
 
             assertEquals(
-                    "Wrong Passphrase Test",
+                    "Wrong Key Test",
                     reopenedCredential.getTitle()
             );
 
             assertEquals(
-                    "wrong-passphrase-user",
+                    "wrong-key-user",
                     reopenedCredential.getUsername()
             );
 
             assertEquals(
-                    "wrong-passphrase-secret",
+                    "wrong-key-secret",
                     reopenedCredential.getPassword()
             );
 
             assertEquals(
-                    "Wrong passphrase test note",
+                    "Wrong key test note",
                     reopenedCredential.getNotes()
             );
 
@@ -411,7 +444,7 @@ public class SafeKeyDataInstrumentedTest {
             reopenedDatabaseManager.close();
 
             context.deleteDatabase(
-                    WRONG_PASSPHRASE_DATABASE_NAME
+                    WRONG_KEY_DATABASE_NAME
             );
         }
     }
@@ -432,7 +465,7 @@ public class SafeKeyDataInstrumentedTest {
 
         SQLiteDatabase creatorDatabase =
                 creatorDatabaseManager.open(
-                        TEST_DATABASE_PASSPHRASE
+                        newTestDatabaseKey()
                 );
 
         assertTrue(
@@ -473,7 +506,7 @@ public class SafeKeyDataInstrumentedTest {
         try {
 
             futureVersionDatabaseManager.open(
-                    TEST_DATABASE_PASSPHRASE
+                    newTestDatabaseKey()
             );
 
             fail(

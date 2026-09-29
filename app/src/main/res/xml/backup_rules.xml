@@ -1,13 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+
     <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+        SafeKey vault data and key envelopes must not be copied
+        through Android Auto Backup.
+    -->
+    <exclude
+        domain="database"
+        path="safekey.db" />
+
+    <exclude
+        domain="sharedpref"
+        path="safekey_vault_key_envelope.xml" />
+
+    <exclude
+        domain="sharedpref"
+        path="safekey_biometric_key_envelope.xml" />
+
 </full-backup-content>
