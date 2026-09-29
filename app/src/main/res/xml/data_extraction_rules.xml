@@ -4,12 +4,28 @@
     <cloud-backup>
 
         <exclude
+            domain="database"
+            path="safekey.db" />
+
+        <exclude
+            domain="sharedpref"
+            path="safekey_vault_key_envelope.xml" />
+
+        <exclude
             domain="sharedpref"
             path="safekey_biometric_key_envelope.xml" />
 
     </cloud-backup>
 
     <device-transfer>
+
+        <exclude
+            domain="database"
+            path="safekey.db" />
+
+        <exclude
+            domain="sharedpref"
+            path="safekey_vault_key_envelope.xml" />
 
         <exclude
             domain="sharedpref"

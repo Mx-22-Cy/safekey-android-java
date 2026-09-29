@@ -2,12 +2,17 @@
 <full-backup-content>
 
     <!--
-        Biometric vault-key metadata is bound to a
-        device-local Android Keystore key.
-
-        Do not restore or transfer this SharedPreferences
-        file to another device.
+        SafeKey vault data and key envelopes must not be copied
+        through Android Auto Backup.
     -->
+    <exclude
+        domain="database"
+        path="safekey.db" />
+
+    <exclude
+        domain="sharedpref"
+        path="safekey_vault_key_envelope.xml" />
+
     <exclude
         domain="sharedpref"
         path="safekey_biometric_key_envelope.xml" />
