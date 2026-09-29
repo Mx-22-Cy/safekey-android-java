@@ -11,6 +11,10 @@
             domain="sharedpref"
             path="safekey_vault_key_envelope.xml" />
 
+        <exclude
+            domain="sharedpref"
+            path="safekey_biometric_key_envelope.xml" />
+
     </cloud-backup>
 
     <device-transfer>
@@ -22,6 +26,10 @@
         <exclude
             domain="sharedpref"
             path="safekey_vault_key_envelope.xml" />
+
+        <exclude
+            domain="sharedpref"
+            path="safekey_biometric_key_envelope.xml" />
 
     </device-transfer>
 

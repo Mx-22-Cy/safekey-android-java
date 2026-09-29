@@ -2,11 +2,8 @@
 <full-backup-content>
 
     <!--
-        SafeKey vault data must not be copied by Android Auto Backup.
-
-        The database is encrypted with a randomly generated key, and the
-        envelope contains the password-protected form of that key. These
-        files must remain under SafeKey's controlled recovery process.
+        SafeKey vault data and key envelopes must not be copied
+        through Android Auto Backup.
     -->
     <exclude
         domain="database"
@@ -15,5 +12,9 @@
     <exclude
         domain="sharedpref"
         path="safekey_vault_key_envelope.xml" />
+
+    <exclude
+        domain="sharedpref"
+        path="safekey_biometric_key_envelope.xml" />
 
 </full-backup-content>
