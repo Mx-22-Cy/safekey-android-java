@@ -4,7 +4,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -14,7 +14,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
 
-public class AddSecureNoteActivity extends AppCompatActivity {
+public class AddSecureNoteActivity extends ProtectedActivity {
 
     private AppCompatEditText editSecureNoteTitle;
     private AppCompatEditText editSecureNoteContent;

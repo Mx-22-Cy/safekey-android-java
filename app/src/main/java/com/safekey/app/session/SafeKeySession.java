@@ -5,31 +5,34 @@ import android.os.SystemClock;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.session.logic.VaultSessionManager;
 
+import java.util.Objects;
+
 /**
  * Android-side holder for the shared vault session state.
  *
  * <p>The shared session intentionally starts in the LOCKED state.
- * Real production code must call unlockAfterAuthentication() only
- * after the authentication/security layer has successfully verified
- * the user and established the required vault key material.</p>
+ * Production code must call unlockAfterAuthentication() only after
+ * authentication succeeds and the required vault key material is
+ * available.</p>
  *
- * <p>The current Sign In screen still contains placeholder security
- * integration, so it must not unlock the session yet.</p>
+ * <p>A sensitive-data cleanup action may be registered by the
+ * authentication/storage integration. The action runs whenever the
+ * session changes from UNLOCKED to LOCKED.</p>
  */
 public final class SafeKeySession {
+
+    private static final Runnable NO_OP_CLEANUP =
+            () -> {
+                // No sensitive resources are currently registered.
+            };
+
+    private static Runnable sensitiveDataCleanup =
+            NO_OP_CLEANUP;
 
     private static final VaultSessionManager SESSION_MANAGER =
             new VaultSessionManager(
                     SystemClock::elapsedRealtime,
-                    () -> {
-                        /*
-                         * Session-scoped sensitive material will be
-                         * cleared here when the security/key layer
-                         * is integrated.
-                         *
-                         * Never log passwords or vault keys.
-                         */
-                    }
+                    SafeKeySession::clearSensitiveData
             );
 
     private SafeKeySession() {
@@ -48,7 +51,37 @@ public final class SafeKeySession {
         return SESSION_MANAGER.recordActivity();
     }
 
+    public static void unlockAfterAuthentication() {
+        SESSION_MANAGER.unlockAfterAuthentication();
+    }
+
     public static void lock() {
         SESSION_MANAGER.lock();
+    }
+
+    public static synchronized void registerSensitiveDataCleanup(
+            Runnable cleanup
+    ) {
+        sensitiveDataCleanup =
+                Objects.requireNonNull(
+                        cleanup,
+                        "cleanup"
+                );
+    }
+
+    public static synchronized void unregisterSensitiveDataCleanup() {
+        sensitiveDataCleanup =
+                NO_OP_CLEANUP;
+    }
+
+    private static void clearSensitiveData() {
+        Runnable cleanup;
+
+        synchronized (SafeKeySession.class) {
+            cleanup =
+                    sensitiveDataCleanup;
+        }
+
+        cleanup.run();
     }
 }

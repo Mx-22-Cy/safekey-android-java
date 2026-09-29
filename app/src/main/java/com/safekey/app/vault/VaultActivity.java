@@ -15,7 +15,7 @@ import android.widget.PopupMenu;
 import android.text.Editable;
 import android.text.TextWatcher;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -32,15 +32,13 @@ import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.session.SafeKeySession;
-import com.safekey.app.session.logic.SessionDestination;
-import com.safekey.app.session.logic.SessionNavigation;
 import com.safekey.app.data.model.SecureNote;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class VaultActivity extends AppCompatActivity {
+public class VaultActivity extends ProtectedActivity {
 
     private VaultCredentialAdapter adapter;
 
@@ -1061,37 +1059,6 @@ public class VaultActivity extends AppCompatActivity {
                         .getDisplayMetrics()
                         .density
         );
-    }
-
-    @Override
-    protected void onResume() {
-
-        super.onResume();
-
-        if (!isSessionUnlocked()) {
-            navigateToSignIn();
-        }
-    }
-
-    @Override
-    public void onUserInteraction() {
-
-        super.onUserInteraction();
-
-        if (!SafeKeySession.recordActivity()) {
-            navigateToSignIn();
-        }
-    }
-
-    private boolean isSessionUnlocked() {
-
-        SessionDestination destination =
-                SessionNavigation.destinationFor(
-                        SafeKeySession.getState()
-                );
-
-        return destination
-                == SessionDestination.HOME;
     }
 
     private boolean requireUnlockedSession() {

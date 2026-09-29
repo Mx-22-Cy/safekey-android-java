@@ -4,7 +4,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -13,7 +13,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
 
-public class SecureNoteDetailsActivity extends AppCompatActivity {
+public class SecureNoteDetailsActivity extends ProtectedActivity {
 
     public static final String EXTRA_TITLE =
             "secure_note_title";

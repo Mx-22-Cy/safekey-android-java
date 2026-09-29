@@ -205,6 +205,98 @@ public class VaultSessionManagerTest {
     }
 
     @Test
+    public void getRemainingInactivityMillis_lockedSession_returnsZero() {
+        VaultSessionManager manager =
+                createManager();
+
+        assertEquals(
+                0L,
+                manager.getRemainingInactivityMillis()
+        );
+
+        assertEquals(
+                0,
+                lockCount.get()
+        );
+    }
+
+    @Test
+    public void getRemainingInactivityMillis_afterUnlock_returnsFullTimeout() {
+        VaultSessionManager manager =
+                createManager();
+
+        manager.unlockAfterAuthentication();
+
+        assertEquals(
+                TIMEOUT_MILLIS,
+                manager.getRemainingInactivityMillis()
+        );
+    }
+
+    @Test
+    public void getRemainingInactivityMillis_afterElapsedTime_returnsRemainingTime() {
+        VaultSessionManager manager =
+                createManager();
+
+        manager.unlockAfterAuthentication();
+        timeSource.advanceBy(400L);
+
+        assertEquals(
+                600L,
+                manager.getRemainingInactivityMillis()
+        );
+
+        assertEquals(
+                SessionState.UNLOCKED,
+                manager.getState()
+        );
+    }
+
+    @Test
+    public void getRemainingInactivityMillis_atTimeout_locksAndReturnsZero() {
+        VaultSessionManager manager =
+                createManager();
+
+        manager.unlockAfterAuthentication();
+        timeSource.advanceBy(TIMEOUT_MILLIS);
+
+        assertEquals(
+                0L,
+                manager.getRemainingInactivityMillis()
+        );
+
+        assertEquals(
+                SessionState.LOCKED,
+                manager.getState()
+        );
+
+        assertEquals(
+                1,
+                lockCount.get()
+        );
+    }
+
+    @Test
+    public void getRemainingInactivityMillis_afterActivity_usesResetTimer() {
+        VaultSessionManager manager =
+                createManager();
+
+        manager.unlockAfterAuthentication();
+        timeSource.advanceBy(700L);
+
+        assertTrue(
+                manager.recordActivity()
+        );
+
+        timeSource.advanceBy(250L);
+
+        assertEquals(
+                750L,
+                manager.getRemainingInactivityMillis()
+        );
+    }
+
+    @Test
     public void defaultConstructor_usesFiveMinuteTimeout() {
         VaultSessionManager manager =
                 new VaultSessionManager(

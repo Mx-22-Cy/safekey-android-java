@@ -7,7 +7,7 @@ import android.text.method.PasswordTransformationMethod;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -17,7 +17,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
 
-public class CredentialDetailsActivity extends AppCompatActivity {
+public class CredentialDetailsActivity extends ProtectedActivity {
 
     public static final String EXTRA_NAME =
             "credential_name";

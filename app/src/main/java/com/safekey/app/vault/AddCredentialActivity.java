@@ -7,7 +7,7 @@ import android.widget.Toast;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -18,7 +18,7 @@ import androidx.appcompat.widget.AppCompatImageButton;
 
 import com.safekey.app.R;
 
-public class AddCredentialActivity extends AppCompatActivity {
+public class AddCredentialActivity extends ProtectedActivity {
 
     private AppCompatEditText editCredentialName;
     private AppCompatEditText editCredentialUsername;
