@@ -110,6 +110,16 @@
     <string name="vault_add_credential">Add Credential</string>
     <string name="vault_add_secure_note">Add Secure Note</string>
 
+    <!-- Week 5 Vault states -->
+    <string name="vault_loading">Loading vault…</string>
+
+    <string name="vault_empty_title">Your vault is empty</string>
+    <string name="vault_empty_message">Add your first credential or secure note to get started.</string>
+
+    <string name="vault_error_title">Couldn’t load your vault</string>
+    <string name="vault_error_message">Something went wrong while loading your saved items.</string>
+    <string name="vault_retry">Retry</string>
+
     <string name="vault_risk_breach">Breach detected</string>
     <string name="vault_risk_at_risk">At risk</string>
 

@@ -19,6 +19,9 @@ import com.safekey.app.R;
 
 public class CredentialDetailsActivity extends AppCompatActivity {
 
+    public static final String EXTRA_ID =
+            "credential_id";
+
     public static final String EXTRA_NAME =
             "credential_name";
 
@@ -311,6 +314,14 @@ public class CredentialDetailsActivity extends AppCompatActivity {
         intent.putExtra(
                 AddCredentialActivity.EXTRA_EDIT_MODE,
                 true
+        );
+
+        intent.putExtra(
+                AddCredentialActivity.EXTRA_ID,
+                getIntent().getLongExtra(
+                        EXTRA_ID,
+                        0L
+                )
         );
 
         intent.putExtra(

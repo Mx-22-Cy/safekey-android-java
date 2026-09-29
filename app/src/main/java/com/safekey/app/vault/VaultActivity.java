@@ -46,6 +46,12 @@ public class VaultActivity extends AppCompatActivity {
 
     private VaultSecureNoteAdapter noteAdapter;
     private RecyclerView recyclerVault;
+
+    private View layoutVaultState;
+    private View layoutVaultLoading;
+    private View layoutVaultEmpty;
+    private View layoutVaultError;
+
     private ConcatAdapter allItemsAdapter;
 
     private final List<SecureNote> allNotes =
@@ -145,6 +151,26 @@ public class VaultActivity extends AppCompatActivity {
                         R.id.recyclerVault
                 );
 
+        layoutVaultState =
+                findViewById(
+                        R.id.layoutVaultState
+                );
+
+        layoutVaultLoading =
+                findViewById(
+                        R.id.layoutVaultLoading
+                );
+
+        layoutVaultEmpty =
+                findViewById(
+                        R.id.layoutVaultEmpty
+                );
+
+        layoutVaultError =
+                findViewById(
+                        R.id.layoutVaultError
+                );
+
         recyclerVault.setLayoutManager(
                 new LinearLayoutManager(
                         this
@@ -221,8 +247,117 @@ public class VaultActivity extends AppCompatActivity {
                 allItemsAdapter
         );
 
+        refreshVaultData();
+    }
+
+    private void showVaultLoadingState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultContentState() {
+
+        recyclerVault.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultState.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultEmptyState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultErrorState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.VISIBLE
+        );
+    }
+
+    private void refreshVaultData() {
+
+        showVaultLoadingState();
+
         showPreviewCredentials();
         showPreviewNotes();
+
+        if (allCredentials.isEmpty()
+                && allNotes.isEmpty()) {
+
+            showVaultEmptyState();
+
+        } else {
+
+            showVaultContentState();
+        }
     }
 
     private void openCredentialDetails(
@@ -245,6 +380,11 @@ public class VaultActivity extends AppCompatActivity {
          * the credential ID and loading the record securely
          * from the approved data layer.
          */
+        intent.putExtra(
+                CredentialDetailsActivity.EXTRA_ID,
+                credential.getId()
+        );
+
         intent.putExtra(
                 CredentialDetailsActivity.EXTRA_NAME,
                 credential.getTitle()
@@ -297,6 +437,11 @@ public class VaultActivity extends AppCompatActivity {
          * prefer passing the note ID and loading
          * the secure note through the data layer.
          */
+        intent.putExtra(
+                SecureNoteDetailsActivity.EXTRA_ID,
+                note.getId()
+        );
+
         intent.putExtra(
                 SecureNoteDetailsActivity.EXTRA_TITLE,
                 note.getTitle()
@@ -753,6 +898,11 @@ public class VaultActivity extends AppCompatActivity {
                         R.id.buttonAddCredential
                 );
 
+        View buttonVaultRetry =
+                findViewById(
+                        R.id.buttonVaultRetry
+                );
+
         View navHome =
                 findViewById(
                         R.id.navHome
@@ -775,6 +925,10 @@ public class VaultActivity extends AppCompatActivity {
 
         buttonQuickAdd.setOnClickListener(
                 this::showQuickAddMenu
+        );
+
+        buttonVaultRetry.setOnClickListener(
+                view -> refreshVaultData()
         );
 
         buttonAddCredential.setOnClickListener(
@@ -1067,6 +1221,10 @@ public class VaultActivity extends AppCompatActivity {
     protected void onResume() {
 
         super.onResume();
+
+        if (adapter != null && noteAdapter != null) {
+            refreshVaultData();
+        }
 
         if (!isSessionUnlocked()) {
             navigateToSignIn();

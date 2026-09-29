@@ -15,6 +15,8 @@ import com.safekey.app.R;
 
 public class SecureNoteDetailsActivity extends AppCompatActivity {
 
+    public static final String EXTRA_ID =
+            "secure_note_id";
     public static final String EXTRA_TITLE =
             "secure_note_title";
 

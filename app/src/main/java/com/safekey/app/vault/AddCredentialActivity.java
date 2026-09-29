@@ -31,9 +31,13 @@ public class AddCredentialActivity extends AppCompatActivity {
 
     private boolean passwordVisible = false;
     private boolean editMode = false;
+    private long credentialId = 0L;
 
     public static final String EXTRA_EDIT_MODE =
             "edit_mode";
+
+    public static final String EXTRA_ID =
+            "edit_credential_id";
 
     public static final String EXTRA_NAME =
             "edit_credential_name";
@@ -167,6 +171,12 @@ public class AddCredentialActivity extends AppCompatActivity {
         if (!editMode) {
             return;
         }
+
+        credentialId =
+                getIntent().getLongExtra(
+                        EXTRA_ID,
+                        0L
+                );
 
         TextView textTitle =
                 findViewById(
