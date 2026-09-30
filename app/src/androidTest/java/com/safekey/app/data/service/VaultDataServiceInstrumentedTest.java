@@ -108,6 +108,180 @@ public class VaultDataServiceInstrumentedTest {
     }
 
     @Test
+    public void credentialCanBeReadByIdAndPersistsAfterCloseAndReopen()
+            throws Exception {
+
+        /*
+         * OPEN
+         */
+        awaitSimpleSuccess(
+                callback ->
+                        service.openVault(
+                                newTestDatabaseKey(),
+                                callback
+                        )
+        );
+
+        assertTrue(
+                service.isVaultOpen()
+        );
+
+        /*
+         * ADD CREDENTIAL
+         */
+        Credential credential =
+                new Credential(
+                        "Persistent Service Credential",
+                        "persistent-user",
+                        "persistent-password",
+                        "persistent.example.test",
+                        "Work",
+                        "Persistent credential note"
+                );
+
+        long credentialId =
+                awaitResultSuccess(
+                        callback ->
+                                service.addCredential(
+                                        credential,
+                                        callback
+                                )
+                );
+
+        assertTrue(
+                credentialId > 0
+        );
+
+        /*
+         * READ THE SINGLE CREDENTIAL BY ID
+         */
+        Credential storedCredential =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                storedCredential
+        );
+
+        assertEquals(
+                credentialId,
+                storedCredential.getId()
+        );
+
+        assertEquals(
+                "Persistent Service Credential",
+                storedCredential.getTitle()
+        );
+
+        assertEquals(
+                "persistent-user",
+                storedCredential.getUsername()
+        );
+
+        assertEquals(
+                "persistent-password",
+                storedCredential.getPassword()
+        );
+
+        assertEquals(
+                "persistent.example.test",
+                storedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "Work",
+                storedCredential.getCategory()
+        );
+
+        assertEquals(
+                "Persistent credential note",
+                storedCredential.getNotes()
+        );
+
+        /*
+         * CLOSE THE VAULT
+         */
+        awaitSimpleSuccess(
+                service::closeVault
+        );
+
+        assertFalse(
+                service.isVaultOpen()
+        );
+
+        /*
+         * REOPEN WITH THE SAME RAW DATABASE KEY
+         */
+        awaitSimpleSuccess(
+                callback ->
+                        service.openVault(
+                                newTestDatabaseKey(),
+                                callback
+                        )
+        );
+
+        assertTrue(
+                service.isVaultOpen()
+        );
+
+        /*
+         * VERIFY THE SAME STORED RECORD IS STILL PRESENT
+         */
+        Credential reopenedCredential =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                reopenedCredential
+        );
+
+        assertEquals(
+                credentialId,
+                reopenedCredential.getId()
+        );
+
+        assertEquals(
+                "Persistent Service Credential",
+                reopenedCredential.getTitle()
+        );
+
+        assertEquals(
+                "persistent-user",
+                reopenedCredential.getUsername()
+        );
+
+        assertEquals(
+                "persistent-password",
+                reopenedCredential.getPassword()
+        );
+
+        assertEquals(
+                "persistent.example.test",
+                reopenedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "Work",
+                reopenedCredential.getCategory()
+        );
+
+        assertEquals(
+                "Persistent credential note",
+                reopenedCredential.getNotes()
+        );
+    }
+
+    @Test
     public void serviceSupportsOpenCrudSearchCloseAndShutdown()
             throws Exception {
 
