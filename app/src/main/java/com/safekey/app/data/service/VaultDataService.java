@@ -242,6 +242,40 @@ public class VaultDataService {
         });
     }
 
+    public void getCredential(
+            long id,
+            ResultCallback<Credential> callback
+    ) {
+
+        executorService.execute(() -> {
+
+            final Credential credential;
+
+            try {
+
+                credential =
+                        requireCredentialRepository()
+                                .getById(
+                                        id
+                                );
+
+            } catch (Exception exception) {
+
+                deliverResultError(
+                        callback,
+                        exception
+                );
+
+                return;
+            }
+
+            deliverResultSuccess(
+                    callback,
+                    credential
+            );
+        });
+    }
+
     public void getCredentials(
             ResultCallback<List<Credential>> callback
     ) {
