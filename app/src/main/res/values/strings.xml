@@ -161,7 +161,8 @@
     <string name="add_credential_error_name_required">Enter a name.</string>
     <string name="add_credential_error_username_required">Enter a username or email.</string>
     <string name="add_credential_error_password_required">Enter a password.</string>
-    <string name="add_credential_save_pending">Credential form is ready. Secure database saving will be connected during data integration.</string>
+    <string name="credential_save_error">Couldn’t save this credential. Please try again.</string>
+    <string name="credential_load_error">Couldn’t load this credential. Please try again.</string>
 
     <!-- Week 4 Credential Details -->
     <string name="credential_details_title">Credential Details</string>
@@ -177,7 +178,12 @@
     <string name="credential_details_delete">Delete Credential</string>
 
     <string name="credential_details_not_provided">Not provided</string>
-    <string name="credential_details_delete_pending">Credential deletion will be connected during data integration.</string>
+
+    <string name="credential_delete_title">Delete credential?</string>
+    <string name="credential_delete_message">This credential will be permanently removed from your vault.</string>
+    <string name="credential_delete_cancel">Cancel</string>
+    <string name="credential_delete_confirm">Delete</string>
+    <string name="credential_delete_error">Couldn’t delete this credential. Please try again.</string>
 
     <!-- Week 4 Secure Note Details -->
     <string name="secure_note_details_title">Secure Note</string>
@@ -214,6 +220,5 @@
     <string name="edit_credential_title">Edit Credential</string>
     <string name="edit_credential_subtitle">Update this login in your vault.</string>
     <string name="edit_credential_save">Save Changes</string>
-    <string name="edit_credential_save_pending">Credential changes are ready. Secure database updating will be connected during data integration.</string>
 
 </resources>

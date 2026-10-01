@@ -17,6 +17,10 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.appcompat.widget.AppCompatImageButton;
 
 import com.safekey.app.R;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.data.model.Credential;
+import com.safekey.app.data.service.VaultDataService;
 
 public class AddCredentialActivity extends AppCompatActivity {
 
@@ -32,6 +36,8 @@ public class AddCredentialActivity extends AppCompatActivity {
     private boolean passwordVisible = false;
     private boolean editMode = false;
     private long credentialId = 0L;
+    private SecureVaultCoordinator secureVaultCoordinator;
+    private Credential loadedCredential;
 
     public static final String EXTRA_EDIT_MODE =
             "edit_mode";
@@ -87,6 +93,10 @@ public class AddCredentialActivity extends AppCompatActivity {
         setContentView(
                 R.layout.activity_add_credential
         );
+
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
 
         View rootAddCredential =
                 findViewById(
@@ -205,40 +215,81 @@ public class AddCredentialActivity extends AppCompatActivity {
                 R.string.edit_credential_save
         );
 
-        editCredentialName.setText(
-                getIntent().getStringExtra(
-                        EXTRA_NAME
-                )
-        );
+        if (credentialId <= 0L) {
 
-        editCredentialUsername.setText(
-                getIntent().getStringExtra(
-                        EXTRA_USERNAME
-                )
-        );
+            Toast.makeText(
+                    this,
+                    R.string.credential_load_error,
+                    Toast.LENGTH_SHORT
+            ).show();
 
-        editCredentialPassword.setText(
-                getIntent().getStringExtra(
-                        EXTRA_PASSWORD
-                )
-        );
+            finish();
+            return;
+        }
 
-        editCredentialWebsite.setText(
-                getIntent().getStringExtra(
-                        EXTRA_WEBSITE
-                )
-        );
+        secureVaultCoordinator.getCredential(
+                credentialId,
+                new VaultDataService.ResultCallback<Credential>() {
 
-        editCredentialCategory.setText(
-                getIntent().getStringExtra(
-                        EXTRA_CATEGORY
-                )
-        );
+                    @Override
+                    public void onSuccess(
+                            Credential credential
+                    ) {
 
-        editCredentialNotes.setText(
-                getIntent().getStringExtra(
-                        EXTRA_NOTES
-                )
+                        if (credential == null) {
+
+                            Toast.makeText(
+                                    AddCredentialActivity.this,
+                                    R.string.credential_load_error,
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            finish();
+                            return;
+                        }
+
+                        loadedCredential =
+                                credential;
+
+                        editCredentialName.setText(
+                                credential.getTitle()
+                        );
+
+                        editCredentialUsername.setText(
+                                credential.getUsername()
+                        );
+
+                        editCredentialPassword.setText(
+                                credential.getPassword()
+                        );
+
+                        editCredentialWebsite.setText(
+                                credential.getWebsite()
+                        );
+
+                        editCredentialCategory.setText(
+                                credential.getCategory()
+                        );
+
+                        editCredentialNotes.setText(
+                                credential.getNotes()
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        Toast.makeText(
+                                AddCredentialActivity.this,
+                                R.string.credential_load_error,
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        finish();
+                    }
+                }
         );
     }
 
@@ -332,6 +383,21 @@ public class AddCredentialActivity extends AppCompatActivity {
                         editCredentialPassword
                 );
 
+        String website =
+                readText(
+                        editCredentialWebsite
+                );
+
+        String category =
+                readText(
+                        editCredentialCategory
+                );
+
+        String notes =
+                readText(
+                        editCredentialNotes
+                );
+
         boolean valid =
                 true;
 
@@ -375,21 +441,116 @@ public class AddCredentialActivity extends AppCompatActivity {
             return;
         }
 
-        /*
-         * UI validation is complete.
-         *
-         * Do not persist the plaintext password here.
-         * Real saving will be connected through the
-         * approved encrypted VaultDataService flow.
-         */
-        int messageResource =
-                editMode
-                        ? R.string.edit_credential_save_pending
-                        : R.string.add_credential_save_pending;
+        if (editMode) {
+
+            if (loadedCredential == null) {
+
+                Toast.makeText(
+                        this,
+                        R.string.credential_load_error,
+                        Toast.LENGTH_SHORT
+                ).show();
+
+                return;
+            }
+
+            loadedCredential.setTitle(
+                    name
+            );
+
+            loadedCredential.setUsername(
+                    username
+            );
+
+            loadedCredential.setPassword(
+                    password
+            );
+
+            loadedCredential.setWebsite(
+                    website
+            );
+
+            loadedCredential.setCategory(
+                    category
+            );
+
+            loadedCredential.setNotes(
+                    notes
+            );
+
+            secureVaultCoordinator.updateCredential(
+                    loadedCredential,
+                    new VaultDataService.ResultCallback<Integer>() {
+
+                        @Override
+                        public void onSuccess(
+                                Integer rows
+                        ) {
+
+                            if (rows == null || rows <= 0) {
+
+                                showSaveError();
+                                return;
+                            }
+
+                            finish();
+                        }
+
+                        @Override
+                        public void onError(
+                                Exception exception
+                        ) {
+                            showSaveError();
+                        }
+                    }
+            );
+
+            return;
+        }
+
+        Credential credential =
+                new Credential(
+                        name,
+                        username,
+                        password,
+                        website,
+                        category,
+                        notes
+                );
+
+        secureVaultCoordinator.addCredential(
+                credential,
+                new VaultDataService.ResultCallback<Long>() {
+
+                    @Override
+                    public void onSuccess(
+                            Long id
+                    ) {
+
+                        if (id == null || id <= 0L) {
+
+                            showSaveError();
+                            return;
+                        }
+
+                        finish();
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+                        showSaveError();
+                    }
+                }
+        );
+    }
+
+    private void showSaveError() {
 
         Toast.makeText(
                 this,
-                messageResource,
+                R.string.credential_save_error,
                 Toast.LENGTH_SHORT
         ).show();
     }

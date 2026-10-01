@@ -194,11 +194,60 @@ public class VaultActivity extends AppCompatActivity {
                                     int position
                             ) {
 
+                                boolean newFavorite =
+                                        !credential.isFavorite();
+
                                 credential.setFavorite(
-                                        !credential.isFavorite()
+                                        newFavorite
                                 );
 
                                 applyFilters();
+
+                                secureVaultCoordinator.setCredentialFavorite(
+                                        credential.getId(),
+                                        newFavorite,
+                                        new VaultDataService.ResultCallback<Integer>() {
+
+                                            @Override
+                                            public void onSuccess(
+                                                    Integer rows
+                                            ) {
+
+                                                if (rows == null || rows <= 0) {
+
+                                                    credential.setFavorite(
+                                                            !newFavorite
+                                                    );
+
+                                                    applyFilters();
+
+                                                    Toast.makeText(
+                                                            VaultActivity.this,
+                                                            R.string.credential_save_error,
+                                                            Toast.LENGTH_SHORT
+                                                    ).show();
+                                                }
+                                            }
+
+                                            @Override
+                                            public void onError(
+                                                    Exception exception
+                                            ) {
+
+                                                credential.setFavorite(
+                                                        !newFavorite
+                                                );
+
+                                                applyFilters();
+
+                                                Toast.makeText(
+                                                        VaultActivity.this,
+                                                        R.string.credential_save_error,
+                                                        Toast.LENGTH_SHORT
+                                                ).show();
+                                            }
+                                        }
+                                );
                             }
 
                             @Override
@@ -438,56 +487,15 @@ public class VaultActivity extends AppCompatActivity {
                         CredentialDetailsActivity.class
                 );
 
-        /*
-         * WEEK 4 UI PREVIEW ONLY.
-         *
-         * The selected preview credential is passed directly
-         * to the details screen for UI testing.
-         *
-         * During real database integration, prefer passing
-         * the credential ID and loading the record securely
-         * from the approved data layer.
-         */
         intent.putExtra(
                 CredentialDetailsActivity.EXTRA_ID,
                 credential.getId()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_NAME,
-                credential.getTitle()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_USERNAME,
-                credential.getUsername()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_PASSWORD,
-                credential.getPassword()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_WEBSITE,
-                credential.getWebsite()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_CATEGORY,
-                credential.getCategory()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_NOTES,
-                credential.getNotes()
         );
 
         startActivity(
                 intent
         );
     }
-
     private void openSecureNoteDetails(
             SecureNote note
     ) {

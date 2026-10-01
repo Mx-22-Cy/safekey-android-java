@@ -79,6 +79,58 @@ public final class SecureVaultCoordinator {
         return vaultDataService.isVaultOpen();
     }
 
+    public void getCredential(
+            long id,
+            VaultDataService.ResultCallback<Credential> callback
+    ) {
+        vaultDataService.getCredential(
+                id,
+                callback
+        );
+    }
+
+    public void addCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Long> callback
+    ) {
+        vaultDataService.addCredential(
+                credential,
+                callback
+        );
+    }
+
+    public void updateCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateCredential(
+                credential,
+                callback
+        );
+    }
+
+    public void deleteCredential(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteCredential(
+                id,
+                callback
+        );
+    }
+
+    public void setCredentialFavorite(
+            long id,
+            boolean favorite,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.setCredentialFavorite(
+                id,
+                favorite,
+                callback
+        );
+    }
+
     public void getCredentials(
             VaultDataService.ResultCallback<List<Credential>> callback
     ) {
