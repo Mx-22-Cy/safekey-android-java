@@ -6,6 +6,7 @@ import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.session.logic.VaultSessionManager;
 
 import java.util.Objects;
+import java.util.function.LongSupplier;
 
 /**
  * Android-side holder for the shared vault session state.
@@ -29,9 +30,14 @@ public final class SafeKeySession {
     private static Runnable sensitiveDataCleanup =
             NO_OP_CLEANUP;
 
+    private static final LongSupplier SYSTEM_CLOCK =
+            SystemClock::elapsedRealtime;
+
+    private static volatile LongSupplier monotonicTimeMillis =
+            SYSTEM_CLOCK;
     private static final VaultSessionManager SESSION_MANAGER =
             new VaultSessionManager(
-                    SystemClock::elapsedRealtime,
+                    () -> monotonicTimeMillis.getAsLong(),
                     SafeKeySession::clearSensitiveData
             );
 
@@ -74,6 +80,14 @@ public final class SafeKeySession {
                 NO_OP_CLEANUP;
     }
 
+    static void setClockForTesting(LongSupplier clock) {
+        monotonicTimeMillis =
+                Objects.requireNonNull(clock, "clock");
+    }
+
+    static void resetClockForTesting() {
+        monotonicTimeMillis = SYSTEM_CLOCK;
+    }
     private static void clearSensitiveData() {
         Runnable cleanup;
 
