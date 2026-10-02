@@ -23,40 +23,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Small Preview badge -->
-    <LinearLayout
-        android:id="@+id/badgeVaultPreview"
-        android:layout_width="wrap_content"
-        android:layout_height="24dp"
-        android:layout_marginStart="8dp"
-        android:background="@drawable/vault_preview_badge_bg"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        app:layout_constraintBottom_toBottomOf="@id/textVaultTitle"
-        app:layout_constraintStart_toEndOf="@id/textVaultTitle"
-        app:layout_constraintTop_toTopOf="@id/textVaultTitle">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/vault_preview_dot"
-            android:textColor="@color/vault_accent"
-            android:textSize="11sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:fontFamily="monospace"
-            android:letterSpacing="0.08"
-            android:text="@string/vault_preview"
-            android:textColor="@color/vault_text_faint"
-            android:textSize="11sp" />
-
-    </LinearLayout>
-
     <!-- Top-right quick add -->
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/buttonQuickAdd"

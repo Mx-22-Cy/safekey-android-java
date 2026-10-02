@@ -11,6 +11,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.appcompat.app.AlertDialog;
 
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
@@ -24,11 +25,6 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
     private SecureVaultCoordinator secureVaultCoordinator;
     public static final String EXTRA_ID =
             "secure_note_id";
-    public static final String EXTRA_TITLE =
-            "secure_note_title";
-
-    public static final String EXTRA_CONTENT =
-            "secure_note_content";
 
     @Override
     protected void onCreate(
@@ -89,6 +85,12 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
 
         bindData();
         setupActions();
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        bindData();
     }
 
     private void bindData() {
@@ -223,11 +225,68 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
 
         buttonDelete.setOnClickListener(
                 view ->
+                        showDeleteConfirmation()
+        );
+    }
+
+    private void showDeleteConfirmation() {
+
+        new AlertDialog.Builder(this)
+                .setTitle(
+                        R.string.secure_note_delete_title
+                )
+                .setMessage(
+                        R.string.secure_note_delete_message
+                )
+                .setNegativeButton(
+                        R.string.secure_note_delete_cancel,
+                        null
+                )
+                .setPositiveButton(
+                        R.string.secure_note_delete_confirm,
+                        (dialog, which) ->
+                                deleteSecureNote()
+                )
+                .show();
+    }
+
+    private void deleteSecureNote() {
+
+        secureVaultCoordinator.deleteSecureNote(
+                secureNoteId,
+                new VaultDataService.ResultCallback<Integer>() {
+
+                    @Override
+                    public void onSuccess(
+                            Integer rows
+                    ) {
+
+                        if (rows == null || rows <= 0) {
+
+                            Toast.makeText(
+                                    SecureNoteDetailsActivity.this,
+                                    R.string.secure_note_delete_error,
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            return;
+                        }
+
+                        finish();
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
                         Toast.makeText(
-                                this,
-                                R.string.secure_note_details_delete_pending,
+                                SecureNoteDetailsActivity.this,
+                                R.string.secure_note_delete_error,
                                 Toast.LENGTH_SHORT
-                        ).show()
+                        ).show();
+                    }
+                }
         );
     }
 
