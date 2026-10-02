@@ -139,6 +139,79 @@ public final class SecureVaultCoordinator {
         );
     }
 
+    public void getSecureNote(
+            long id,
+            VaultDataService.ResultCallback<SecureNote> callback
+    ) {
+        vaultDataService.getSecureNotes(
+                new VaultDataService.ResultCallback<List<SecureNote>>() {
+                    @Override
+                    public void onSuccess(
+                            List<SecureNote> notes
+                    ) {
+                        SecureNote matchingNote =
+                                null;
+
+                        if (notes != null) {
+
+                            for (SecureNote note : notes) {
+
+                                if (note.getId() == id) {
+
+                                    matchingNote =
+                                            note;
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        callback.onSuccess(
+                                matchingNote
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+                        callback.onError(
+                                exception
+                        );
+                    }
+                }
+        );
+    }
+
+    public void addSecureNote(
+            SecureNote note,
+            VaultDataService.ResultCallback<Long> callback
+    ) {
+        vaultDataService.addSecureNote(
+                note,
+                callback
+        );
+    }
+    public void updateSecureNote(
+            SecureNote note,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateSecureNote(
+                note,
+                callback
+        );
+    }
+
+    public void deleteSecureNote(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteSecureNote(
+                id,
+                callback
+        );
+    }
+
     public void getSecureNotes(
             VaultDataService.ResultCallback<List<SecureNote>> callback
     ) {

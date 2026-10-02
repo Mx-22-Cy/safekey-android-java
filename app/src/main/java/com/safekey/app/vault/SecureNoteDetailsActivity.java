@@ -3,6 +3,7 @@ package com.safekey.app.vault;
 import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.Intent;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -12,9 +13,15 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 
 public class SecureNoteDetailsActivity extends AppCompatActivity {
 
+    private long secureNoteId = 0L;
+    private SecureVaultCoordinator secureVaultCoordinator;
     public static final String EXTRA_ID =
             "secure_note_id";
     public static final String EXTRA_TITLE =
@@ -54,6 +61,10 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
                 R.layout.activity_secure_note_details
         );
 
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
+
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(
                         R.id.rootSecureNoteDetails
@@ -92,43 +103,95 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
                         R.id.textSecureNoteDetailsContent
                 );
 
-        String title =
-                getIntent().getStringExtra(
-                        EXTRA_TITLE
+        secureNoteId =
+                getIntent().getLongExtra(
+                        EXTRA_ID,
+                        0L
                 );
 
-        String content =
-                getIntent().getStringExtra(
-                        EXTRA_CONTENT
-                );
+        if (secureNoteId <= 0L) {
 
-        if (title == null
-                || title.trim().isEmpty()) {
+            Toast.makeText(
+                    this,
+                    R.string.secure_note_load_error,
+                    Toast.LENGTH_SHORT
+            ).show();
 
-            textTitle.setText(
-                    R.string.secure_note_details_title
-            );
-
-        } else {
-
-            textTitle.setText(
-                    title
-            );
+            finish();
+            return;
         }
 
-        if (content == null
-                || content.trim().isEmpty()) {
+        secureVaultCoordinator.getSecureNote(
+                secureNoteId,
+                new VaultDataService.ResultCallback<SecureNote>() {
 
-            textContent.setText(
-                    R.string.secure_note_details_not_provided
-            );
+                    @Override
+                    public void onSuccess(
+                            SecureNote note
+                    ) {
 
-        } else {
+                        if (note == null) {
 
-            textContent.setText(
-                    content
-            );
-        }
+                            Toast.makeText(
+                                    SecureNoteDetailsActivity.this,
+                                    R.string.secure_note_load_error,
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            finish();
+                            return;
+                        }
+
+                        String title =
+                                note.getTitle();
+
+                        String content =
+                                note.getContent();
+
+                        if (title == null
+                                || title.trim().isEmpty()) {
+
+                            textTitle.setText(
+                                    R.string.secure_note_details_title
+                            );
+
+                        } else {
+
+                            textTitle.setText(
+                                    title
+                            );
+                        }
+
+                        if (content == null
+                                || content.trim().isEmpty()) {
+
+                            textContent.setText(
+                                    R.string.secure_note_details_not_provided
+                            );
+
+                        } else {
+
+                            textContent.setText(
+                                    content
+                            );
+                        }
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        Toast.makeText(
+                                SecureNoteDetailsActivity.this,
+                                R.string.secure_note_load_error,
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        finish();
+                    }
+                }
+        );
     }
 
     private void setupActions() {
@@ -155,11 +218,7 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
 
         buttonEdit.setOnClickListener(
                 view ->
-                        Toast.makeText(
-                                this,
-                                R.string.secure_note_details_edit_pending,
-                                Toast.LENGTH_SHORT
-                        ).show()
+                        openEditSecureNoteScreen()
         );
 
         buttonDelete.setOnClickListener(
@@ -169,6 +228,29 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
                                 R.string.secure_note_details_delete_pending,
                                 Toast.LENGTH_SHORT
                         ).show()
+        );
+    }
+
+    private void openEditSecureNoteScreen() {
+
+        Intent intent =
+                new Intent(
+                        SecureNoteDetailsActivity.this,
+                        AddSecureNoteActivity.class
+                );
+
+        intent.putExtra(
+                AddSecureNoteActivity.EXTRA_EDIT_MODE,
+                true
+        );
+
+        intent.putExtra(
+                AddSecureNoteActivity.EXTRA_ID,
+                secureNoteId
+        );
+
+        startActivity(
+                intent
         );
     }
 }

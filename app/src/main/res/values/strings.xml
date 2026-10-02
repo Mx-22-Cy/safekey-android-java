@@ -210,6 +210,8 @@
 
     <string name="add_secure_note_error_title_required">Enter a title.</string>
     <string name="add_secure_note_error_content_required">Enter note content.</string>
+    <string name="secure_note_save_error">Couldn’t save this secure note. Please try again.</string>
+    <string name="secure_note_load_error">Couldn’t load this secure note. Please try again.</string>
 
     <string name="add_secure_note_save_pending">Secure note form is ready. Encrypted database saving will be connected during data integration.</string>
 
@@ -220,5 +222,9 @@
     <string name="edit_credential_title">Edit Credential</string>
     <string name="edit_credential_subtitle">Update this login in your vault.</string>
     <string name="edit_credential_save">Save Changes</string>
+
+    <string name="edit_secure_note_title">Edit Secure Note</string>
+    <string name="edit_secure_note_subtitle">Update this note in your vault.</string>
+    <string name="edit_secure_note_save">Save Changes</string>
 
 </resources>
