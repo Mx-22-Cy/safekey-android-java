@@ -7,7 +7,7 @@ import android.text.method.PasswordTransformationMethod;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -21,8 +21,10 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
-public class CredentialDetailsActivity extends AppCompatActivity {
+public class CredentialDetailsActivity extends ProtectedActivity {
 
     public static final String EXTRA_ID =
             "credential_id";
@@ -192,6 +194,11 @@ public class CredentialDetailsActivity extends AppCompatActivity {
                     public void onSuccess(
                             Credential credential
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         if (credential == null) {
 
@@ -336,6 +343,11 @@ public class CredentialDetailsActivity extends AppCompatActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 CredentialDetailsActivity.this,

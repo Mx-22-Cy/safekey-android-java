@@ -15,6 +15,9 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
 import org.junit.After;
 import org.junit.Before;
@@ -105,6 +108,76 @@ public class VaultDataServiceInstrumentedTest {
         context.deleteDatabase(
                 TEST_DATABASE_NAME
         );
+    }
+
+    @Test
+    public void sessionLock_closesOpenVault()
+            throws Exception {
+        SafeKeySession.lock();
+
+        awaitSimpleSuccess(
+                callback -> service.openVault(
+                        newTestDatabaseKey(),
+                        callback
+                )
+        );
+        assertTrue(service.isVaultOpen());
+
+        CountDownLatch closeFinished = new CountDownLatch(1);
+        AtomicReference<Exception> closeError =
+                new AtomicReference<>();
+
+        SafeKeySession.registerSensitiveDataCleanup(
+                () -> service.closeVault(
+                        new VaultDataService.SimpleCallback() {
+                            @Override
+                            public void onSuccess() {
+                                closeFinished.countDown();
+                            }
+
+                            @Override
+                            public void onError(Exception exception) {
+                                closeError.set(exception);
+                                closeFinished.countDown();
+                            }
+                        }
+                )
+        );
+
+        try {
+            SafeKeySession.unlockAfterAuthentication();
+            SafeKeySession.lock();
+
+            assertTrue(
+                    "Timed out waiting for the vault to close.",
+                    closeFinished.await(
+                            CALLBACK_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            if (closeError.get() != null) {
+                throw closeError.get();
+            }
+
+            assertEquals(
+                    SessionState.LOCKED,
+                    SafeKeySession.getState()
+            );
+            assertFalse(service.isVaultOpen());
+
+            assertEquals(
+                    "Vault is not open.",
+                    awaitResultError(
+                            service::getCredentials
+                    ).getMessage()
+            );
+        } finally {
+            SafeKeySession.lock();
+
+            ((SafeKeyApplication) context.getApplicationContext())
+                    .registerSessionCleanup();
+        }
     }
 
     @Test

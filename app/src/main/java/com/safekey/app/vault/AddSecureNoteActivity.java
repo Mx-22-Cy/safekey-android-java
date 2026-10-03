@@ -4,7 +4,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -17,8 +17,10 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
-public class AddSecureNoteActivity extends AppCompatActivity {
+public class AddSecureNoteActivity extends ProtectedActivity {
 
     public static final String EXTRA_EDIT_MODE =
             "secure_note_edit_mode";
@@ -171,6 +173,11 @@ public class AddSecureNoteActivity extends AppCompatActivity {
                     public void onSuccess(
                             SecureNote note
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         if (note == null) {
 
@@ -200,6 +207,11 @@ public class AddSecureNoteActivity extends AppCompatActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 AddSecureNoteActivity.this,
