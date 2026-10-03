@@ -222,4 +222,12 @@
     <string name="edit_secure_note_subtitle">Update this note in your vault.</string>
     <string name="edit_secure_note_save">Save Changes</string>
 
+    <!-- Week 6 biometric UI -->
+    <string name="signin_or">or</string>
+    <string name="signin_unlock_with_biometrics">Unlock with biometrics</string>
+    <string name="biometric_enable_title">Enable biometric unlock?</string>
+    <string name="biometric_enable_message">Use your phone’s fingerprint or face recognition to unlock SafeKey faster.</string>
+    <string name="biometric_not_now">Not now</string>
+    <string name="biometric_enable">Enable</string>
+
 </resources>

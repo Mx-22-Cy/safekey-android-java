@@ -10,6 +10,10 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.LinearLayout;
+import android.graphics.drawable.ColorDrawable;
+import android.view.Window;
+import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -17,6 +21,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.appcompat.app.AlertDialog;
 
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
@@ -24,6 +29,8 @@ import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.security.biometric.BiometricAuthenticator;
+import com.safekey.app.security.biometric.BiometricVaultKeyManager;
 
 import java.util.Arrays;
 
@@ -33,6 +40,8 @@ public class SignInActivity extends AppCompatActivity {
     private ImageButton buttonTogglePassword;
     private boolean passwordVisible = false;
     private TextView textValidationMessage;
+    private BiometricVaultKeyManager biometricVaultKeyManager;
+    private LinearLayout biometricUnlockSection;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -97,6 +106,16 @@ public class SignInActivity extends AppCompatActivity {
         textValidationMessage =
                 findViewById(
                         R.id.textValidationMessage
+                );
+
+        biometricUnlockSection =
+                findViewById(
+                        R.id.biometricUnlockSection
+                );
+
+        biometricVaultKeyManager =
+                new BiometricVaultKeyManager(
+                        this
                 );
 
         Button buttonUnlockVault =
@@ -166,6 +185,145 @@ public class SignInActivity extends AppCompatActivity {
         );
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        updateBiometricUnlockVisibility();
+    }
+
+    private void updateBiometricUnlockVisibility() {
+
+        boolean shouldShowBiometricUnlock = false;
+
+        try {
+
+            shouldShowBiometricUnlock =
+                    biometricVaultKeyManager.getAvailability()
+                            == BiometricAuthenticator.Availability.AVAILABLE
+                            && biometricVaultKeyManager.isConfigured();
+
+        } catch (Exception exception) {
+
+            shouldShowBiometricUnlock = false;
+        }
+
+        biometricUnlockSection.setVisibility(
+                shouldShowBiometricUnlock
+                        ? View.VISIBLE
+                        : View.GONE
+        );
+    }
+    private boolean shouldOfferBiometricEnrollment() {
+
+        try {
+
+            return biometricVaultKeyManager.getAvailability()
+                    == BiometricAuthenticator.Availability.AVAILABLE
+                    && !biometricVaultKeyManager.isConfigured();
+
+        } catch (Exception exception) {
+
+            return false;
+        }
+    }
+
+    private void showBiometricEnrollmentDialog(
+            Runnable onNotNow,
+            Runnable onEnable
+    ) {
+
+        View dialogView =
+                getLayoutInflater().inflate(
+                        R.layout.dialog_enable_biometric,
+                        null
+                );
+
+        AlertDialog dialog =
+                new AlertDialog.Builder(this)
+                        .setView(dialogView)
+                        .create();
+
+        dialog.setCancelable(false);
+        dialog.setCanceledOnTouchOutside(false);
+
+        Button buttonNotNow =
+                dialogView.findViewById(
+                        R.id.buttonBiometricNotNow
+                );
+
+        Button buttonEnable =
+                dialogView.findViewById(
+                        R.id.buttonBiometricEnable
+                );
+
+        buttonNotNow.setOnClickListener(
+                view -> {
+                    dialog.dismiss();
+                    onNotNow.run();
+                }
+        );
+
+        buttonEnable.setOnClickListener(
+                view ->
+                        onEnable.run()
+        );
+
+        dialog.setOnShowListener(
+                ignored -> {
+
+                    Window window =
+                            dialog.getWindow();
+
+                    if (window != null) {
+
+                        window.setBackgroundDrawable(
+                                new ColorDrawable(
+                                        android.graphics.Color.TRANSPARENT
+                                )
+                        );
+
+                        window.addFlags(
+                                WindowManager.LayoutParams.FLAG_DIM_BEHIND
+                        );
+
+                        WindowManager.LayoutParams attributes =
+                                window.getAttributes();
+
+                        attributes.dimAmount = 0.72f;
+
+                        window.setAttributes(
+                                attributes
+                        );
+                    }
+                }
+        );
+
+        dialog.show();
+    }
+
+    private void continueToHome() {
+
+        SafeKeySession
+                .getManager()
+                .unlockAfterAuthentication();
+
+        editMasterPassword.setText("");
+
+        Intent intent =
+                new Intent(
+                        SignInActivity.this,
+                        HomeActivity.class
+                );
+
+        intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
+        );
+
+        startActivity(intent);
+        finish();
+    }
     private void setPasswordVisibility(
             boolean visible
     ) {
@@ -243,29 +401,7 @@ public class SignInActivity extends AppCompatActivity {
 
                         @Override
                         public void onSuccess() {
-
-                            SafeKeySession
-                                    .getManager()
-                                    .unlockAfterAuthentication();
-
-                            editMasterPassword.setText("");
-
-                            Intent intent =
-                                    new Intent(
-                                            SignInActivity.this,
-                                            HomeActivity.class
-                                    );
-
-                            intent.addFlags(
-                                    Intent.FLAG_ACTIVITY_NEW_TASK
-                                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            );
-
-                            startActivity(
-                                    intent
-                            );
-
-                            finish();
+                            continueToHome();
                         }
 
                         @Override
