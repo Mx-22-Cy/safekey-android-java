@@ -5,6 +5,8 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
+import com.safekey.app.data.model.Credential;
+import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.Argon2idMasterKeyDeriver;
@@ -15,6 +17,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.List;
 
 public final class SecureVaultCoordinator {
 
@@ -74,6 +77,147 @@ public final class SecureVaultCoordinator {
 
     public boolean isVaultOpen() {
         return vaultDataService.isVaultOpen();
+    }
+
+    public void getCredential(
+            long id,
+            VaultDataService.ResultCallback<Credential> callback
+    ) {
+        vaultDataService.getCredential(
+                id,
+                callback
+        );
+    }
+
+    public void addCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Long> callback
+    ) {
+        vaultDataService.addCredential(
+                credential,
+                callback
+        );
+    }
+
+    public void updateCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateCredential(
+                credential,
+                callback
+        );
+    }
+
+    public void deleteCredential(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteCredential(
+                id,
+                callback
+        );
+    }
+
+    public void setCredentialFavorite(
+            long id,
+            boolean favorite,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.setCredentialFavorite(
+                id,
+                favorite,
+                callback
+        );
+    }
+
+    public void getCredentials(
+            VaultDataService.ResultCallback<List<Credential>> callback
+    ) {
+        vaultDataService.getCredentials(
+                callback
+        );
+    }
+
+    public void getSecureNote(
+            long id,
+            VaultDataService.ResultCallback<SecureNote> callback
+    ) {
+        vaultDataService.getSecureNotes(
+                new VaultDataService.ResultCallback<List<SecureNote>>() {
+                    @Override
+                    public void onSuccess(
+                            List<SecureNote> notes
+                    ) {
+                        SecureNote matchingNote =
+                                null;
+
+                        if (notes != null) {
+
+                            for (SecureNote note : notes) {
+
+                                if (note.getId() == id) {
+
+                                    matchingNote =
+                                            note;
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        callback.onSuccess(
+                                matchingNote
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+                        callback.onError(
+                                exception
+                        );
+                    }
+                }
+        );
+    }
+
+    public void addSecureNote(
+            SecureNote note,
+            VaultDataService.ResultCallback<Long> callback
+    ) {
+        vaultDataService.addSecureNote(
+                note,
+                callback
+        );
+    }
+    public void updateSecureNote(
+            SecureNote note,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateSecureNote(
+                note,
+                callback
+        );
+    }
+
+    public void deleteSecureNote(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteSecureNote(
+                id,
+                callback
+        );
+    }
+
+    public void getSecureNotes(
+            VaultDataService.ResultCallback<List<SecureNote>> callback
+    ) {
+        vaultDataService.getSecureNotes(
+                callback
+        );
     }
 
     public void createVault(

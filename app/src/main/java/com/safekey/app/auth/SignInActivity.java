@@ -4,12 +4,12 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
+import android.text.Editable;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -19,6 +19,13 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.home.HomeActivity;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
+
+import java.util.Arrays;
 
 public class SignInActivity extends AppCompatActivity {
 
@@ -199,9 +206,10 @@ public class SignInActivity extends AppCompatActivity {
 
         textValidationMessage.setText(null);
 
-        if (editMasterPassword
-                .getText()
-                .length() == 0) {
+        Editable masterEditable =
+                editMasterPassword.getText();
+
+        if (masterEditable.length() == 0) {
 
             editMasterPassword.setError(
                     getString(
@@ -213,26 +221,85 @@ public class SignInActivity extends AppCompatActivity {
             return;
         }
 
-        /*
-         * TODO: Connect this screen to the real vault unlock logic later.
-         *
-         * Do not save or log the master password.
-         * The password should not be used directly as the SQLCipher password.
-         *
-         * Later, the security layer will verify the password,
-         * unlock the required key material, and open the encrypted vault.
-         */
+        char[] masterPasswordChars =
+                new char[masterEditable.length()];
 
-        textValidationMessage.setText(
-                R.string.signin_pending_integration
+        masterEditable.getChars(
+                0,
+                masterEditable.length(),
+                masterPasswordChars,
+                0
         );
 
-        Toast.makeText(
-                this,
-                R.string.signin_pending_integration_toast,
-                Toast.LENGTH_LONG
-        ).show();
+        try {
 
-        editMasterPassword.setText("");
+            SecureVaultCoordinator secureVaultCoordinator =
+                    ((SafeKeyApplication) getApplication())
+                            .getSecureVaultCoordinator();
+
+            secureVaultCoordinator.unlockVault(
+                    masterPasswordChars,
+                    new VaultDataService.SimpleCallback() {
+
+                        @Override
+                        public void onSuccess() {
+
+                            SafeKeySession
+                                    .getManager()
+                                    .unlockAfterAuthentication();
+
+                            editMasterPassword.setText("");
+
+                            Intent intent =
+                                    new Intent(
+                                            SignInActivity.this,
+                                            HomeActivity.class
+                                    );
+
+                            intent.addFlags(
+                                    Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            );
+
+                            startActivity(
+                                    intent
+                            );
+
+                            finish();
+                        }
+
+                        @Override
+                        public void onError(
+                                Exception exception
+                        ) {
+
+                            editMasterPassword.setText("");
+
+                            textValidationMessage.setText(
+                                    R.string.signin_vault_unlock_error
+                            );
+
+                            editMasterPassword.requestFocus();
+                        }
+                    }
+            );
+
+        } catch (RuntimeException exception) {
+
+            editMasterPassword.setText("");
+
+            textValidationMessage.setText(
+                    R.string.signin_vault_unlock_error
+            );
+
+            editMasterPassword.requestFocus();
+
+        } finally {
+
+            Arrays.fill(
+                    masterPasswordChars,
+                    '\0'
+            );
+        }
     }
 }

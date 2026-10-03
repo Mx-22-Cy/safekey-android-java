@@ -55,4 +55,7 @@
     <color name="vault_risk_red">#E5484D</color>
     <color name="vault_risk_amber">#E5A44D</color>
 
+    <color name="vault_error_background">#2A1A1D</color>
+    <color name="vault_error_border">#45262A</color>
+
 </resources>

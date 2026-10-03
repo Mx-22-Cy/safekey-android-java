@@ -24,6 +24,11 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.safekey.app.R;
 import com.safekey.app.auth.logic.MasterPasswordPolicy;
 import com.safekey.app.auth.logic.MasterPasswordValidationResult;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.home.HomeActivity;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
 
@@ -649,32 +654,53 @@ public class SignUpActivity extends AppCompatActivity {
                     break;
             }
 
-            /*
-             * TODO: Connect this screen to the remaining security and key-management logic later.
-             *
-             * Do not save or log the master password.
-             * The master password should not be used directly as the
-             * SQLCipher database password.
-             *
-             * Later, the security layer will:
-             * - derive the required key using Argon2id;
-             * - open/unlock the encrypted database;
-             * - protect keys using Android Keystore;
-             * - clear temporary sensitive values when possible.
-             */
+            SecureVaultCoordinator secureVaultCoordinator =
+                    ((SafeKeyApplication) getApplication())
+                            .getSecureVaultCoordinator();
 
-            textValidationMessage.setText(
-                    R.string.signup_pending_integration
+            secureVaultCoordinator.createVault(
+                    masterPasswordChars,
+                    new VaultDataService.SimpleCallback() {
+
+                        @Override
+                        public void onSuccess() {
+
+                            SafeKeySession
+                                    .getManager()
+                                    .unlockAfterAuthentication();
+
+                            editMasterPassword.setText("");
+                            editConfirmPassword.setText("");
+
+                            Intent intent =
+                                    new Intent(
+                                            SignUpActivity.this,
+                                            HomeActivity.class
+                                    );
+
+                            intent.addFlags(
+                                    Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            );
+
+                            startActivity(
+                                    intent
+                            );
+
+                            finish();
+                        }
+
+                        @Override
+                        public void onError(
+                                Exception exception
+                        ) {
+
+                            textValidationMessage.setText(
+                                    R.string.signup_vault_creation_error
+                            );
+                        }
+                    }
             );
-
-            Toast.makeText(
-                    this,
-                    R.string.signup_pending_integration_toast,
-                    Toast.LENGTH_LONG
-            ).show();
-
-            editMasterPassword.setText("");
-            editConfirmPassword.setText("");
 
         } finally {
 

@@ -14,10 +14,18 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.appcompat.app.AlertDialog;
 
 import com.safekey.app.R;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.model.Credential;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 
 public class CredentialDetailsActivity extends AppCompatActivity {
+
+    public static final String EXTRA_ID =
+            "credential_id";
 
     public static final String EXTRA_NAME =
             "credential_name";
@@ -41,6 +49,8 @@ public class CredentialDetailsActivity extends AppCompatActivity {
     private AppCompatImageButton buttonTogglePassword;
 
     private boolean passwordVisible = false;
+    private long credentialId = 0L;
+    private SecureVaultCoordinator secureVaultCoordinator;
 
     @Override
     protected void onCreate(
@@ -71,6 +81,16 @@ public class CredentialDetailsActivity extends AppCompatActivity {
                 R.layout.activity_credential_details
         );
 
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
+
+        credentialId =
+                getIntent().getLongExtra(
+                        EXTRA_ID,
+                        0L
+                );
+
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(
                         R.id.rootCredentialDetails
@@ -95,6 +115,14 @@ public class CredentialDetailsActivity extends AppCompatActivity {
 
         bindData();
         setupActions();
+    }
+
+    @Override
+    protected void onRestart() {
+
+        super.onRestart();
+
+        bindData();
     }
 
     private void bindData() {
@@ -144,118 +172,181 @@ public class CredentialDetailsActivity extends AppCompatActivity {
                         R.id.buttonToggleDetailsPassword
                 );
 
-        String name =
-                getIntent().getStringExtra(
-                        EXTRA_NAME
-                );
-        if (name != null
-                && !name.trim().isEmpty()) {
+        if (credentialId <= 0L) {
 
-            textLogo.setText(
-                    name.trim()
-                            .substring(
-                                    0,
-                                    1
-                            )
-                            .toUpperCase(
-                                    java.util.Locale.ROOT
-                            )
-            );
+            Toast.makeText(
+                    this,
+                    R.string.credential_load_error,
+                    Toast.LENGTH_SHORT
+            ).show();
 
-        } else {
-
-            textLogo.setText(
-                    "?"
-            );
+            finish();
+            return;
         }
 
-        String username =
-                getIntent().getStringExtra(
-                        EXTRA_USERNAME
-                );
+        secureVaultCoordinator.getCredential(
+                credentialId,
+                new VaultDataService.ResultCallback<Credential>() {
 
-        String password =
-                getIntent().getStringExtra(
-                        EXTRA_PASSWORD
-                );
+                    @Override
+                    public void onSuccess(
+                            Credential credential
+                    ) {
 
-        String website =
-                getIntent().getStringExtra(
-                        EXTRA_WEBSITE
-                );
+                        if (credential == null) {
 
-        String category =
-                getIntent().getStringExtra(
-                        EXTRA_CATEGORY
-                );
+                            Toast.makeText(
+                                    CredentialDetailsActivity.this,
+                                    R.string.credential_load_error,
+                                    Toast.LENGTH_SHORT
+                            ).show();
 
-        String notes =
-                getIntent().getStringExtra(
-                        EXTRA_NOTES
-                );
+                            finish();
+                            return;
+                        }
 
-        textName.setText(
-                valueOrPlaceholder(name)
+                        String name =
+                                credential.getTitle();
+
+                        String username =
+                                credential.getUsername();
+
+                        String password =
+                                credential.getPassword();
+
+                        String website =
+                                credential.getWebsite();
+
+                        String category =
+                                credential.getCategory();
+
+                        String notes =
+                                credential.getNotes();
+
+                        if (name != null
+                                && !name.trim().isEmpty()) {
+
+                            textLogo.setText(
+                                    name.trim()
+                                            .substring(
+                                                    0,
+                                                    1
+                                            )
+                                            .toUpperCase(
+                                                    java.util.Locale.ROOT
+                                            )
+                            );
+
+                        } else {
+
+                            textLogo.setText(
+                                    "?"
+                            );
+                        }
+
+                        textName.setText(
+                                valueOrPlaceholder(
+                                        name
+                                )
+                        );
+
+                        textDomain.setText(
+                                valueOrPlaceholder(
+                                        website
+                                )
+                        );
+
+                        textUsername.setText(
+                                valueOrPlaceholder(
+                                        username
+                                )
+                        );
+
+                        passwordVisible =
+                                false;
+
+                        if (password == null
+                                || password.trim().isEmpty()) {
+
+                            textPassword.setText(
+                                    R.string.credential_details_not_provided
+                            );
+
+                            textPassword.setTransformationMethod(
+                                    null
+                            );
+
+                            buttonTogglePassword.setEnabled(
+                                    false
+                            );
+
+                            buttonTogglePassword.setVisibility(
+                                    android.view.View.GONE
+                            );
+
+                        } else {
+
+                            textPassword.setText(
+                                    password
+                            );
+
+                            textPassword.setTransformationMethod(
+                                    PasswordTransformationMethod.getInstance()
+                            );
+
+                            buttonTogglePassword.setImageResource(
+                                    R.drawable.ic_password_visible
+                            );
+
+                            buttonTogglePassword.setContentDescription(
+                                    getString(
+                                            R.string.show_password_content_description
+                                    )
+                            );
+
+                            buttonTogglePassword.setEnabled(
+                                    true
+                            );
+
+                            buttonTogglePassword.setVisibility(
+                                    android.view.View.VISIBLE
+                            );
+                        }
+
+                        textWebsite.setText(
+                                valueOrPlaceholder(
+                                        website
+                                )
+                        );
+
+                        textCategory.setText(
+                                valueOrPlaceholder(
+                                        category
+                                )
+                        );
+
+                        textNotes.setText(
+                                valueOrPlaceholder(
+                                        notes
+                                )
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        Toast.makeText(
+                                CredentialDetailsActivity.this,
+                                R.string.credential_load_error,
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        finish();
+                    }
+                }
         );
-
-        textDomain.setText(
-                valueOrPlaceholder(website)
-        );
-
-        textUsername.setText(
-                valueOrPlaceholder(username)
-        );
-
-        if (password == null
-                || password.trim().isEmpty()) {
-
-            textPassword.setText(
-                    R.string.credential_details_not_provided
-            );
-
-            textPassword.setTransformationMethod(
-                    null
-            );
-
-            buttonTogglePassword.setEnabled(
-                    false
-            );
-
-            buttonTogglePassword.setVisibility(
-                    android.view.View.GONE
-            );
-
-        } else {
-
-            textPassword.setText(
-                    password
-            );
-
-            textPassword.setTransformationMethod(
-                    PasswordTransformationMethod.getInstance()
-            );
-
-            buttonTogglePassword.setEnabled(
-                    true
-            );
-
-            buttonTogglePassword.setVisibility(
-                    android.view.View.VISIBLE
-            );
-        }
-
-        textWebsite.setText(
-                valueOrPlaceholder(website)
-        );
-
-        textCategory.setText(
-                valueOrPlaceholder(category)
-        );
-
-        textNotes.setText(
-                valueOrPlaceholder(notes)
-        );
-
     }
 
     private void setupActions() {
@@ -292,14 +383,72 @@ public class CredentialDetailsActivity extends AppCompatActivity {
 
         buttonDelete.setOnClickListener(
                 view ->
-                        Toast.makeText(
-                                this,
-                                R.string.credential_details_delete_pending,
-                                Toast.LENGTH_SHORT
-                        ).show()
+                        showDeleteConfirmation()
         );
     }
 
+    private void showDeleteConfirmation() {
+
+        new AlertDialog.Builder(
+                this
+        )
+                .setTitle(
+                        R.string.credential_delete_title
+                )
+                .setMessage(
+                        R.string.credential_delete_message
+                )
+                .setNegativeButton(
+                        R.string.credential_delete_cancel,
+                        null
+                )
+                .setPositiveButton(
+                        R.string.credential_delete_confirm,
+                        (dialog, which) ->
+                                deleteCredential()
+                )
+                .show();
+    }
+
+    private void deleteCredential() {
+
+        secureVaultCoordinator.deleteCredential(
+                credentialId,
+                new VaultDataService.ResultCallback<Integer>() {
+
+                    @Override
+                    public void onSuccess(
+                            Integer rows
+                    ) {
+
+                        if (rows == null || rows <= 0) {
+
+                            Toast.makeText(
+                                    CredentialDetailsActivity.this,
+                                    R.string.credential_delete_error,
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+                            return;
+                        }
+
+                        finish();
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        Toast.makeText(
+                                CredentialDetailsActivity.this,
+                                R.string.credential_delete_error,
+                                Toast.LENGTH_SHORT
+                        ).show();
+                    }
+                }
+        );
+    }
     private void openEditCredentialScreen() {
 
         Intent intent =
@@ -314,52 +463,14 @@ public class CredentialDetailsActivity extends AppCompatActivity {
         );
 
         intent.putExtra(
-                AddCredentialActivity.EXTRA_NAME,
-                getIntent().getStringExtra(
-                        EXTRA_NAME
-                )
-        );
-
-        intent.putExtra(
-                AddCredentialActivity.EXTRA_USERNAME,
-                getIntent().getStringExtra(
-                        EXTRA_USERNAME
-                )
-        );
-
-        intent.putExtra(
-                AddCredentialActivity.EXTRA_PASSWORD,
-                getIntent().getStringExtra(
-                        EXTRA_PASSWORD
-                )
-        );
-
-        intent.putExtra(
-                AddCredentialActivity.EXTRA_WEBSITE,
-                getIntent().getStringExtra(
-                        EXTRA_WEBSITE
-                )
-        );
-
-        intent.putExtra(
-                AddCredentialActivity.EXTRA_CATEGORY,
-                getIntent().getStringExtra(
-                        EXTRA_CATEGORY
-                )
-        );
-
-        intent.putExtra(
-                AddCredentialActivity.EXTRA_NOTES,
-                getIntent().getStringExtra(
-                        EXTRA_NOTES
-                )
+                AddCredentialActivity.EXTRA_ID,
+                credentialId
         );
 
         startActivity(
                 intent
         );
     }
-
     private void togglePasswordVisibility() {
 
         passwordVisible =
