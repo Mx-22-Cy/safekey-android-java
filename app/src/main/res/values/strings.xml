@@ -44,10 +44,8 @@
     <string name="error_passwords_do_not_match">Passwords do not match.</string>
 
     <!-- Temporary authentication integration messages -->
-    <string name="signup_pending_integration">Sign-up UI is ready. Security integration is pending.</string>
-    <string name="signup_pending_integration_toast">Sign-up screen ready for security integration.</string>
-    <string name="signin_pending_integration">Sign-in UI is ready. Vault security integration is pending.</string>
-    <string name="signin_pending_integration_toast">Sign-in screen ready for security integration.</string>
+    <string name="signup_vault_creation_error">Couldn’t create your vault. Please try again.</string>
+    <string name="signin_vault_unlock_error">Couldn’t unlock your vault. Check your master password and try again.</string>
 
     <!-- Accessibility -->
     <string name="show_password_content_description">Show password</string>
@@ -99,7 +97,6 @@
     <!-- Week 4 Vault -->
     <string name="vault_title">Vault</string>
     <string name="vault_subtitle">Your saved credentials</string>
-    <string name="vault_preview">Preview</string>
 
     <string name="vault_search_hint">Search vault…</string>
 
@@ -109,6 +106,16 @@
 
     <string name="vault_add_credential">Add Credential</string>
     <string name="vault_add_secure_note">Add Secure Note</string>
+
+    <!-- Week 5 Vault states -->
+    <string name="vault_loading">Loading vault…</string>
+
+    <string name="vault_empty_title">Your vault is empty</string>
+    <string name="vault_empty_message">Add your first credential or secure note to get started.</string>
+
+    <string name="vault_error_title">Couldn’t load your vault</string>
+    <string name="vault_error_message">Something went wrong while loading your saved items.</string>
+    <string name="vault_retry">Retry</string>
 
     <string name="vault_risk_breach">Breach detected</string>
     <string name="vault_risk_at_risk">At risk</string>
@@ -149,7 +156,8 @@
     <string name="add_credential_error_name_required">Enter a name.</string>
     <string name="add_credential_error_username_required">Enter a username or email.</string>
     <string name="add_credential_error_password_required">Enter a password.</string>
-    <string name="add_credential_save_pending">Credential form is ready. Secure database saving will be connected during data integration.</string>
+    <string name="credential_save_error">Couldn’t save this credential. Please try again.</string>
+    <string name="credential_load_error">Couldn’t load this credential. Please try again.</string>
 
     <!-- Week 4 Credential Details -->
     <string name="credential_details_title">Credential Details</string>
@@ -165,7 +173,12 @@
     <string name="credential_details_delete">Delete Credential</string>
 
     <string name="credential_details_not_provided">Not provided</string>
-    <string name="credential_details_delete_pending">Credential deletion will be connected during data integration.</string>
+
+    <string name="credential_delete_title">Delete credential?</string>
+    <string name="credential_delete_message">This credential will be permanently removed from your vault.</string>
+    <string name="credential_delete_cancel">Cancel</string>
+    <string name="credential_delete_confirm">Delete</string>
+    <string name="credential_delete_error">Couldn’t delete this credential. Please try again.</string>
 
     <!-- Week 4 Secure Note Details -->
     <string name="secure_note_details_title">Secure Note</string>
@@ -174,8 +187,11 @@
     <string name="secure_note_details_edit">Edit Note</string>
     <string name="secure_note_details_delete">Delete Note</string>
     <string name="secure_note_details_not_provided">No note content provided.</string>
-    <string name="secure_note_details_edit_pending">Secure note editing will be connected during data integration.</string>
-    <string name="secure_note_details_delete_pending">Secure note deletion will be connected during data integration.</string>
+    <string name="secure_note_delete_title">Delete secure note?</string>
+    <string name="secure_note_delete_message">This secure note will be permanently removed from your vault.</string>
+    <string name="secure_note_delete_cancel">Cancel</string>
+    <string name="secure_note_delete_confirm">Delete</string>
+    <string name="secure_note_delete_error">Couldn’t delete this secure note. Please try again.</string>
 
     <!-- Week 4 Add Secure Note -->
     <string name="add_secure_note_title">Add Secure Note</string>
@@ -192,16 +208,18 @@
 
     <string name="add_secure_note_error_title_required">Enter a title.</string>
     <string name="add_secure_note_error_content_required">Enter note content.</string>
-
-    <string name="add_secure_note_save_pending">Secure note form is ready. Encrypted database saving will be connected during data integration.</string>
+    <string name="secure_note_save_error">Couldn’t save this secure note. Please try again.</string>
+    <string name="secure_note_load_error">Couldn’t load this secure note. Please try again.</string>
 
     <!-- Week 4 Vault UI reusable text -->
-    <string name="vault_preview_dot">•</string>
     <string name="secure_note_icon_letter">N</string>
 
     <string name="edit_credential_title">Edit Credential</string>
     <string name="edit_credential_subtitle">Update this login in your vault.</string>
     <string name="edit_credential_save">Save Changes</string>
-    <string name="edit_credential_save_pending">Credential changes are ready. Secure database updating will be connected during data integration.</string>
+
+    <string name="edit_secure_note_title">Edit Secure Note</string>
+    <string name="edit_secure_note_subtitle">Update this note in your vault.</string>
+    <string name="edit_secure_note_save">Save Changes</string>
 
 </resources>

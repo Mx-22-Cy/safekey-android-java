@@ -33,6 +33,9 @@ import com.safekey.app.data.model.Credential;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,9 +44,15 @@ import java.util.Locale;
 public class VaultActivity extends ProtectedActivity {
 
     private VaultCredentialAdapter adapter;
-
+    private SecureVaultCoordinator secureVaultCoordinator;
     private VaultSecureNoteAdapter noteAdapter;
     private RecyclerView recyclerVault;
+
+    private View layoutVaultState;
+    private View layoutVaultLoading;
+    private View layoutVaultEmpty;
+    private View layoutVaultError;
+
     private ConcatAdapter allItemsAdapter;
 
     private final List<SecureNote> allNotes =
@@ -78,6 +87,10 @@ public class VaultActivity extends ProtectedActivity {
         super.onCreate(
                 savedInstanceState
         );
+
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -143,6 +156,26 @@ public class VaultActivity extends ProtectedActivity {
                         R.id.recyclerVault
                 );
 
+        layoutVaultState =
+                findViewById(
+                        R.id.layoutVaultState
+                );
+
+        layoutVaultLoading =
+                findViewById(
+                        R.id.layoutVaultLoading
+                );
+
+        layoutVaultEmpty =
+                findViewById(
+                        R.id.layoutVaultEmpty
+                );
+
+        layoutVaultError =
+                findViewById(
+                        R.id.layoutVaultError
+                );
+
         recyclerVault.setLayoutManager(
                 new LinearLayoutManager(
                         this
@@ -159,11 +192,60 @@ public class VaultActivity extends ProtectedActivity {
                                     int position
                             ) {
 
+                                boolean newFavorite =
+                                        !credential.isFavorite();
+
                                 credential.setFavorite(
-                                        !credential.isFavorite()
+                                        newFavorite
                                 );
 
                                 applyFilters();
+
+                                secureVaultCoordinator.setCredentialFavorite(
+                                        credential.getId(),
+                                        newFavorite,
+                                        new VaultDataService.ResultCallback<Integer>() {
+
+                                            @Override
+                                            public void onSuccess(
+                                                    Integer rows
+                                            ) {
+
+                                                if (rows == null || rows <= 0) {
+
+                                                    credential.setFavorite(
+                                                            !newFavorite
+                                                    );
+
+                                                    applyFilters();
+
+                                                    Toast.makeText(
+                                                            VaultActivity.this,
+                                                            R.string.credential_save_error,
+                                                            Toast.LENGTH_SHORT
+                                                    ).show();
+                                                }
+                                            }
+
+                                            @Override
+                                            public void onError(
+                                                    Exception exception
+                                            ) {
+
+                                                credential.setFavorite(
+                                                        !newFavorite
+                                                );
+
+                                                applyFilters();
+
+                                                Toast.makeText(
+                                                        VaultActivity.this,
+                                                        R.string.credential_save_error,
+                                                        Toast.LENGTH_SHORT
+                                                ).show();
+                                            }
+                                        }
+                                );
                             }
 
                             @Override
@@ -218,9 +300,179 @@ public class VaultActivity extends ProtectedActivity {
         recyclerVault.setAdapter(
                 allItemsAdapter
         );
+    }
 
-        showPreviewCredentials();
-        showPreviewNotes();
+    private void showVaultLoadingState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultContentState() {
+
+        recyclerVault.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultState.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultEmptyState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultError.setVisibility(
+                View.GONE
+        );
+    }
+
+    private void showVaultErrorState() {
+
+        recyclerVault.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultState.setVisibility(
+                View.VISIBLE
+        );
+
+        layoutVaultLoading.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultEmpty.setVisibility(
+                View.GONE
+        );
+
+        layoutVaultError.setVisibility(
+                View.VISIBLE
+        );
+    }
+
+    private void refreshVaultData() {
+
+        showVaultLoadingState();
+
+        secureVaultCoordinator.getCredentials(
+                new VaultDataService.ResultCallback<List<Credential>>() {
+
+                    @Override
+                    public void onSuccess(
+                            List<Credential> credentials
+                    ) {
+
+                        allCredentials.clear();
+                        allCredentials.addAll(
+                                credentials
+                        );
+
+                        allRiskStatuses.clear();
+
+                        for (int i = 0;
+                             i < allCredentials.size();
+                             i++) {
+
+                            allRiskStatuses.add(
+                                    VaultCredentialAdapter.RiskStatus.NONE
+                            );
+                        }
+
+                        loadSecureNotes();
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        showVaultErrorState();
+                    }
+                }
+        );
+    }
+
+    private void loadSecureNotes() {
+
+        secureVaultCoordinator.getSecureNotes(
+                new VaultDataService.ResultCallback<List<SecureNote>>() {
+
+                    @Override
+                    public void onSuccess(
+                            List<SecureNote> notes
+                    ) {
+
+                        allNotes.clear();
+                        allNotes.addAll(
+                                notes
+                        );
+
+                        applyFilters();
+
+                        if (allCredentials.isEmpty()
+                                && allNotes.isEmpty()) {
+
+                            showVaultEmptyState();
+
+                        } else {
+
+                            showVaultContentState();
+                        }
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+
+                        showVaultErrorState();
+                    }
+                }
+        );
     }
 
     private void openCredentialDetails(
@@ -233,51 +485,15 @@ public class VaultActivity extends ProtectedActivity {
                         CredentialDetailsActivity.class
                 );
 
-        /*
-         * WEEK 4 UI PREVIEW ONLY.
-         *
-         * The selected preview credential is passed directly
-         * to the details screen for UI testing.
-         *
-         * During real database integration, prefer passing
-         * the credential ID and loading the record securely
-         * from the approved data layer.
-         */
         intent.putExtra(
-                CredentialDetailsActivity.EXTRA_NAME,
-                credential.getTitle()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_USERNAME,
-                credential.getUsername()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_PASSWORD,
-                credential.getPassword()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_WEBSITE,
-                credential.getWebsite()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_CATEGORY,
-                credential.getCategory()
-        );
-
-        intent.putExtra(
-                CredentialDetailsActivity.EXTRA_NOTES,
-                credential.getNotes()
+                CredentialDetailsActivity.EXTRA_ID,
+                credential.getId()
         );
 
         startActivity(
                 intent
         );
     }
-
     private void openSecureNoteDetails(
             SecureNote note
     ) {
@@ -288,161 +504,13 @@ public class VaultActivity extends ProtectedActivity {
                         SecureNoteDetailsActivity.class
                 );
 
-        /*
-         * WEEK 4 UI PREVIEW ONLY.
-         *
-         * During real database integration,
-         * prefer passing the note ID and loading
-         * the secure note through the data layer.
-         */
         intent.putExtra(
-                SecureNoteDetailsActivity.EXTRA_TITLE,
-                note.getTitle()
-        );
-
-        intent.putExtra(
-                SecureNoteDetailsActivity.EXTRA_CONTENT,
-                note.getContent()
+                SecureNoteDetailsActivity.EXTRA_ID,
+                note.getId()
         );
 
         startActivity(
                 intent
-        );
-    }
-
-    private void showPreviewCredentials() {
-
-        /*
-         * WEEK 4 UI PREVIEW DATA ONLY.
-         *
-         * These credentials are not loaded from the
-         * encrypted database.
-         *
-         * Replace this preview source with
-         * VaultDataService during data/UI integration.
-         */
-
-        allCredentials.clear();
-        allRiskStatuses.clear();
-
-        Credential google =
-                new Credential(
-                        "Google",
-                        "user@gmail.com",
-                        "",
-                        "accounts.google.com",
-                        "Login",
-                        ""
-                );
-
-        allCredentials.add(
-                google
-        );
-
-        allRiskStatuses.add(
-                VaultCredentialAdapter.RiskStatus.BREACH
-        );
-
-        Credential microsoft =
-                new Credential(
-                        "Microsoft",
-                        "user@outlook.com",
-                        "",
-                        "microsoft.com",
-                        "Login",
-                        ""
-                );
-
-        microsoft.setFavorite(
-                true
-        );
-
-        allCredentials.add(
-                microsoft
-        );
-
-        allRiskStatuses.add(
-                VaultCredentialAdapter.RiskStatus.AT_RISK
-        );
-
-        Credential amazon =
-                new Credential(
-                        "Amazon",
-                        "user@icloud.com",
-                        "",
-                        "amazon.com",
-                        "Login",
-                        ""
-                );
-
-        allCredentials.add(
-                amazon
-        );
-
-        allRiskStatuses.add(
-                VaultCredentialAdapter.RiskStatus.AT_RISK
-        );
-
-        Credential netflix =
-                new Credential(
-                        "Netflix",
-                        "user@proton.me",
-                        "",
-                        "netflix.com",
-                        "Login",
-                        ""
-                );
-
-        allCredentials.add(
-                netflix
-        );
-
-        allRiskStatuses.add(
-                VaultCredentialAdapter.RiskStatus.NONE
-        );
-
-        adapter.submitCredentials(
-                allCredentials,
-                allRiskStatuses
-        );
-    }
-
-    private void showPreviewNotes() {
-
-        /*
-         * WEEK 4 UI PREVIEW DATA ONLY.
-         *
-         * These notes are not loaded from the encrypted
-         * database yet.
-         *
-         * Replace this preview source with VaultDataService
-         * during data/UI integration.
-         */
-
-        allNotes.clear();
-
-        SecureNote homeWifi =
-                new SecureNote(
-                        "Home Wi-Fi",
-                        "Router login and guest network details."
-                );
-
-        SecureNote personalLaptop =
-                new SecureNote(
-                        "Personal laptop",
-                        "Recovery key and setup notes."
-                );
-
-        allNotes.add(
-                homeWifi
-        );
-
-        allNotes.add(
-                personalLaptop
-        );
-
-        noteAdapter.submitNotes(
-                allNotes
         );
     }
 
@@ -751,6 +819,11 @@ public class VaultActivity extends ProtectedActivity {
                         R.id.buttonAddCredential
                 );
 
+        View buttonVaultRetry =
+                findViewById(
+                        R.id.buttonVaultRetry
+                );
+
         View navHome =
                 findViewById(
                         R.id.navHome
@@ -773,6 +846,10 @@ public class VaultActivity extends ProtectedActivity {
 
         buttonQuickAdd.setOnClickListener(
                 this::showQuickAddMenu
+        );
+
+        buttonVaultRetry.setOnClickListener(
+                view -> refreshVaultData()
         );
 
         buttonAddCredential.setOnClickListener(
@@ -1061,6 +1138,18 @@ public class VaultActivity extends ProtectedActivity {
         );
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (isFinishing()) {
+            return;
+        }
+
+        if (adapter != null && noteAdapter != null) {
+            refreshVaultData();
+        }
+    }
     private boolean requireUnlockedSession() {
 
         if (!SafeKeySession.recordActivity()) {
