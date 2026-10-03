@@ -12,6 +12,7 @@ import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import com.safekey.app.SafeKeyApplication;
 
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.home.HomeActivity;
@@ -47,6 +48,11 @@ public class ProtectedActivityBackgroundTimeoutInstrumentedTest {
         SafeKeySession.lock();
         SafeKeySession.resetClockForTesting();
         SafeKeySession.unregisterSensitiveDataCleanup();
+        ((SafeKeyApplication) InstrumentationRegistry
+                .getInstrumentation()
+                .getTargetContext()
+                .getApplicationContext())
+                .registerSessionCleanup();
     }
 
     @Test

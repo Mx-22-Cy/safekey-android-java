@@ -36,6 +36,7 @@ import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.logic.SessionState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -191,6 +192,9 @@ public class VaultActivity extends ProtectedActivity {
                                     Credential credential,
                                     int position
                             ) {
+                                if (!requireUnlockedSession()) {
+                                    return;
+                                }
 
                                 boolean newFavorite =
                                         !credential.isFavorite();
@@ -210,6 +214,11 @@ public class VaultActivity extends ProtectedActivity {
                                             public void onSuccess(
                                                     Integer rows
                                             ) {
+                                                if (isFinishing()
+                                                        || isDestroyed()
+                                                        || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                                    return;
+                                                }
 
                                                 if (rows == null || rows <= 0) {
 
@@ -231,6 +240,11 @@ public class VaultActivity extends ProtectedActivity {
                                             public void onError(
                                                     Exception exception
                                             ) {
+                                                if (isFinishing()
+                                                        || isDestroyed()
+                                                        || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                                    return;
+                                                }
 
                                                 credential.setFavorite(
                                                         !newFavorite
@@ -254,6 +268,9 @@ public class VaultActivity extends ProtectedActivity {
                                     VaultCredentialAdapter.RiskStatus riskStatus,
                                     View anchorView
                             ) {
+                                if (!requireUnlockedSession()) {
+                                    return;
+                                }
 
                                 showRiskTooltip(
                                         anchorView,
@@ -405,6 +422,11 @@ public class VaultActivity extends ProtectedActivity {
                     public void onSuccess(
                             List<Credential> credentials
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         allCredentials.clear();
                         allCredentials.addAll(
@@ -429,6 +451,11 @@ public class VaultActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         showVaultErrorState();
                     }
@@ -445,6 +472,11 @@ public class VaultActivity extends ProtectedActivity {
                     public void onSuccess(
                             List<SecureNote> notes
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         allNotes.clear();
                         allNotes.addAll(
@@ -468,6 +500,11 @@ public class VaultActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         showVaultErrorState();
                     }

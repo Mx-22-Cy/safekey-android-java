@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import com.safekey.app.SafeKeyApplication;
 
 import com.safekey.app.session.logic.SessionState;
 
@@ -27,6 +29,12 @@ public class SafeKeySessionInstrumentedTest {
     public void tearDown() {
         SafeKeySession.unregisterSensitiveDataCleanup();
         SafeKeySession.lock();
+
+        ((SafeKeyApplication) InstrumentationRegistry
+                .getInstrumentation()
+                .getTargetContext()
+                .getApplicationContext())
+                .registerSessionCleanup();
     }
 
     @Test

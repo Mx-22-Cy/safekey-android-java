@@ -17,6 +17,8 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
 public class AddSecureNoteActivity extends ProtectedActivity {
 
@@ -171,6 +173,11 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onSuccess(
                             SecureNote note
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         if (note == null) {
 
@@ -200,6 +207,11 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 AddSecureNoteActivity.this,

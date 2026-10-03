@@ -16,6 +16,7 @@ import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.vault.VaultActivity;
+import com.safekey.app.SafeKeyApplication;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -146,6 +147,8 @@ public class ProtectedActivityRedirectInstrumentedTest {
                     });
 
             SafeKeySession.lock();
+            ((SafeKeyApplication) application)
+                    .registerSessionCleanup();
         }
     }
 }
