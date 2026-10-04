@@ -7,7 +7,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -18,10 +18,8 @@ import com.safekey.app.R;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
-import com.safekey.app.session.logic.SessionDestination;
-import com.safekey.app.session.logic.SessionNavigation;
 
-public class HomeActivity extends AppCompatActivity {
+public class HomeActivity extends ProtectedActivity {
 
     private static final int PREVIEW_SECURITY_SCORE = 82;
 
@@ -188,56 +186,6 @@ public class HomeActivity extends AppCompatActivity {
                                 R.string.home_credential_creation_pending
                         )
         );
-    }
-
-    @Override
-    protected void onResume() {
-
-        super.onResume();
-
-        /*
-         * Maryam's SessionNavigation defines:
-         *
-         * UNLOCKED -> HOME
-         * LOCKED   -> LOCK_SCREEN
-         *
-         * SignInActivity currently represents the lock-screen
-         * destination in the Android UI.
-         *
-         * The real authentication/security integration is not
-         * connected yet, so production code intentionally does
-         * not call unlockAfterAuthentication() from the current
-         * placeholder Sign In actions.
-         */
-        if (!isSessionUnlocked()) {
-            navigateToSignIn();
-        }
-    }
-
-    @Override
-    public void onUserInteraction() {
-
-        super.onUserInteraction();
-
-        /*
-         * recordActivity() performs the inactivity-timeout check.
-         * If it returns false, the session is locked or has expired,
-         * so Home must no longer remain visible.
-         */
-        if (!SafeKeySession.recordActivity()) {
-            navigateToSignIn();
-        }
-    }
-
-    private boolean isSessionUnlocked() {
-
-        SessionDestination destination =
-                SessionNavigation.destinationFor(
-                        SafeKeySession.getState()
-                );
-
-        return destination
-                == SessionDestination.HOME;
     }
 
     private boolean requireUnlockedSession() {

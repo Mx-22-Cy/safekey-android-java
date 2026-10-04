@@ -94,6 +94,26 @@ public final class VaultSessionManager {
         return true;
     }
 
+    public synchronized long getRemainingInactivityMillis() {
+        if (state != SessionState.UNLOCKED) {
+            return 0L;
+        }
+
+        long nowMillis =
+                monotonicTimeMillis.getAsLong();
+
+        lockIfTimedOut(
+                nowMillis
+        );
+
+        if (state != SessionState.UNLOCKED) {
+            return 0L;
+        }
+
+        return inactivityTimeoutMillis
+                - (nowMillis - lastActivityMillis);
+    }
+
     public synchronized void lock() {
         transitionToLocked();
     }
