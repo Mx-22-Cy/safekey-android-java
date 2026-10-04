@@ -5,7 +5,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.content.Intent;
 
-import androidx.appcompat.app.AppCompatActivity;
+import com.safekey.app.session.ProtectedActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -18,8 +18,10 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
-public class SecureNoteDetailsActivity extends AppCompatActivity {
+public class SecureNoteDetailsActivity extends ProtectedActivity {
 
     private long secureNoteId = 0L;
     private SecureVaultCoordinator secureVaultCoordinator;
@@ -131,6 +133,11 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
                     public void onSuccess(
                             SecureNote note
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         if (note == null) {
 
@@ -183,6 +190,11 @@ public class SecureNoteDetailsActivity extends AppCompatActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (isFinishing()
+                                || isDestroyed()
+                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 SecureNoteDetailsActivity.this,

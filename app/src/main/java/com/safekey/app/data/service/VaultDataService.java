@@ -177,29 +177,18 @@ public class VaultDataService {
     public void closeVault(
             SimpleCallback callback
     ) {
-
         executorService.execute(() -> {
-
             try {
-
                 databaseManager.close();
-
+            } catch (Exception exception) {
+                deliverSimpleError(callback, exception);
+                return;
+            } finally {
                 credentialRepository = null;
                 secureNoteRepository = null;
-
-            } catch (Exception exception) {
-
-                deliverSimpleError(
-                        callback,
-                        exception
-                );
-
-                return;
             }
 
-            deliverSimpleSuccess(
-                    callback
-            );
+            deliverSimpleSuccess(callback);
         });
     }
 
