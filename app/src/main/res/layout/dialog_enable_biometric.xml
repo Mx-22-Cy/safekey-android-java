@@ -18,8 +18,8 @@
         android:background="@drawable/vault_empty_icon_bg">
 
         <ImageView
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_gravity="center"
             android:contentDescription="@null"
             android:src="@drawable/ic_fingerprint" />
@@ -60,7 +60,7 @@
             android:layout_width="0dp"
             android:layout_height="48dp"
             android:layout_weight="1"
-            android:background="@drawable/auth_secondary_button_bg"
+            android:background="@drawable/biometric_dialog_secondary_button_bg"
             app:backgroundTint="@null"
             android:text="@string/biometric_not_now"
             android:textAllCaps="false"

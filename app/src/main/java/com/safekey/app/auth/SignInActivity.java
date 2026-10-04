@@ -30,7 +30,7 @@ import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.security.biometric.BiometricAuthenticator;
-import com.safekey.app.security.biometric.BiometricVaultKeyManager;
+import com.safekey.app.auth.logic.BiometricSignInPolicy;
 
 import java.util.Arrays;
 
@@ -40,7 +40,7 @@ public class SignInActivity extends AppCompatActivity {
     private ImageButton buttonTogglePassword;
     private boolean passwordVisible = false;
     private TextView textValidationMessage;
-    private BiometricVaultKeyManager biometricVaultKeyManager;
+    private SecureVaultCoordinator secureVaultCoordinator;
     private LinearLayout biometricUnlockSection;
 
     @Override
@@ -113,10 +113,14 @@ public class SignInActivity extends AppCompatActivity {
                         R.id.biometricUnlockSection
                 );
 
-        biometricVaultKeyManager =
-                new BiometricVaultKeyManager(
-                        this
+        TextView biometricUnlockArea =
+                findViewById(
+                        R.id.biometricUnlockArea
                 );
+
+        secureVaultCoordinator =
+                ((SafeKeyApplication) getApplication())
+                        .getSecureVaultCoordinator();
 
         Button buttonUnlockVault =
                 findViewById(
@@ -170,6 +174,11 @@ public class SignInActivity extends AppCompatActivity {
                         validateSignInForm()
         );
 
+        biometricUnlockArea.setOnClickListener(
+                view ->
+                        unlockVaultWithBiometrics()
+        );
+
         buttonGoToSignUp.setOnClickListener(
                 view -> {
 
@@ -198,10 +207,18 @@ public class SignInActivity extends AppCompatActivity {
 
         try {
 
+            boolean biometricAvailable =
+                    secureVaultCoordinator.getBiometricAvailability(this)
+                            == BiometricAuthenticator.Availability.AVAILABLE;
+
+            boolean biometricConfigured =
+                    secureVaultCoordinator.isBiometricUnlockConfigured(this);
+
             shouldShowBiometricUnlock =
-                    biometricVaultKeyManager.getAvailability()
-                            == BiometricAuthenticator.Availability.AVAILABLE
-                            && biometricVaultKeyManager.isConfigured();
+                    BiometricSignInPolicy.shouldShowUnlockOption(
+                            biometricAvailable,
+                            biometricConfigured
+                    );
 
         } catch (Exception exception) {
 
@@ -218,9 +235,17 @@ public class SignInActivity extends AppCompatActivity {
 
         try {
 
-            return biometricVaultKeyManager.getAvailability()
-                    == BiometricAuthenticator.Availability.AVAILABLE
-                    && !biometricVaultKeyManager.isConfigured();
+            boolean biometricAvailable =
+                    secureVaultCoordinator.getBiometricAvailability(this)
+                            == BiometricAuthenticator.Availability.AVAILABLE;
+
+            boolean biometricConfigured =
+                    secureVaultCoordinator.isBiometricUnlockConfigured(this);
+
+            return BiometricSignInPolicy.shouldOfferEnrollment(
+                    biometricAvailable,
+                    biometricConfigured
+            );
 
         } catch (Exception exception) {
 
@@ -228,10 +253,26 @@ public class SignInActivity extends AppCompatActivity {
         }
     }
 
+    private void hideKeyboard() {
+
+        editMasterPassword.clearFocus();
+
+        WindowInsetsControllerCompat insetsController =
+                WindowCompat.getInsetsController(
+                        getWindow(),
+                        getWindow().getDecorView()
+                );
+
+        insetsController.hide(
+                WindowInsetsCompat.Type.ime()
+        );
+    }
+
     private void showBiometricEnrollmentDialog(
             Runnable onNotNow,
             Runnable onEnable
     ) {
+        hideKeyboard();
 
         View dialogView =
                 getLayoutInflater().inflate(
@@ -265,8 +306,10 @@ public class SignInActivity extends AppCompatActivity {
         );
 
         buttonEnable.setOnClickListener(
-                view ->
-                        onEnable.run()
+                view -> {
+                    dialog.dismiss();
+                    onEnable.run();
+                }
         );
 
         dialog.setOnShowListener(
@@ -300,6 +343,99 @@ public class SignInActivity extends AppCompatActivity {
         );
 
         dialog.show();
+    }
+
+    private void unlockVaultWithBiometrics() {
+
+        textValidationMessage.setText(null);
+
+        try {
+
+            secureVaultCoordinator.unlockVaultWithBiometrics(
+                    this,
+                    getString(
+                            R.string.biometric_unlock_prompt_title
+                    ),
+                    getString(
+                            R.string.biometric_unlock_prompt_subtitle
+                    ),
+                    new SecureVaultCoordinator.BiometricUnlockCallback() {
+
+                        @Override
+                        public void onSuccess() {
+                            continueToHome();
+                        }
+
+                        @Override
+                        public void onError(
+                                String message
+                        ) {
+                            updateBiometricUnlockVisibility();
+                        }
+
+                        @Override
+                        public void onFailed() {
+                            // Android keeps the biometric prompt open
+                            // so the user can try again.
+                        }
+                    }
+            );
+
+        } catch (RuntimeException exception) {
+
+            updateBiometricUnlockVisibility();
+        }
+    }
+
+    private void enableBiometricEnrollment(
+            char[] masterPassword
+    ) {
+
+        try {
+
+            secureVaultCoordinator.enableBiometricUnlock(
+                    this,
+                    masterPassword,
+                    getString(
+                            R.string.biometric_enable_title
+                    ),
+                    getString(
+                            R.string.biometric_enable_message
+                    ),
+                    new SecureVaultCoordinator.BiometricSetupCallback() {
+
+                        @Override
+                        public void onEnabled() {
+                            updateBiometricUnlockVisibility();
+                            continueToHome();
+                        }
+
+                        @Override
+                        public void onError(
+                                String message
+                        ) {
+                            continueToHome();
+                        }
+
+                        @Override
+                        public void onFailed() {
+                            // Android biometric prompt remains available
+                            // for another authentication attempt.
+                        }
+                    }
+            );
+
+        } catch (RuntimeException exception) {
+
+            continueToHome();
+
+        } finally {
+
+            Arrays.fill(
+                    masterPassword,
+                    '\0'
+            );
+        }
     }
 
     private void continueToHome() {
@@ -389,11 +525,13 @@ public class SignInActivity extends AppCompatActivity {
                 0
         );
 
-        try {
+        char[] biometricEnrollmentPassword =
+                Arrays.copyOf(
+                        masterPasswordChars,
+                        masterPasswordChars.length
+                );
 
-            SecureVaultCoordinator secureVaultCoordinator =
-                    ((SafeKeyApplication) getApplication())
-                            .getSecureVaultCoordinator();
+        try {
 
             secureVaultCoordinator.unlockVault(
                     masterPasswordChars,
@@ -401,13 +539,44 @@ public class SignInActivity extends AppCompatActivity {
 
                         @Override
                         public void onSuccess() {
-                            continueToHome();
+
+                            if (shouldOfferBiometricEnrollment()) {
+
+                                showBiometricEnrollmentDialog(
+                                        () -> {
+                                            Arrays.fill(
+                                                    biometricEnrollmentPassword,
+                                                    '\0'
+                                            );
+
+                                            continueToHome();
+                                        },
+                                        () ->
+                                                enableBiometricEnrollment(
+                                                        biometricEnrollmentPassword
+                                                )
+                                );
+
+                            } else {
+
+                                Arrays.fill(
+                                        biometricEnrollmentPassword,
+                                        '\0'
+                                );
+
+                                continueToHome();
+                            }
                         }
 
                         @Override
                         public void onError(
                                 Exception exception
                         ) {
+
+                            Arrays.fill(
+                                    biometricEnrollmentPassword,
+                                    '\0'
+                            );
 
                             editMasterPassword.setText("");
 
@@ -421,6 +590,11 @@ public class SignInActivity extends AppCompatActivity {
             );
 
         } catch (RuntimeException exception) {
+
+            Arrays.fill(
+                    biometricEnrollmentPassword,
+                    '\0'
+            );
 
             editMasterPassword.setText("");
 

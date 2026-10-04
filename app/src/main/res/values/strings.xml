@@ -229,5 +229,6 @@
     <string name="biometric_enable_message">Use your phone’s fingerprint or face recognition to unlock SafeKey faster.</string>
     <string name="biometric_not_now">Not now</string>
     <string name="biometric_enable">Enable</string>
-
+    <string name="biometric_unlock_prompt_title">Unlock SafeKey</string>
+    <string name="biometric_unlock_prompt_subtitle">Confirm your identity to continue.</string>
 </resources>
