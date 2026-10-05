@@ -231,4 +231,7 @@
     <string name="biometric_enable">Enable</string>
     <string name="biometric_unlock_prompt_title">Unlock SafeKey</string>
     <string name="biometric_unlock_prompt_subtitle">Confirm your identity to continue.</string>
+    <string name="biometric_unlock_error">Unable to verify your identity with biometrics. Try again or use your master password.</string>
+    <string name="biometric_reenrollment_required">Biometric unlock needs to be set up again. Sign in with your master password to continue.</string>
+    <string name="biometric_setup_error">Biometric setup was unsuccessful. You can continue with your master password and enable biometrics later.</string>
 </resources>

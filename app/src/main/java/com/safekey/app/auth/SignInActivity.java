@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import android.graphics.drawable.ColorDrawable;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
@@ -42,6 +43,8 @@ public class SignInActivity extends AppCompatActivity {
     private TextView textValidationMessage;
     private SecureVaultCoordinator secureVaultCoordinator;
     private LinearLayout biometricUnlockSection;
+    private AlertDialog biometricEnrollmentDialog;
+    private char[] pendingBiometricEnrollmentPassword;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -253,6 +256,93 @@ public class SignInActivity extends AppCompatActivity {
         }
     }
 
+    private void retainBiometricEnrollmentPassword(
+            char[] masterPassword
+    ) {
+        clearPendingBiometricEnrollmentPassword();
+
+        pendingBiometricEnrollmentPassword =
+                Arrays.copyOf(
+                        masterPassword,
+                        masterPassword.length
+                );
+    }
+
+    private char[] takeBiometricEnrollmentPassword() {
+
+        char[] masterPassword =
+                pendingBiometricEnrollmentPassword;
+
+        pendingBiometricEnrollmentPassword =
+                null;
+
+        return masterPassword;
+    }
+
+    private void clearPendingBiometricEnrollmentPassword() {
+
+        if (pendingBiometricEnrollmentPassword == null) {
+            return;
+        }
+
+        Arrays.fill(
+                pendingBiometricEnrollmentPassword,
+                '\0'
+        );
+
+        pendingBiometricEnrollmentPassword =
+                null;
+    }
+
+    private void abandonBiometricEnrollment() {
+
+        boolean enrollmentPending =
+                pendingBiometricEnrollmentPassword != null
+                        || (biometricEnrollmentDialog != null
+                        && biometricEnrollmentDialog.isShowing());
+
+        if (!enrollmentPending) {
+            return;
+        }
+
+        AlertDialog dialog =
+                biometricEnrollmentDialog;
+
+        biometricEnrollmentDialog =
+                null;
+
+        if (dialog != null
+                && dialog.isShowing()) {
+
+            dialog.dismiss();
+        }
+
+        clearPendingBiometricEnrollmentPassword();
+
+        SafeKeySession.lock();
+
+        if (editMasterPassword != null) {
+            editMasterPassword.setText("");
+        }
+    }
+
+    @Override
+    protected void onStop() {
+
+        abandonBiometricEnrollment();
+
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        abandonBiometricEnrollment();
+        clearPendingBiometricEnrollmentPassword();
+
+        super.onDestroy();
+    }
+
     private void hideKeyboard() {
 
         editMasterPassword.clearFocus();
@@ -285,8 +375,30 @@ public class SignInActivity extends AppCompatActivity {
                         .setView(dialogView)
                         .create();
 
+        biometricEnrollmentDialog =
+                dialog;
+
         dialog.setCancelable(false);
         dialog.setCanceledOnTouchOutside(false);
+
+        dialog.setOnDismissListener(
+                ignored -> {
+
+                    if (biometricEnrollmentDialog != dialog) {
+                        return;
+                    }
+
+                    biometricEnrollmentDialog = null;
+
+                    clearPendingBiometricEnrollmentPassword();
+
+                    SafeKeySession.lock();
+
+                    if (editMasterPassword != null) {
+                        editMasterPassword.setText("");
+                    }
+                }
+        );
 
         Button buttonNotNow =
                 dialogView.findViewById(
@@ -300,6 +412,7 @@ public class SignInActivity extends AppCompatActivity {
 
         buttonNotNow.setOnClickListener(
                 view -> {
+                    biometricEnrollmentDialog = null;
                     dialog.dismiss();
                     onNotNow.run();
                 }
@@ -307,6 +420,7 @@ public class SignInActivity extends AppCompatActivity {
 
         buttonEnable.setOnClickListener(
                 view -> {
+                    biometricEnrollmentDialog = null;
                     dialog.dismiss();
                     onEnable.run();
                 }
@@ -345,6 +459,65 @@ public class SignInActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void handleBiometricUnlockError(
+            String message
+    ) {
+
+        if (!BiometricSignInPolicy.requiresReEnrollment(message)) {
+
+            textValidationMessage.setText(
+                    R.string.biometric_unlock_error
+            );
+
+            return;
+        }
+
+        biometricUnlockSection.setVisibility(
+                View.GONE
+        );
+
+        try {
+
+            secureVaultCoordinator.disableBiometricUnlock(
+                    this,
+                    new VaultDataService.SimpleCallback() {
+
+                        @Override
+                        public void onSuccess() {
+
+                            updateBiometricUnlockVisibility();
+
+                            textValidationMessage.setText(
+                                    R.string.biometric_reenrollment_required
+                            );
+
+                            editMasterPassword.requestFocus();
+                        }
+
+                        @Override
+                        public void onError(
+                                Exception exception
+                        ) {
+
+                            textValidationMessage.setText(
+                                    R.string.biometric_reenrollment_required
+                            );
+
+                            editMasterPassword.requestFocus();
+                        }
+                    }
+            );
+
+        } catch (RuntimeException exception) {
+
+            textValidationMessage.setText(
+                    R.string.biometric_reenrollment_required
+            );
+
+            editMasterPassword.requestFocus();
+        }
+    }
+
     private void unlockVaultWithBiometrics() {
 
         textValidationMessage.setText(null);
@@ -370,7 +543,9 @@ public class SignInActivity extends AppCompatActivity {
                         public void onError(
                                 String message
                         ) {
-                            updateBiometricUnlockVisibility();
+                            handleBiometricUnlockError(
+                                    message
+                            );
                         }
 
                         @Override
@@ -382,6 +557,10 @@ public class SignInActivity extends AppCompatActivity {
             );
 
         } catch (RuntimeException exception) {
+
+            textValidationMessage.setText(
+                    R.string.biometric_unlock_error
+            );
 
             updateBiometricUnlockVisibility();
         }
@@ -414,6 +593,13 @@ public class SignInActivity extends AppCompatActivity {
                         public void onError(
                                 String message
                         ) {
+
+                            Toast.makeText(
+                                    SignInActivity.this,
+                                    R.string.biometric_setup_error,
+                                    Toast.LENGTH_LONG
+                            ).show();
+
                             continueToHome();
                         }
 
@@ -426,6 +612,12 @@ public class SignInActivity extends AppCompatActivity {
             );
 
         } catch (RuntimeException exception) {
+
+            Toast.makeText(
+                    SignInActivity.this,
+                    R.string.biometric_setup_error,
+                    Toast.LENGTH_LONG
+            ).show();
 
             continueToHome();
 
@@ -525,11 +717,9 @@ public class SignInActivity extends AppCompatActivity {
                 0
         );
 
-        char[] biometricEnrollmentPassword =
-                Arrays.copyOf(
-                        masterPasswordChars,
-                        masterPasswordChars.length
-                );
+        retainBiometricEnrollmentPassword(
+                masterPasswordChars
+        );
 
         try {
 
@@ -540,29 +730,40 @@ public class SignInActivity extends AppCompatActivity {
                         @Override
                         public void onSuccess() {
 
+                            SafeKeySession.unlockAfterAuthentication();
+
+                            if (pendingBiometricEnrollmentPassword == null) {
+
+                                SafeKeySession.lock();
+                                return;
+                            }
+
                             if (shouldOfferBiometricEnrollment()) {
 
                                 showBiometricEnrollmentDialog(
                                         () -> {
-                                            Arrays.fill(
-                                                    biometricEnrollmentPassword,
-                                                    '\0'
-                                            );
-
+                                            clearPendingBiometricEnrollmentPassword();
                                             continueToHome();
                                         },
-                                        () ->
-                                                enableBiometricEnrollment(
-                                                        biometricEnrollmentPassword
-                                                )
+                                        () -> {
+
+                                            char[] enrollmentPassword =
+                                                    takeBiometricEnrollmentPassword();
+
+                                            if (enrollmentPassword == null) {
+                                                SafeKeySession.lock();
+                                                return;
+                                            }
+
+                                            enableBiometricEnrollment(
+                                                    enrollmentPassword
+                                            );
+                                        }
                                 );
 
                             } else {
 
-                                Arrays.fill(
-                                        biometricEnrollmentPassword,
-                                        '\0'
-                                );
+                                clearPendingBiometricEnrollmentPassword();
 
                                 continueToHome();
                             }
@@ -573,10 +774,7 @@ public class SignInActivity extends AppCompatActivity {
                                 Exception exception
                         ) {
 
-                            Arrays.fill(
-                                    biometricEnrollmentPassword,
-                                    '\0'
-                            );
+                            clearPendingBiometricEnrollmentPassword();
 
                             editMasterPassword.setText("");
 
@@ -591,10 +789,7 @@ public class SignInActivity extends AppCompatActivity {
 
         } catch (RuntimeException exception) {
 
-            Arrays.fill(
-                    biometricEnrollmentPassword,
-                    '\0'
-            );
+            clearPendingBiometricEnrollmentPassword();
 
             editMasterPassword.setText("");
 

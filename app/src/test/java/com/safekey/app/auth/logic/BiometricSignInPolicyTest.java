@@ -66,4 +66,31 @@ public class BiometricSignInPolicyTest {
                 )
         );
     }
+
+    @Test
+    public void requiresReEnrollment_missingKey_returnsTrue() {
+        assertTrue(
+                BiometricSignInPolicy.requiresReEnrollment(
+                        "Biometric unlock key is missing. Re-enroll biometric unlock."
+                )
+        );
+    }
+
+    @Test
+    public void requiresReEnrollment_invalidatedKey_returnsTrue() {
+        assertTrue(
+                BiometricSignInPolicy.requiresReEnrollment(
+                        "Biometric unlock key is no longer valid. Re-enroll biometric unlock."
+                )
+        );
+    }
+
+    @Test
+    public void requiresReEnrollment_cancelOrOtherError_returnsFalse() {
+        assertFalse(
+                BiometricSignInPolicy.requiresReEnrollment(
+                        "Authentication canceled."
+                )
+        );
+    }
 }
