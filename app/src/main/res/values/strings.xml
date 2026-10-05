@@ -222,4 +222,16 @@
     <string name="edit_secure_note_subtitle">Update this note in your vault.</string>
     <string name="edit_secure_note_save">Save Changes</string>
 
+    <!-- Week 6 biometric UI -->
+    <string name="signin_or">or</string>
+    <string name="signin_unlock_with_biometrics">Unlock with biometrics</string>
+    <string name="biometric_enable_title">Enable biometric unlock?</string>
+    <string name="biometric_enable_message">Use your phone’s fingerprint or face recognition to unlock SafeKey faster.</string>
+    <string name="biometric_not_now">Not now</string>
+    <string name="biometric_enable">Enable</string>
+    <string name="biometric_unlock_prompt_title">Unlock SafeKey</string>
+    <string name="biometric_unlock_prompt_subtitle">Confirm your identity to continue.</string>
+    <string name="biometric_unlock_error">Unable to verify your identity with biometrics. Try again or use your master password.</string>
+    <string name="biometric_reenrollment_required">Biometric unlock needs to be set up again. Sign in with your master password to continue.</string>
+    <string name="biometric_setup_error">Biometric setup was unsuccessful. You can continue with your master password and enable biometrics later.</string>
 </resources>
