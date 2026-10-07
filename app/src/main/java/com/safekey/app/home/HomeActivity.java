@@ -18,6 +18,7 @@ import com.safekey.app.R;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.generator.GeneratorActivity;
 
 public class HomeActivity extends ProtectedActivity {
 
@@ -139,6 +140,11 @@ public class HomeActivity extends ProtectedActivity {
                         R.id.navVault
                 );
 
+        View navGenerator =
+                findViewById(
+                        R.id.navGenerator
+                );
+
         View navAlerts =
                 findViewById(
                         R.id.navAlerts
@@ -159,6 +165,25 @@ public class HomeActivity extends ProtectedActivity {
         navVault.setOnClickListener(
                 view ->
                         navigateToVault()
+        );
+
+        navGenerator.setOnClickListener(
+                view -> {
+
+                    if (!requireUnlockedSession()) {
+                        return;
+                    }
+
+                    Intent intent =
+                            new Intent(
+                                    HomeActivity.this,
+                                    GeneratorActivity.class
+                            );
+
+                    startActivity(
+                            intent
+                    );
+                }
         );
 
         navAlerts.setOnClickListener(

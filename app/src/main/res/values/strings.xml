@@ -234,4 +234,48 @@
     <string name="biometric_unlock_error">Unable to verify your identity with biometrics. Try again or use your master password.</string>
     <string name="biometric_reenrollment_required">Biometric unlock needs to be set up again. Sign in with your master password to continue.</string>
     <string name="biometric_setup_error">Biometric setup was unsuccessful. You can continue with your master password and enable biometrics later.</string>
+
+    <!-- Week 7 Password Generator -->
+    <string name="generator_title">Generator</string>
+    <string name="generator_strength_label">Strength</string>
+
+    <string name="generator_copy">Copy</string>
+    <string name="generator_copied">Copied</string>
+    <string name="generator_regenerate">Regenerate</string>
+    <string name="generator_use_password">Use Password</string>
+
+    <string name="generator_password_length">Password Length</string>
+
+    <string name="generator_character_types">Character Types</string>
+    <string name="generator_uppercase">Uppercase Letters</string>
+    <string name="generator_lowercase">Lowercase Letters</string>
+    <string name="generator_numbers">Numbers</string>
+    <string name="generator_symbols">Symbols</string>
+
+    <string name="generator_character_type_required">
+        At least one type must remain enabled.
+    </string>
+
+    <string name="generator_nav">Generator</string>
+
+    <string name="generator_copy_success">Password copied.</string>
+    <string name="generator_generation_error">
+        Unable to generate a password. Please try again.
+    </string>
+
+    <string name="generator_password_content_description">
+        Generated password
+    </string>
+
+    <string name="generator_generate_for_credential">
+        Generate Password
+    </string>
+
+    <string name="generator_strength_very_weak">Very weak</string>
+    <string name="generator_strength_weak">Weak</string>
+    <string name="generator_strength_fair">Fair</string>
+    <string name="generator_strength_strong">Strong</string>
+    <string name="generator_strength_very_strong">Very strong</string>
+    <string name="add_credential_generate_password">Generate Password</string>
+    <string name="generator_back_content_description">Go back</string>
 </resources>

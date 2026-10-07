@@ -395,13 +395,13 @@
     <!-- Bottom navigation -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="72dp"
-        android:background="@color/auth_card_background"
+        android:layout_height="76dp"
+        android:background="@color/vault_panel"
         android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp">
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp">
 
         <!-- Home -->
         <LinearLayout
@@ -412,18 +412,27 @@
             android:gravity="center"
             android:orientation="vertical">
 
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:contentDescription="@null"
-                android:src="@drawable/ic_home" />
+            <FrameLayout
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:background="@drawable/vault_nav_active_bg">
+
+                <ImageView
+                    android:layout_width="21dp"
+                    android:layout_height="21dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_home"
+                    app:tint="@color/vault_accent" />
+
+            </FrameLayout>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="3dp"
                 android:text="@string/home_nav_home"
-                android:textColor="@color/auth_accent"
+                android:textColor="@color/vault_accent"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -439,17 +448,44 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="21dp"
+                android:layout_height="21dp"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_vault" />
+                android:src="@drawable/ic_vault"
+                app:tint="@color/vault_text_faint" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/home_nav_vault"
-                android:textColor="@color/auth_text_secondary"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+        <!-- Generator -->
+        <LinearLayout
+            android:id="@+id/navGenerator"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_generate_password"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/generator_nav"
+                android:textColor="@color/vault_text_faint"
                 android:textSize="11sp" />
 
         </LinearLayout>
@@ -464,17 +500,18 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="21dp"
+                android:layout_height="21dp"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_alerts" />
+                android:src="@drawable/ic_alerts"
+                app:tint="@color/vault_text_faint" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/home_nav_alerts"
-                android:textColor="@color/auth_text_secondary"
+                android:textColor="@color/vault_text_faint"
                 android:textSize="11sp" />
 
         </LinearLayout>
@@ -489,17 +526,18 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
+                android:layout_width="21dp"
+                android:layout_height="21dp"
                 android:contentDescription="@null"
-                android:src="@drawable/ic_settings" />
+                android:src="@drawable/ic_settings"
+                app:tint="@color/vault_text_faint" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="5dp"
                 android:text="@string/home_nav_settings"
-                android:textColor="@color/auth_text_secondary"
+                android:textColor="@color/vault_text_faint"
                 android:textSize="11sp" />
 
         </LinearLayout>
