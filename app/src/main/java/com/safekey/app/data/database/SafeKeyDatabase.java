@@ -5,16 +5,19 @@ import android.content.Context;
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
 import java.io.File;
+import java.util.Arrays;
 
 public class SafeKeyDatabase {
 
     private static final String DEFAULT_DATABASE_NAME = "safekey.db";
     private static final int DATABASE_VERSION = 1;
+    public static final int DATABASE_KEY_LENGTH_BYTES = 32;
 
     private final Context context;
     private final String databaseName;
 
     private SQLiteDatabase database;
+
 
     static {
         System.loadLibrary("sqlcipher");
@@ -47,62 +50,61 @@ public class SafeKeyDatabase {
     }
 
     public SQLiteDatabase open(
-            String databasePassphrase
+            byte[] databaseKey
     ) {
+        byte[] encodedDatabaseKey =
+                SqlCipherKeyEncoder.encode(
+                        databaseKey
+                );
 
-        /*
-         * Reject a missing database passphrase
-         * before SQLCipher attempts to open or
-         * create the database.
-         *
-         * The production database passphrase will
-         * later come from the security/key-management
-         * layer. It must never be hard-coded here.
-         */
-        if (databasePassphrase == null
-                || databasePassphrase.isEmpty()) {
+        return openWithEncodedDatabaseKey(
+                encodedDatabaseKey
+        );
+    }
 
-            throw new IllegalArgumentException(
-                    "Database passphrase cannot be null or empty."
-            );
-        }
-
+    private SQLiteDatabase openWithEncodedDatabaseKey(
+            byte[] encodedDatabaseKey
+    ) {
         if (database != null
                 && database.isOpen()) {
+
+            Arrays.fill(
+                    encodedDatabaseKey,
+                    (byte) 0
+            );
 
             return database;
         }
 
-        File databaseFile =
-                context.getDatabasePath(
-                        databaseName
-                );
-
-        File parent =
-                databaseFile.getParentFile();
-
-        if (parent != null) {
-            parent.mkdirs();
-        }
-
         /*
-         * Keep this connection local until all
-         * database initialization is complete.
-         *
-         * If opening succeeds but schema setup,
-         * version checking, or migration fails,
-         * this local connection must be closed.
+         * The previous connection may have been
+         * closed directly by another caller.
          */
-        SQLiteDatabase db =
-                SQLiteDatabase.openOrCreateDatabase(
-                        databaseFile,
-                        databasePassphrase,
-                        null,
-                        null,
-                        null
-                );
+        database = null;
+
+        SQLiteDatabase db = null;
 
         try {
+            File databaseFile =
+                    context.getDatabasePath(
+                            databaseName
+                    );
+
+            File parent =
+                    databaseFile.getParentFile();
+
+            if (parent != null) {
+                parent.mkdirs();
+            }
+
+            db =
+                    SQLiteDatabase.openOrCreateDatabase(
+                            databaseFile,
+                            encodedDatabaseKey,
+                            null,
+                            null,
+                            null
+                    );
 
             db.execSQL(
                     "PRAGMA foreign_keys = ON"
@@ -111,23 +113,7 @@ public class SafeKeyDatabase {
             int currentVersion =
                     db.getVersion();
 
-            /*
-             * Never allow an older application build
-             * to silently open a database created by
-             * a newer schema version.
-             *
-             * Repositories in this application only
-             * understand schemas up to DATABASE_VERSION.
-             * Opening a newer schema could cause runtime
-             * failures or corrupt data.
-             *
-             * Throwing here also allows the existing
-             * initialization cleanup below to close
-             * the local SQLCipher connection before
-             * the error is returned to the caller.
-             */
             if (currentVersion > DATABASE_VERSION) {
-
                 throw new IllegalStateException(
                         "Database version "
                                 + currentVersion
@@ -138,7 +124,6 @@ public class SafeKeyDatabase {
             }
 
             if (currentVersion == 0) {
-
                 createVersion1Schema(
                         db
                 );
@@ -150,7 +135,6 @@ public class SafeKeyDatabase {
             } else if (
                     currentVersion < DATABASE_VERSION
             ) {
-
                 migrateDatabase(
                         db,
                         currentVersion,
@@ -158,11 +142,6 @@ public class SafeKeyDatabase {
                 );
             }
 
-            /*
-             * Only store the connection in the
-             * instance field after initialization
-             * has completed successfully.
-             */
             database = db;
 
             return database;
@@ -171,18 +150,10 @@ public class SafeKeyDatabase {
                 RuntimeException
                 | Error initializationError
         ) {
-
-            /*
-             * At this point the SQLCipher connection
-             * may already be open, but database has
-             * not yet been assigned.
-             *
-             * Close the local connection directly
-             * before rethrowing the original error.
-             */
             try {
+                if (db != null
+                        && db.isOpen()) {
 
-                if (db.isOpen()) {
                     db.close();
                 }
 
@@ -190,20 +161,27 @@ public class SafeKeyDatabase {
                     RuntimeException
                     | Error closeError
             ) {
-
-                /*
-                 * Preserve the original initialization
-                 * failure while also retaining information
-                 * about a possible close failure.
-                 */
                 initializationError.addSuppressed(
                         closeError
                 );
             }
 
             throw initializationError;
+
+        } finally {
+
+            /*
+             * SQLCipher has already consumed the encoded
+             * key before openOrCreateDatabase() returns.
+             * Do not retain another Java-memory copy.
+             */
+            Arrays.fill(
+                    encodedDatabaseKey,
+                    (byte) 0
+            );
         }
     }
+
 
     private void createVersion1Schema(
             SQLiteDatabase db
@@ -304,9 +282,13 @@ public class SafeKeyDatabase {
 
     public void close() {
 
-        if (database != null) {
+        try {
 
-            database.close();
+            if (database != null) {
+                database.close();
+            }
+
+        } finally {
 
             database = null;
         }

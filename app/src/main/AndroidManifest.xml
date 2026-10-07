@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
     <application
+        android:name=".SafeKeyApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -39,6 +43,27 @@
         -->
         <activity
             android:name=".home.HomeActivity"
+            android:exported="false" />
+
+        <!-- Week 4 Vault -->
+        <activity
+            android:name=".vault.VaultActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.AddCredentialActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.CredentialDetailsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.SecureNoteDetailsActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".vault.AddSecureNoteActivity"
             android:exported="false" />
 
         <!--

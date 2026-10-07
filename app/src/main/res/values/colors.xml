@@ -34,4 +34,28 @@
 
     <color name="dashboard_nav_inactive">#68738A</color>
 
+    <!-- Week 4 Vault -->
+    <color name="vault_background">#081729</color>
+
+    <color name="vault_panel">#101D33</color>
+    <color name="vault_panel_border">#22314D</color>
+
+    <color name="vault_field_background">#0B1A2C</color>
+    <color name="vault_field_border">#22314D</color>
+
+    <color name="vault_accent">#27E0D0</color>
+    <color name="vault_accent_dim">#1FB5A8</color>
+    <color name="vault_accent_surface">#103A36</color>
+    <color name="vault_chip_text_dark">#062420</color>
+
+    <color name="vault_text_primary">#F6F1E7</color>
+    <color name="vault_text_secondary">#8EA2C8</color>
+    <color name="vault_text_faint">#6F84A8</color>
+
+    <color name="vault_risk_red">#E5484D</color>
+    <color name="vault_risk_amber">#E5A44D</color>
+
+    <color name="vault_error_background">#2A1A1D</color>
+    <color name="vault_error_border">#45262A</color>
+
 </resources>

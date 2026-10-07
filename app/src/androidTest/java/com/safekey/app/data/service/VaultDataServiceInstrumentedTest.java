@@ -16,6 +16,9 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
 import org.junit.After;
 import org.junit.Before;
@@ -36,11 +39,28 @@ public class VaultDataServiceInstrumentedTest {
             "safekey_service_instrumented_test.db";
 
     /*
-     * Test-only SQLCipher passphrase.
-     * This remains under src/androidTest only.
+     * Creates a fresh 32-byte test database key.
      */
-    private static final String TEST_DATABASE_PASSPHRASE =
-            "SafeKey-Service-Test-Passphrase-2026";
+    private static byte[] newTestDatabaseKey() {
+
+        byte[] databaseKey =
+                new byte[
+                        SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
+                        ];
+
+        for (
+                int index = 0;
+                index < databaseKey.length;
+                index++
+        ) {
+            databaseKey[index] =
+                    (byte) (
+                            index + 1
+                    );
+        }
+
+        return databaseKey;
+    }
 
     private static final long CALLBACK_TIMEOUT_SECONDS =
             5;
@@ -92,6 +112,250 @@ public class VaultDataServiceInstrumentedTest {
     }
 
     @Test
+    public void sessionLock_closesOpenVault()
+            throws Exception {
+        SafeKeySession.lock();
+
+        awaitSimpleSuccess(
+                callback -> service.openVault(
+                        newTestDatabaseKey(),
+                        callback
+                )
+        );
+        assertTrue(service.isVaultOpen());
+
+        CountDownLatch closeFinished = new CountDownLatch(1);
+        AtomicReference<Exception> closeError =
+                new AtomicReference<>();
+
+        SafeKeySession.registerSensitiveDataCleanup(
+                () -> service.closeVault(
+                        new VaultDataService.SimpleCallback() {
+                            @Override
+                            public void onSuccess() {
+                                closeFinished.countDown();
+                            }
+
+                            @Override
+                            public void onError(Exception exception) {
+                                closeError.set(exception);
+                                closeFinished.countDown();
+                            }
+                        }
+                )
+        );
+
+        try {
+            SafeKeySession.unlockAfterAuthentication();
+            SafeKeySession.lock();
+
+            assertTrue(
+                    "Timed out waiting for the vault to close.",
+                    closeFinished.await(
+                            CALLBACK_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            if (closeError.get() != null) {
+                throw closeError.get();
+            }
+
+            assertEquals(
+                    SessionState.LOCKED,
+                    SafeKeySession.getState()
+            );
+            assertFalse(service.isVaultOpen());
+
+            assertEquals(
+                    "Vault is not open.",
+                    awaitResultError(
+                            service::getCredentials
+                    ).getMessage()
+            );
+        } finally {
+            SafeKeySession.lock();
+
+            ((SafeKeyApplication) context.getApplicationContext())
+                    .registerSessionCleanup();
+        }
+    }
+
+    @Test
+    public void credentialCanBeReadByIdAndPersistsAfterCloseAndReopen()
+            throws Exception {
+
+        /*
+         * OPEN
+         */
+        awaitSimpleSuccess(
+                callback ->
+                        service.openVault(
+                                newTestDatabaseKey(),
+                                callback
+                        )
+        );
+
+        assertTrue(
+                service.isVaultOpen()
+        );
+
+        /*
+         * ADD CREDENTIAL
+         */
+        Credential credential =
+                new Credential(
+                        "Persistent Service Credential",
+                        "persistent-user",
+                        "persistent-password",
+                        "persistent.example.test",
+                        "Work",
+                        "Persistent credential note"
+                );
+
+        long credentialId =
+                awaitResultSuccess(
+                        callback ->
+                                service.addCredential(
+                                        credential,
+                                        callback
+                                )
+                );
+
+        assertTrue(
+                credentialId > 0
+        );
+
+        /*
+         * READ THE SINGLE CREDENTIAL BY ID
+         */
+        Credential storedCredential =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                storedCredential
+        );
+
+        assertEquals(
+                credentialId,
+                storedCredential.getId()
+        );
+
+        assertEquals(
+                "Persistent Service Credential",
+                storedCredential.getTitle()
+        );
+
+        assertEquals(
+                "persistent-user",
+                storedCredential.getUsername()
+        );
+
+        assertEquals(
+                "persistent-password",
+                storedCredential.getPassword()
+        );
+
+        assertEquals(
+                "persistent.example.test",
+                storedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "Work",
+                storedCredential.getCategory()
+        );
+
+        assertEquals(
+                "Persistent credential note",
+                storedCredential.getNotes()
+        );
+
+        /*
+         * CLOSE THE VAULT
+         */
+        awaitSimpleSuccess(
+                service::closeVault
+        );
+
+        assertFalse(
+                service.isVaultOpen()
+        );
+
+        /*
+         * REOPEN WITH THE SAME RAW DATABASE KEY
+         */
+        awaitSimpleSuccess(
+                callback ->
+                        service.openVault(
+                                newTestDatabaseKey(),
+                                callback
+                        )
+        );
+
+        assertTrue(
+                service.isVaultOpen()
+        );
+
+        /*
+         * VERIFY THE SAME STORED RECORD IS STILL PRESENT
+         */
+        Credential reopenedCredential =
+                awaitResultSuccess(
+                        callback ->
+                                service.getCredential(
+                                        credentialId,
+                                        callback
+                                )
+                );
+
+        assertNotNull(
+                reopenedCredential
+        );
+
+        assertEquals(
+                credentialId,
+                reopenedCredential.getId()
+        );
+
+        assertEquals(
+                "Persistent Service Credential",
+                reopenedCredential.getTitle()
+        );
+
+        assertEquals(
+                "persistent-user",
+                reopenedCredential.getUsername()
+        );
+
+        assertEquals(
+                "persistent-password",
+                reopenedCredential.getPassword()
+        );
+
+        assertEquals(
+                "persistent.example.test",
+                reopenedCredential.getWebsite()
+        );
+
+        assertEquals(
+                "Work",
+                reopenedCredential.getCategory()
+        );
+
+        assertEquals(
+                "Persistent credential note",
+                reopenedCredential.getNotes()
+        );
+    }
+
+    @Test
     public void serviceSupportsOpenCrudSearchCloseAndShutdown()
             throws Exception {
 
@@ -101,7 +365,7 @@ public class VaultDataServiceInstrumentedTest {
         awaitSimpleSuccess(
                 callback ->
                         service.openVault(
-                                TEST_DATABASE_PASSPHRASE,
+                                newTestDatabaseKey(),
                                 callback
                         )
         );
@@ -503,7 +767,7 @@ public class VaultDataServiceInstrumentedTest {
         awaitSimpleSuccess(
                 callback ->
                         service.openVault(
-                                TEST_DATABASE_PASSPHRASE,
+                                newTestDatabaseKey(),
                                 callback
                         )
         );

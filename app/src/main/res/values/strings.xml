@@ -44,10 +44,8 @@
     <string name="error_passwords_do_not_match">Passwords do not match.</string>
 
     <!-- Temporary authentication integration messages -->
-    <string name="signup_pending_integration">Sign-up UI is ready. Security integration is pending.</string>
-    <string name="signup_pending_integration_toast">Sign-up screen ready for security integration.</string>
-    <string name="signin_pending_integration">Sign-in UI is ready. Vault security integration is pending.</string>
-    <string name="signin_pending_integration_toast">Sign-in screen ready for security integration.</string>
+    <string name="signup_vault_creation_error">Couldn’t create your vault. Please try again.</string>
+    <string name="signin_vault_unlock_error">Couldn’t unlock your vault. Check your master password and try again.</string>
 
     <!-- Accessibility -->
     <string name="show_password_content_description">Show password</string>
@@ -91,10 +89,149 @@
     <string name="home_security_score_accessibility">Security score is %1$d. Maximum score is 100.</string>
 
     <!-- Week 3 integration messages -->
-    <string name="home_vault_navigation_pending">Vault screen will be connected in the next integration step.</string>
     <string name="home_credential_creation_pending">Credential creation will be connected in the next integration step.</string>
     <string name="home_alerts_navigation_pending">Alerts screen will be connected in the next integration step.</string>
     <string name="home_settings_navigation_pending">Settings screen will be connected in the next integration step.</string>
     <string name="home_session_locked">Your vault is locked. Sign in to continue.</string>
 
+    <!-- Week 4 Vault -->
+    <string name="vault_title">Vault</string>
+    <string name="vault_subtitle">Your saved credentials</string>
+
+    <string name="vault_search_hint">Search vault…</string>
+
+    <string name="vault_filter_all">All</string>
+    <string name="vault_filter_favorites">Favorites</string>
+    <string name="vault_filter_notes">Notes</string>
+
+    <string name="vault_add_credential">Add Credential</string>
+    <string name="vault_add_secure_note">Add Secure Note</string>
+
+    <!-- Week 5 Vault states -->
+    <string name="vault_loading">Loading vault…</string>
+
+    <string name="vault_empty_title">Your vault is empty</string>
+    <string name="vault_empty_message">Add your first credential or secure note to get started.</string>
+
+    <string name="vault_error_title">Couldn’t load your vault</string>
+    <string name="vault_error_message">Something went wrong while loading your saved items.</string>
+    <string name="vault_retry">Retry</string>
+
+    <string name="vault_risk_breach">Breach detected</string>
+    <string name="vault_risk_at_risk">At risk</string>
+
+    <!-- Vault accessibility -->
+    <string name="vault_quick_add_content_description">Add credential or secure note</string>
+    <string name="vault_add_credential_content_description">Add a new credential</string>
+    <string name="vault_favorite_content_description">Mark credential as favorite</string>
+    <string name="vault_unfavorite_content_description">Remove credential from favorites</string>
+    <string name="vault_breach_content_description">Credential has a breach warning</string>
+    <string name="vault_at_risk_content_description">Credential is at risk</string>
+
+    <!-- Week 4 Add Credential -->
+    <string name="add_credential_title">Add Credential</string>
+    <string name="add_credential_subtitle">Save a login to your vault.</string>
+    <string name="add_credential_cancel">Cancel</string>
+
+    <string name="add_credential_name_label">Name</string>
+    <string name="add_credential_name_hint">e.g. Google</string>
+
+    <string name="add_credential_username_label">Username or email</string>
+    <string name="add_credential_username_hint">Enter username or email</string>
+
+    <string name="add_credential_password_label">Password</string>
+    <string name="add_credential_password_hint">Enter password</string>
+
+    <string name="add_credential_website_label">Website</string>
+    <string name="add_credential_website_hint">e.g. accounts.google.com</string>
+
+    <string name="add_credential_category_label">Category</string>
+    <string name="add_credential_category_hint">e.g. Login</string>
+
+    <string name="add_credential_notes_label">Notes</string>
+    <string name="add_credential_notes_hint">Optional notes</string>
+
+    <string name="add_credential_save">Save Credential</string>
+
+    <string name="add_credential_error_name_required">Enter a name.</string>
+    <string name="add_credential_error_username_required">Enter a username or email.</string>
+    <string name="add_credential_error_password_required">Enter a password.</string>
+    <string name="credential_save_error">Couldn’t save this credential. Please try again.</string>
+    <string name="credential_load_error">Couldn’t load this credential. Please try again.</string>
+
+    <!-- Week 4 Credential Details -->
+    <string name="credential_details_title">Credential Details</string>
+    <string name="credential_details_back">Back</string>
+
+    <string name="credential_details_username">Username or email</string>
+    <string name="credential_details_password">Password</string>
+    <string name="credential_details_website">Website</string>
+    <string name="credential_details_category">Category</string>
+    <string name="credential_details_notes">Notes</string>
+
+    <string name="credential_details_edit">Edit Credential</string>
+    <string name="credential_details_delete">Delete Credential</string>
+
+    <string name="credential_details_not_provided">Not provided</string>
+
+    <string name="credential_delete_title">Delete credential?</string>
+    <string name="credential_delete_message">This credential will be permanently removed from your vault.</string>
+    <string name="credential_delete_cancel">Cancel</string>
+    <string name="credential_delete_confirm">Delete</string>
+    <string name="credential_delete_error">Couldn’t delete this credential. Please try again.</string>
+
+    <!-- Week 4 Secure Note Details -->
+    <string name="secure_note_details_title">Secure Note</string>
+    <string name="secure_note_details_back">Back</string>
+    <string name="secure_note_details_content">Note</string>
+    <string name="secure_note_details_edit">Edit Note</string>
+    <string name="secure_note_details_delete">Delete Note</string>
+    <string name="secure_note_details_not_provided">No note content provided.</string>
+    <string name="secure_note_delete_title">Delete secure note?</string>
+    <string name="secure_note_delete_message">This secure note will be permanently removed from your vault.</string>
+    <string name="secure_note_delete_cancel">Cancel</string>
+    <string name="secure_note_delete_confirm">Delete</string>
+    <string name="secure_note_delete_error">Couldn’t delete this secure note. Please try again.</string>
+
+    <!-- Week 4 Add Secure Note -->
+    <string name="add_secure_note_title">Add Secure Note</string>
+    <string name="add_secure_note_subtitle">Save private information to your vault.</string>
+    <string name="add_secure_note_cancel">Cancel</string>
+
+    <string name="add_secure_note_title_label">Title</string>
+    <string name="add_secure_note_title_hint">e.g. Home Wi-Fi</string>
+
+    <string name="add_secure_note_content_label">Note</string>
+    <string name="add_secure_note_content_hint">Enter your secure note</string>
+
+    <string name="add_secure_note_save">Save Secure Note</string>
+
+    <string name="add_secure_note_error_title_required">Enter a title.</string>
+    <string name="add_secure_note_error_content_required">Enter note content.</string>
+    <string name="secure_note_save_error">Couldn’t save this secure note. Please try again.</string>
+    <string name="secure_note_load_error">Couldn’t load this secure note. Please try again.</string>
+
+    <!-- Week 4 Vault UI reusable text -->
+    <string name="secure_note_icon_letter">N</string>
+
+    <string name="edit_credential_title">Edit Credential</string>
+    <string name="edit_credential_subtitle">Update this login in your vault.</string>
+    <string name="edit_credential_save">Save Changes</string>
+
+    <string name="edit_secure_note_title">Edit Secure Note</string>
+    <string name="edit_secure_note_subtitle">Update this note in your vault.</string>
+    <string name="edit_secure_note_save">Save Changes</string>
+
+    <!-- Week 6 biometric UI -->
+    <string name="signin_or">or</string>
+    <string name="signin_unlock_with_biometrics">Unlock with biometrics</string>
+    <string name="biometric_enable_title">Enable biometric unlock?</string>
+    <string name="biometric_enable_message">Use your phone’s fingerprint or face recognition to unlock SafeKey faster.</string>
+    <string name="biometric_not_now">Not now</string>
+    <string name="biometric_enable">Enable</string>
+    <string name="biometric_unlock_prompt_title">Unlock SafeKey</string>
+    <string name="biometric_unlock_prompt_subtitle">Confirm your identity to continue.</string>
+    <string name="biometric_unlock_error">Unable to verify your identity with biometrics. Try again or use your master password.</string>
+    <string name="biometric_reenrollment_required">Biometric unlock needs to be set up again. Sign in with your master password to continue.</string>
+    <string name="biometric_setup_error">Biometric setup was unsuccessful. You can continue with your master password and enable biometrics later.</string>
 </resources>

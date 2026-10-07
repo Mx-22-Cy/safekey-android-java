@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/rootVault"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vault_background">
+
+    <!-- Header title -->
+    <TextView
+        android:id="@+id/textVaultTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="24dp"
+        android:fontFamily="serif"
+        android:text="@string/vault_title"
+        android:textColor="@color/vault_text_primary"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Top-right quick add -->
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/buttonQuickAdd"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:layout_marginEnd="28dp"
+        android:background="@drawable/vault_quick_add_bg"
+        android:contentDescription="@string/vault_quick_add_content_description"
+        android:padding="11dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/textVaultTitle"
+        app:srcCompat="@drawable/ic_vault_plus" />
+
+    <!-- Subtitle -->
+    <TextView
+        android:id="@+id/textVaultSubtitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:text="@string/vault_subtitle"
+        android:textColor="@color/vault_text_secondary"
+        android:textSize="14sp"
+        app:layout_constraintStart_toStartOf="@id/textVaultTitle"
+        app:layout_constraintTop_toBottomOf="@id/textVaultTitle" />
+
+    <!-- Search -->
+    <androidx.appcompat.widget.AppCompatEditText
+        android:id="@+id/editSearchVault"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="28dp"
+        android:layout_marginEnd="28dp"
+        android:background="@drawable/vault_field_bg"
+        android:drawableStart="@drawable/ic_vault_search"
+        android:drawablePadding="12dp"
+        android:hint="@string/vault_search_hint"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:singleLine="true"
+        android:textColor="@color/vault_text_primary"
+        android:textColorHint="@color/vault_text_faint"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/textVaultSubtitle" />
+
+    <!-- Filters -->
+    <LinearLayout
+        android:id="@+id/layoutVaultFilters"
+        android:layout_width="wrap_content"
+        android:layout_height="40dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="14dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/editSearchVault">
+
+        <TextView
+            android:id="@+id/filterAll"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:background="@drawable/vault_chip_active_bg"
+            android:gravity="center"
+            android:minWidth="58dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/vault_filter_all"
+            android:textColor="@color/vault_chip_text_dark"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/filterFavorites"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/vault_chip_inactive_bg"
+            android:gravity="center"
+            android:minWidth="96dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/vault_filter_favorites"
+            android:textColor="@color/vault_text_secondary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/filterNotes"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/vault_chip_inactive_bg"
+            android:gravity="center"
+            android:minWidth="70dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/vault_filter_notes"
+            android:textColor="@color/vault_text_secondary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Dynamic credential list -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/recyclerVault"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="28dp"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        app:layout_constraintBottom_toTopOf="@id/buttonAddCredential"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutVaultFilters"
+        tools:listitem="@layout/item_vault_credential" />
+
+    <FrameLayout
+        android:id="@+id/layoutVaultState"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="28dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/buttonAddCredential"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layoutVaultFilters">
+
+        <LinearLayout
+            android:id="@+id/layoutVaultLoading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ProgressBar
+                android:id="@+id/progressVaultLoading"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/vault_accent" />
+
+            <TextView
+                android:id="@+id/textVaultLoading"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/vault_loading"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layoutVaultEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/vault_empty_icon_bg">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="28dp"
+                    android:layout_height="28dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    app:srcCompat="@drawable/ic_vault_empty_lock" />
+
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/textVaultEmptyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:fontFamily="serif"
+                android:text="@string/vault_empty_title"
+                android:textColor="@color/vault_text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/textVaultEmptyMessage"
+                android:layout_width="240dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/vault_empty_message"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/layoutVaultError"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/vault_error_icon_bg">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@null"
+                    app:srcCompat="@drawable/ic_vault_error_warning" />
+
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/textVaultErrorTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:fontFamily="serif"
+                android:text="@string/vault_error_title"
+                android:textColor="@color/vault_text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/textVaultErrorMessage"
+                android:layout_width="240dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/vault_error_message"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:id="@+id/buttonVaultRetry"
+                android:layout_width="140dp"
+                android:layout_height="48dp"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/auth_primary_button_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:contentDescription="@null"
+                    app:srcCompat="@drawable/ic_vault_retry" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/vault_retry"
+                    android:textColor="@color/auth_primary_button_text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- Add Credential -->
+    <LinearLayout
+        android:id="@+id/buttonAddCredential"
+        android:layout_width="0dp"
+        android:layout_height="50dp"
+        android:layout_marginStart="28dp"
+        android:layout_marginEnd="28dp"
+        android:layout_marginBottom="18dp"
+        android:background="@drawable/vault_add_credential_bg"
+        android:clickable="true"
+        android:contentDescription="@string/vault_add_credential_content_description"
+        android:focusable="true"
+        android:gravity="center"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toTopOf="@id/viewNavDivider"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null"
+            app:srcCompat="@drawable/ic_vault_plus" />
+
+        <TextView
+            android:id="@+id/textAddCredential"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="@string/vault_add_credential"
+            android:textColor="@color/vault_accent"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Divider above bottom navigation -->
+    <View
+        android:id="@+id/viewNavDivider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="@color/vault_panel_border"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavigationVault"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <!-- Bottom navigation -->
+    <LinearLayout
+        android:id="@+id/bottomNavigationVault"
+        android:layout_width="0dp"
+        android:layout_height="76dp"
+        android:background="@color/vault_panel"
+        android:baselineAligned="false"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Home -->
+        <LinearLayout
+            android:id="@+id/navHome"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                app:srcCompat="@drawable/ic_home"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/home_nav_home"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+        <!-- Vault active -->
+        <LinearLayout
+            android:id="@+id/navVault"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:background="@drawable/vault_nav_active_bg">
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_gravity="center"
+                    app:srcCompat="@drawable/ic_vault"
+                    app:tint="@color/vault_accent" />
+
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/home_nav_vault"
+                android:textColor="@color/vault_accent"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <!-- Alerts -->
+        <LinearLayout
+            android:id="@+id/navAlerts"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                app:srcCompat="@drawable/ic_alerts"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/home_nav_alerts"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+        <!-- Settings -->
+        <LinearLayout
+            android:id="@+id/navSettings"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                app:srcCompat="@drawable/ic_settings"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/home_nav_settings"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -25,6 +25,7 @@ android {
             }
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
@@ -35,11 +36,21 @@ dependencies {
     implementation libs.activity.ktx
     implementation libs.appcompat
     implementation libs.constraintlayout
+    implementation libs.recyclerview
     implementation libs.bouncycastle
     implementation libs.material
+
     testImplementation libs.junit
+
     androidTestImplementation libs.espresso.core
     androidTestImplementation libs.ext.junit
+
     implementation("net.zetetic:sqlcipher-android:4.17.0@aar")
     implementation("androidx.sqlite:sqlite:2.6.2")
+
+    // Week 6 - Android biometric authentication
+    implementation("androidx.biometric:biometric:1.1.0")
+
+    // Week 7 - Credential password strength estimation
+    implementation("com.nulab-inc:zxcvbn:1.9.0")
 }

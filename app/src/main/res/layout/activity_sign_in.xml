@@ -136,6 +136,65 @@
             android:textSize="16sp"
             android:textStyle="bold" />
 
+        <!-- Biometric unlock -->
+        <LinearLayout
+            android:id="@+id/biometricUnlockSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"
+                    android:alpha="0.45"
+                    android:background="@color/auth_text_hint" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:text="@string/signin_or"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="13sp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"
+                    android:alpha="0.45"
+                    android:background="@color/auth_text_hint" />
+
+            </LinearLayout>
+
+            <androidx.appcompat.widget.AppCompatTextView
+                android:id="@+id/biometricUnlockArea"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                app:drawableTopCompat="@drawable/ic_fingerprint"
+                android:drawablePadding="7dp"
+                android:text="@string/signin_unlock_with_biometrics"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="14sp" />
+
+        </LinearLayout>
+
         <!-- Create vault -->
         <Button
             android:id="@+id/buttonGoToSignUp"

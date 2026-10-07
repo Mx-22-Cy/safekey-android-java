@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootAddSecureNote"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/vault_background">
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="28dp"
+            android:paddingTop="28dp"
+            android:paddingEnd="28dp"
+            android:paddingBottom="32dp">
+
+            <!-- Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/textAddSecureNoteTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/add_secure_note_title"
+                    android:textColor="@color/vault_text_primary"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/buttonCancelAddSecureNote"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="@string/add_secure_note_cancel"
+                    android:textColor="@color/vault_accent"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/textAddSecureNoteSubtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="28dp"
+                android:text="@string/add_secure_note_subtitle"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="13sp" />
+
+            <!-- Title -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/add_secure_note_title_label"
+                android:textColor="@color/vault_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatEditText
+                android:id="@+id/editSecureNoteTitle"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="7dp"
+                android:layout_marginBottom="20dp"
+                android:background="@drawable/vault_field_bg"
+                android:hint="@string/add_secure_note_title_hint"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:singleLine="true"
+                android:textColor="@color/vault_text_primary"
+                android:textColorHint="@color/vault_text_faint"
+                android:textSize="14sp" />
+
+            <!-- Note content -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/add_secure_note_content_label"
+                android:textColor="@color/vault_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.AppCompatEditText
+                android:id="@+id/editSecureNoteContent"
+                android:layout_width="match_parent"
+                android:layout_height="180dp"
+                android:layout_marginTop="7dp"
+                android:layout_marginBottom="28dp"
+                android:background="@drawable/vault_field_bg"
+                android:gravity="top|start"
+                android:hint="@string/add_secure_note_content_hint"
+                android:inputType="textMultiLine"
+                android:padding="14dp"
+                android:textColor="@color/vault_text_primary"
+                android:textColorHint="@color/vault_text_faint"
+                android:textSize="14sp" />
+
+            <!-- Save -->
+            <TextView
+                android:id="@+id/buttonSaveSecureNote"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/vault_add_credential_bg"
+                android:gravity="center"
+                android:text="@string/add_secure_note_save"
+                android:textColor="@color/vault_accent"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </ScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
