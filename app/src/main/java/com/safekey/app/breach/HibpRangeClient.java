@@ -3,9 +3,9 @@ package com.safekey.app.breach;
 import android.os.Handler;
 import android.os.Looper;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -36,6 +36,15 @@ public final class HibpRangeClient
 
     private static final int READ_TIMEOUT_MS =
             10_000;
+
+    /**
+     * Maximum HIBP response size accepted by SafeKey.
+     */
+    static final int MAX_RESPONSE_LENGTH =
+            1_048_576;
+
+    private static final int READ_BUFFER_SIZE =
+            4096;
 
     private final ExecutorService executorService;
     private final Handler mainHandler;
@@ -143,13 +152,6 @@ public final class HibpRangeClient
                     "text/plain"
             );
 
-            /*
-             * HIBP response padding reduces information
-             * leakage based on response size.
-             *
-             * Padding rows have count 0 and are removed
-             * later by HibpRangeParser.
-             */
             connection.setRequestProperty(
                     "Add-Padding",
                     "true"
@@ -167,28 +169,16 @@ public final class HibpRangeClient
             }
 
             try (
-                    BufferedReader reader =
-                            new BufferedReader(
-                                    new InputStreamReader(
-                                            connection.getInputStream(),
-                                            StandardCharsets.UTF_8
-                                    )
+                    Reader reader =
+                            new InputStreamReader(
+                                    connection.getInputStream(),
+                                    StandardCharsets.UTF_8
                             )
             ) {
 
-                StringBuilder response =
-                        new StringBuilder();
-
-                String line;
-
-                while ((line =
-                        reader.readLine()) != null) {
-
-                    response.append(line)
-                            .append('\n');
-                }
-
-                return response.toString();
+                return readBoundedResponse(
+                        reader
+                );
             }
 
         } finally {
@@ -197,6 +187,77 @@ public final class HibpRangeClient
         }
     }
 
+    /**
+     * Reads the HTTP response in bounded chunks.
+     *
+     * No more than MAX_RESPONSE_LENGTH characters
+     * are retained.
+     */
+    static String readBoundedResponse(
+            Reader reader
+    ) throws IOException {
+
+        Objects.requireNonNull(
+                reader,
+                "reader"
+        );
+
+        StringBuilder response =
+                new StringBuilder();
+
+        char[] buffer =
+                new char[READ_BUFFER_SIZE];
+
+        while (true) {
+
+            int remainingIncludingProbe =
+                    MAX_RESPONSE_LENGTH
+                            - response.length()
+                            + 1;
+
+            int charactersToRead =
+                    Math.min(
+                            buffer.length,
+                            remainingIncludingProbe
+                    );
+
+            int charactersRead =
+                    reader.read(
+                            buffer,
+                            0,
+                            charactersToRead
+                    );
+
+            if (charactersRead == -1) {
+                break;
+            }
+
+            if (response.length()
+                    + charactersRead
+                    > MAX_RESPONSE_LENGTH) {
+
+                throw new IOException(
+                        "HIBP response exceeded maximum allowed size."
+                );
+            }
+
+            response.append(
+                    buffer,
+                    0,
+                    charactersRead
+            );
+        }
+
+        return response.toString();
+    }
+
+    /**
+     * Validates the original prefix before normalizing case.
+     *
+     * Only exactly five ASCII hexadecimal characters
+     * are accepted. Unicode case expansion must never
+     * turn malformed input into a valid HIBP prefix.
+     */
     static String normalizePrefix(
             String hashPrefix
     ) {
@@ -208,12 +269,12 @@ public final class HibpRangeClient
             );
         }
 
-        String normalized =
-                hashPrefix.toUpperCase(
-                        Locale.US
-                );
-
-        if (normalized.length() != 5) {
+        /*
+         * IMPORTANT:
+         * Validate the ORIGINAL string length before
+         * any Unicode case conversion.
+         */
+        if (hashPrefix.length() != 5) {
 
             throw new IllegalArgumentException(
                     "HIBP hash prefix must contain exactly "
@@ -221,29 +282,48 @@ public final class HibpRangeClient
             );
         }
 
+        /*
+         * Validate every ORIGINAL character as ASCII hex.
+         * Do not uppercase first because Unicode characters
+         * may expand during case conversion.
+         */
         for (int index = 0;
-             index < normalized.length();
+             index < hashPrefix.length();
              index++) {
 
             char character =
-                    normalized.charAt(index);
+                    hashPrefix.charAt(index);
 
-            boolean hexadecimal =
-                    (character >= '0'
-                            && character <= '9')
-                            || (character >= 'A'
-                            && character <= 'F');
-
-            if (!hexadecimal) {
+            if (!isAsciiHexDigit(
+                    character
+            )) {
 
                 throw new IllegalArgumentException(
                         "HIBP hash prefix must contain only "
-                                + "hexadecimal characters."
+                                + "ASCII hexadecimal characters."
                 );
             }
         }
 
-        return normalized;
+        /*
+         * Case normalization is safe only after the
+         * original input has passed validation.
+         */
+        return hashPrefix.toUpperCase(
+                Locale.US
+        );
+    }
+
+    private static boolean isAsciiHexDigit(
+            char character
+    ) {
+
+        return (character >= '0'
+                && character <= '9')
+                || (character >= 'A'
+                && character <= 'F')
+                || (character >= 'a'
+                && character <= 'f');
     }
 
     private void deliverSuccess(

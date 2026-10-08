@@ -3,15 +3,13 @@ package com.safekey.app.breach;
 import java.util.Locale;
 
 /**
- * One real entry returned by the HIBP Pwned Passwords
- * SHA-1 range endpoint.
- *
- * Padding entries with count 0 are discarded by the parser,
- * so instances of this class always have a positive count.
+ * One validated entry returned by the
+ * HIBP Pwned Passwords range endpoint.
  */
 public final class HibpRangeEntry {
 
-    public static final int SHA1_SUFFIX_LENGTH = 35;
+    public static final int SHA1_SUFFIX_LENGTH =
+            35;
 
     private final String hashSuffix;
     private final long count;
@@ -20,70 +18,93 @@ public final class HibpRangeEntry {
             String hashSuffix,
             long count
     ) {
+
         this.hashSuffix =
-                normalizeSuffix(hashSuffix);
+                normalizeSuffix(
+                        hashSuffix
+                );
 
         if (count <= 0) {
+
             throw new IllegalArgumentException(
-                    "HIBP breach count must be greater than zero."
+                    "HIBP breach count must be positive."
             );
         }
 
-        this.count = count;
+        this.count =
+                count;
     }
 
     public String getHashSuffix() {
+
         return hashSuffix;
     }
 
     public long getCount() {
+
         return count;
     }
 
+    /**
+     * Validates the original suffix before normalizing case.
+     *
+     * Only exactly 35 ASCII hexadecimal characters
+     * are accepted. Unicode case expansion must not be
+     * able to transform malformed input into a valid suffix.
+     */
     private static String normalizeSuffix(
             String hashSuffix
     ) {
+
         if (hashSuffix == null) {
+
             throw new IllegalArgumentException(
                     "HIBP hash suffix must not be null."
             );
         }
 
-        String normalized =
-                hashSuffix.toUpperCase(
-                        Locale.US
-                );
-
-        if (normalized.length()
+        if (hashSuffix.length()
                 != SHA1_SUFFIX_LENGTH) {
 
             throw new IllegalArgumentException(
-                    "HIBP SHA-1 hash suffix must contain exactly "
+                    "HIBP hash suffix must contain exactly "
                             + SHA1_SUFFIX_LENGTH
                             + " hexadecimal characters."
             );
         }
 
         for (int index = 0;
-             index < normalized.length();
+             index < hashSuffix.length();
              index++) {
 
             char character =
-                    normalized.charAt(index);
+                    hashSuffix.charAt(index);
 
-            boolean hexadecimal =
-                    (character >= '0'
-                            && character <= '9')
-                            || (character >= 'A'
-                            && character <= 'F');
+            if (!isAsciiHexDigit(
+                    character
+            )) {
 
-            if (!hexadecimal) {
                 throw new IllegalArgumentException(
-                        "HIBP hash suffix must contain only hexadecimal characters."
+                        "HIBP hash suffix must contain only "
+                                + "ASCII hexadecimal characters."
                 );
             }
         }
 
-        return normalized;
+        return hashSuffix.toUpperCase(
+                Locale.US
+        );
+    }
+
+    private static boolean isAsciiHexDigit(
+            char character
+    ) {
+
+        return (character >= '0'
+                && character <= '9')
+                || (character >= 'A'
+                && character <= 'F')
+                || (character >= 'a'
+                && character <= 'f');
     }
 }

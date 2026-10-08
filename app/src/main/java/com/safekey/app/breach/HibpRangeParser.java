@@ -23,14 +23,34 @@ public final class HibpRangeParser {
     public static List<HibpRangeEntry> parse(
             String responseBody
     ) {
+
         if (responseBody == null) {
+
             throw new IllegalArgumentException(
                     "HIBP response must not be null."
             );
         }
 
-        if (responseBody.isEmpty()) {
-            return Collections.emptyList();
+        /*
+         * Reject oversized responses before split()
+         * creates additional strings in memory.
+         */
+        if (responseBody.length()
+                > HibpRangeClient.MAX_RESPONSE_LENGTH) {
+
+            throw new IllegalArgumentException(
+                    "HIBP response exceeded maximum allowed size."
+            );
+        }
+
+        /*
+         * Empty and whitespace-only responses are invalid.
+         */
+        if (responseBody.trim().isEmpty()) {
+
+            throw new IllegalArgumentException(
+                    "HIBP response must not be empty or blank."
+            );
         }
 
         String[] lines =
@@ -46,6 +66,10 @@ public final class HibpRangeParser {
             String line =
                     rawLine.trim();
 
+            /*
+             * Blank lines inside an otherwise valid response
+             * are ignored.
+             */
             if (line.isEmpty()) {
                 continue;
             }
@@ -79,10 +103,11 @@ public final class HibpRangeParser {
                     );
 
             /*
-             * HIBP uses count 0 only for response-padding
-             * entries. They must not be treated as breaches.
+             * Count 0 represents HIBP response-padding rows.
+             * They are valid but are not breach entries.
              */
             if (count == 0) {
+
                 validatePaddingSuffix(
                         suffix
                 );
@@ -108,6 +133,7 @@ public final class HibpRangeParser {
     private static long parseCount(
             String countText
     ) {
+
         if (countText == null
                 || countText.isEmpty()) {
 
@@ -133,6 +159,7 @@ public final class HibpRangeParser {
         }
 
         try {
+
             return Long.parseLong(
                     countText
             );
@@ -149,10 +176,7 @@ public final class HibpRangeParser {
     private static void validatePaddingSuffix(
             String suffix
     ) {
-        /*
-         * Reuse the normal entry validation without retaining
-         * a zero-count entry.
-         */
+
         if (suffix == null
                 || suffix.length()
                 != HibpRangeEntry.SHA1_SUFFIX_LENGTH) {
@@ -162,20 +186,25 @@ public final class HibpRangeParser {
             );
         }
 
+        /*
+         * Validate the original characters directly.
+         * Do not uppercase first, because Unicode case
+         * conversion can change the length/content.
+         */
         for (int index = 0;
              index < suffix.length();
              index++) {
 
             char character =
-                    Character.toUpperCase(
-                            suffix.charAt(index)
-                    );
+                    suffix.charAt(index);
 
             boolean hexadecimal =
                     (character >= '0'
                             && character <= '9')
                             || (character >= 'A'
-                            && character <= 'F');
+                            && character <= 'F')
+                            || (character >= 'a'
+                            && character <= 'f');
 
             if (!hexadecimal) {
 

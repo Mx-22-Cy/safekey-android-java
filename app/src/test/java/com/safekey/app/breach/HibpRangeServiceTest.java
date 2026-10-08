@@ -162,6 +162,132 @@ public class HibpRangeServiceTest {
     }
 
     @Test
+    public void fetchEntries_onlyPaddingEntries_returnsSuccessfulEmptyList() {
+
+        String paddingSuffix =
+                repeat('B', 35);
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        paddingSuffix + ":0\n"
+                );
+
+        HibpRangeService service =
+                new HibpRangeService(
+                        source
+                );
+
+        AtomicReference<List<HibpRangeEntry>> result =
+                new AtomicReference<>();
+
+        AtomicReference<HibpRangeError> error =
+                new AtomicReference<>();
+
+        service.fetchEntries(
+                "ABCDE",
+                new HibpRangeService.Callback() {
+
+                    @Override
+                    public void onSuccess(
+                            List<HibpRangeEntry> entries
+                    ) {
+                        result.set(
+                                entries
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            HibpRangeError serviceError
+                    ) {
+                        error.set(
+                                serviceError
+                        );
+                    }
+                }
+        );
+
+        assertNull(
+                error.get()
+        );
+
+        assertNotNull(
+                result.get()
+        );
+
+        assertEquals(
+                0,
+                result.get().size()
+        );
+    }
+
+    @Test
+    public void fetchEntries_emptyResponse_returnsInvalidResponseError() {
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        ""
+                );
+
+        HibpRangeService service =
+                new HibpRangeService(
+                        source
+                );
+
+        AtomicReference<HibpRangeError> error =
+                new AtomicReference<>();
+
+        service.fetchEntries(
+                "ABCDE",
+                new ErrorCapturingCallback(
+                        error
+                )
+        );
+
+        assertNotNull(
+                error.get()
+        );
+
+        assertEquals(
+                HibpRangeError.Type.INVALID_RESPONSE,
+                error.get().getType()
+        );
+    }
+
+    @Test
+    public void fetchEntries_blankResponse_returnsInvalidResponseError() {
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        "   \r\n\t   \n"
+                );
+
+        HibpRangeService service =
+                new HibpRangeService(
+                        source
+                );
+
+        AtomicReference<HibpRangeError> error =
+                new AtomicReference<>();
+
+        service.fetchEntries(
+                "ABCDE",
+                new ErrorCapturingCallback(
+                        error
+                )
+        );
+
+        assertNotNull(
+                error.get()
+        );
+
+        assertEquals(
+                HibpRangeError.Type.INVALID_RESPONSE,
+                error.get().getType()
+        );
+    }
+
+    @Test
     public void fetchEntries_invalidResponse_returnsInvalidResponseError() {
 
         FakeHibpRangeSource source =

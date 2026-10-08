@@ -1,7 +1,6 @@
 package com.safekey.app.breach;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
@@ -14,7 +13,10 @@ public class HibpRangeParserTest {
     public void parse_validEntry_returnsEntry() {
 
         String suffix =
-                repeat('A', 35);
+                repeat(
+                        'A',
+                        35
+                );
 
         String response =
                 suffix + ":42\n";
@@ -46,10 +48,16 @@ public class HibpRangeParserTest {
     public void parse_paddingEntryWithZeroCount_discardsEntry() {
 
         String realSuffix =
-                repeat('A', 35);
+                repeat(
+                        'A',
+                        35
+                );
 
         String paddingSuffix =
-                repeat('B', 35);
+                repeat(
+                        'B',
+                        35
+                );
 
         String response =
                 realSuffix
@@ -81,15 +89,38 @@ public class HibpRangeParserTest {
     }
 
     @Test
-    public void parse_emptyResponse_returnsEmptyList() {
+    public void parse_onlyPaddingEntries_returnsEmptyList() {
+
+        String paddingSuffix =
+                repeat(
+                        'B',
+                        35
+                );
 
         List<HibpRangeEntry> entries =
                 HibpRangeParser.parse(
-                        ""
+                        paddingSuffix + ":0\n"
                 );
 
-        assertTrue(
-                entries.isEmpty()
+        assertEquals(
+                0,
+                entries.size()
+        );
+    }
+
+    @Test
+    public void parse_emptyResponse_throwsException() {
+
+        assertInvalidResponse(
+                ""
+        );
+    }
+
+    @Test
+    public void parse_blankResponse_throwsException() {
+
+        assertInvalidResponse(
+                "   \r\n\t   \n"
         );
     }
 
@@ -115,90 +146,91 @@ public class HibpRangeParserTest {
     @Test
     public void parse_invalidLine_throwsException() {
 
-        try {
-
-            HibpRangeParser.parse(
-                    "INVALID_LINE"
-            );
-
-            fail(
-                    "Expected IllegalArgumentException."
-            );
-
-        } catch (IllegalArgumentException expected) {
-
-            // Expected.
-        }
+        assertInvalidResponse(
+                "INVALID_LINE"
+        );
     }
 
     @Test
     public void parse_invalidSuffixLength_throwsException() {
 
-        try {
-
-            HibpRangeParser.parse(
-                    "ABCDEF:10\n"
-            );
-
-            fail(
-                    "Expected IllegalArgumentException."
-            );
-
-        } catch (IllegalArgumentException expected) {
-
-            // Expected.
-        }
+        assertInvalidResponse(
+                "ABCDEF:10\n"
+        );
     }
 
     @Test
     public void parse_nonHexSuffix_throwsException() {
 
         String invalidSuffix =
-                repeat('G', 35);
+                repeat(
+                        'G',
+                        35
+                );
 
-        try {
-
-            HibpRangeParser.parse(
-                    invalidSuffix + ":10\n"
-            );
-
-            fail(
-                    "Expected IllegalArgumentException."
-            );
-
-        } catch (IllegalArgumentException expected) {
-
-            // Expected.
-        }
+        assertInvalidResponse(
+                invalidSuffix + ":10\n"
+        );
     }
 
     @Test
     public void parse_negativeCount_throwsException() {
 
         String suffix =
-                repeat('A', 35);
+                repeat(
+                        'A',
+                        35
+                );
 
-        try {
+        assertInvalidResponse(
+                suffix + ":-1\n"
+        );
+    }
 
-            HibpRangeParser.parse(
-                    suffix + ":-1\n"
-            );
+    @Test
+    public void parse_oversizedResponse_throwsBeforeSplit() {
 
-            fail(
-                    "Expected IllegalArgumentException."
-            );
+        String oversizedResponse =
+                repeat(
+                        'A',
+                        HibpRangeClient.MAX_RESPONSE_LENGTH + 1
+                );
 
-        } catch (IllegalArgumentException expected) {
+        assertInvalidResponse(
+                oversizedResponse
+        );
+    }
 
-            // Expected.
-        }
+    @Test
+    public void parse_unicodeExpansionSuffix_throwsException() {
+
+        /*
+         * Original suffix length is 34 characters:
+         * one U+FB00 ligature plus 33 ASCII characters.
+         *
+         * Uppercasing U+FB00 could expand it into two
+         * characters. Validation must happen before that.
+         */
+        String malformedSuffix =
+                "\uFB00"
+                        + repeat(
+                        'A',
+                        33
+                );
+
+        assertInvalidResponse(
+                malformedSuffix + ":10\n"
+        );
     }
 
     @Test
     public void parse_resultList_isImmutable() {
 
         String suffix =
-                repeat('A', 35);
+                repeat(
+                        'A',
+                        35
+                );
 
         List<HibpRangeEntry> entries =
                 HibpRangeParser.parse(
@@ -209,7 +241,10 @@ public class HibpRangeParserTest {
 
             entries.add(
                     new HibpRangeEntry(
-                            repeat('B', 35),
+                            repeat(
+                                    'B',
+                                    35
+                            ),
                             1
                     )
             );
@@ -219,6 +254,26 @@ public class HibpRangeParserTest {
             );
 
         } catch (UnsupportedOperationException expected) {
+
+            // Expected.
+        }
+    }
+
+    private static void assertInvalidResponse(
+            String response
+    ) {
+
+        try {
+
+            HibpRangeParser.parse(
+                    response
+            );
+
+            fail(
+                    "Expected IllegalArgumentException."
+            );
+
+        } catch (IllegalArgumentException expected) {
 
             // Expected.
         }
