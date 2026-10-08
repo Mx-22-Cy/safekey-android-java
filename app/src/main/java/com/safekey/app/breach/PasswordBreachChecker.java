@@ -26,6 +26,48 @@ public final class PasswordBreachChecker {
     }
 
     /**
+     * Prepares a local check for a callback-based range client.
+     * The caller may clear its password array immediately after this returns.
+     * Complete, fail, or close the pending check on every terminal path.
+     */
+    public static PreparedPasswordBreachCheck prepare(char[] password) {
+        if (password == null || password.length == 0) {
+            throw new IllegalArgumentException(
+                    "A non-empty password is required."
+            );
+        }
+
+        char[] fullHash = null;
+
+        try {
+            fullHash = hashPassword(password);
+
+            PreparedPasswordBreachCheck prepared =
+                    new PreparedPasswordBreachCheck(fullHash);
+
+            fullHash = null; // Ownership transferred to the pending check.
+
+            return prepared;
+
+        } catch (CharacterCodingException exception) {
+            throw new IllegalArgumentException(
+                    "Password must contain valid Unicode characters."
+            );
+
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(
+                    "Required SHA-1 digest is unavailable.",
+                    exception
+            );
+
+        } finally {
+            if (fullHash != null) {
+                Arrays.fill(fullHash, '\0');
+            }
+        }
+    }
+
+    /**
      * Leaves the caller's password array unchanged.
      * The caller owns that array and must clear it after use.
      * NOT_FOUND means no match in the returned dataset, not guaranteed safety.
@@ -126,7 +168,7 @@ public final class PasswordBreachChecker {
         }
     }
 
-    private static PasswordBreachResult matchResponse(
+    static PasswordBreachResult matchResponse(
             char[] fullHash,
             String response
     ) {
