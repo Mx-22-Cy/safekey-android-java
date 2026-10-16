@@ -238,6 +238,7 @@
     <!-- Week 7 Password Generator -->
     <string name="generator_title">Generator</string>
     <string name="generator_strength_label">Strength</string>
+    <string name="generator_strength_checking">Checking…</string>
 
     <string name="generator_copy">Copy</string>
     <string name="generator_regenerate">Regenerate</string>

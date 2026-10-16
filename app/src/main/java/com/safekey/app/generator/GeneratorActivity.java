@@ -1,16 +1,19 @@
 package com.safekey.app.generator;
 
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.widget.CheckBox;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.content.ClipData;
+import android.content.ClipDescription;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.widget.Toast;
 import android.content.Intent;
 import android.view.View;
+import android.annotation.SuppressLint;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -20,11 +23,14 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.appcompat.widget.AppCompatImageButton;
 
 import com.safekey.app.R;
+import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.vault.VaultActivity;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -60,6 +66,7 @@ public class GeneratorActivity extends ProtectedActivity {
     private TextView buttonUsePassword;
     private char[] generatedPassword;
     private boolean passwordVisible = false;
+    private boolean lengthSliderTracking = false;
     private final PasswordGenerator passwordGenerator =
             new PasswordGenerator();
     private static final int MAX_STRENGTH_SCORE = 4;
@@ -71,10 +78,62 @@ public class GeneratorActivity extends ProtectedActivity {
             Executors.newSingleThreadExecutor();
     private int strengthRequestId = 0;
 
+    private final class StrengthEvaluationTask implements Runnable {
+
+        private char[] passwordSnapshot;
+        private final int requestId;
+
+        private StrengthEvaluationTask(
+                char[] passwordSnapshot,
+                int requestId
+        ) {
+            this.passwordSnapshot = passwordSnapshot;
+            this.requestId = requestId;
+        }
+
+        @Override
+        public void run() {
+
+            PasswordStrengthResult result;
+
+            try {
+                result =
+                        passwordStrengthEvaluator.evaluate(
+                                passwordSnapshot
+                        );
+            } finally {
+                clearPasswordSnapshot();
+            }
+
+            runOnUiThread(
+                    () -> {
+                        if (requestId != strengthRequestId
+                                || isFinishing()
+                                || isDestroyed()) {
+                            return;
+                        }
+
+                        displayStrengthResult(result);
+                    }
+            );
+        }
+
+        private void clearPasswordSnapshot() {
+            if (passwordSnapshot != null) {
+                Arrays.fill(
+                        passwordSnapshot,
+                        '\0'
+                );
+                passwordSnapshot = null;
+            }
+        }
+    }
     private View bottomNavigationGenerator;
 
     private View navHome;
     private View navVault;
+    private View navAlerts;
+    private View navSettings;
 
     @Override
     protected void onCreate(
@@ -272,6 +331,16 @@ public class GeneratorActivity extends ProtectedActivity {
                 findViewById(
                         R.id.navVault
                 );
+
+        navAlerts =
+                findViewById(
+                        R.id.navAlerts
+                );
+
+        navSettings =
+                findViewById(
+                        R.id.navSettings
+                );
     }
 
     private void setupGeneratorDefaults() {
@@ -345,19 +414,24 @@ public class GeneratorActivity extends ProtectedActivity {
                         textPasswordLength.setText(
                                 String.valueOf(length)
                         );
+
+                        if (fromUser && !lengthSliderTracking) {
+                            generatePassword();
+                        }
                     }
 
                     @Override
                     public void onStartTrackingTouch(
                             SeekBar seekBar
                     ) {
-                        // No action needed.
+                        lengthSliderTracking = true;
                     }
 
                     @Override
                     public void onStopTrackingTouch(
                             SeekBar seekBar
                     ) {
+                        lengthSliderTracking = false;
                         generatePassword();
                     }
                 }
@@ -458,6 +532,12 @@ public class GeneratorActivity extends ProtectedActivity {
             return;
         }
 
+        textStrengthLabel.setText(
+                R.string.generator_strength_checking
+        );
+        textStrengthFeedback.setText("");
+        progressPasswordStrength.setProgress(0);
+
         char[] passwordSnapshot =
                 generatedPassword.clone();
 
@@ -465,40 +545,10 @@ public class GeneratorActivity extends ProtectedActivity {
                 ++strengthRequestId;
 
         strengthExecutor.execute(
-                () -> {
-
-                    PasswordStrengthResult result;
-
-                    try {
-
-                        result =
-                                passwordStrengthEvaluator.evaluate(
-                                        passwordSnapshot
-                                );
-
-                    } finally {
-
-                        Arrays.fill(
-                                passwordSnapshot,
-                                '\0'
-                        );
-                    }
-
-                    runOnUiThread(
-                            () -> {
-
-                                if (requestId != strengthRequestId
-                                        || isFinishing()
-                                        || isDestroyed()) {
-                                    return;
-                                }
-
-                                displayStrengthResult(
-                                        result
-                                );
-                            }
-                    );
-                }
+                new StrengthEvaluationTask(
+                        passwordSnapshot,
+                        requestId
+                )
         );
     }
 
@@ -688,6 +738,36 @@ public class GeneratorActivity extends ProtectedActivity {
                     finish();
                 }
         );
+
+        navAlerts.setOnClickListener(
+                view -> {
+
+                    if (!requireUnlockedSession()) {
+                        return;
+                    }
+
+                    Toast.makeText(
+                            GeneratorActivity.this,
+                            R.string.home_alerts_navigation_pending,
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
+        );
+
+        navSettings.setOnClickListener(
+                view -> {
+
+                    if (!requireUnlockedSession()) {
+                        return;
+                    }
+
+                    Toast.makeText(
+                            GeneratorActivity.this,
+                            R.string.home_settings_navigation_pending,
+                            Toast.LENGTH_SHORT
+                    ).show();
+                }
+        );
     }
 
     private void returnGeneratedPassword() {
@@ -715,6 +795,7 @@ public class GeneratorActivity extends ProtectedActivity {
         finish();
     }
 
+    @SuppressLint("InlinedApi")
     private void copyGeneratedPassword() {
 
         if (generatedPassword == null
@@ -736,6 +817,16 @@ public class GeneratorActivity extends ProtectedActivity {
                                 generatedPassword
                         )
                 );
+
+        PersistableBundle clipDescriptionExtras =
+                new PersistableBundle();
+        clipDescriptionExtras.putBoolean(
+                ClipDescription.EXTRA_IS_SENSITIVE,
+                true
+        );
+        clipData.getDescription().setExtras(
+                clipDescriptionExtras
+        );
 
         clipboardManager.setPrimaryClip(
                 clipData
@@ -862,12 +953,61 @@ public class GeneratorActivity extends ProtectedActivity {
         generatePassword();
     }
 
+    private boolean requireUnlockedSession() {
+
+        if (!SafeKeySession.recordActivity()) {
+
+            navigateToSignIn();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private void navigateToSignIn() {
+
+        if (isFinishing()) {
+            return;
+        }
+
+        Toast.makeText(
+                this,
+                R.string.home_session_locked,
+                Toast.LENGTH_SHORT
+        ).show();
+
+        Intent intent =
+                new Intent(
+                        GeneratorActivity.this,
+                        SignInActivity.class
+                );
+
+        intent.addFlags(
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+        );
+
+        startActivity(
+                intent
+        );
+
+        finish();
+    }
+
     @Override
     protected void onDestroy() {
 
         strengthRequestId++;
 
-        strengthExecutor.shutdownNow();
+        List<Runnable> cancelledTasks =
+                strengthExecutor.shutdownNow();
+
+        for (Runnable task : cancelledTasks) {
+            if (task instanceof StrengthEvaluationTask) {
+                ((StrengthEvaluationTask) task)
+                        .clearPasswordSnapshot();
+            }
+        }
 
         if (generatedPassword != null) {
 
