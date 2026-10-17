@@ -433,6 +433,33 @@
 
         </LinearLayout>
 
+        <!-- Generator -->
+        <LinearLayout
+            android:id="@+id/navGenerator"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                app:srcCompat="@drawable/ic_generate_password"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/generator_title"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+
+        </LinearLayout>
+
         <!-- Alerts -->
         <LinearLayout
             android:id="@+id/navAlerts"

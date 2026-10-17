@@ -37,6 +37,7 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.generator.GeneratorActivity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -871,6 +872,11 @@ public class VaultActivity extends ProtectedActivity {
                         R.id.navVault
                 );
 
+        View navGenerator =
+                findViewById(
+                        R.id.navGenerator
+                );
+
         View navAlerts =
                 findViewById(
                         R.id.navAlerts
@@ -932,6 +938,25 @@ public class VaultActivity extends ProtectedActivity {
         navVault.setOnClickListener(
                 view ->
                         requireUnlockedSession()
+        );
+
+        navGenerator.setOnClickListener(
+                view -> {
+
+                    if (!requireUnlockedSession()) {
+                        return;
+                    }
+
+                    Intent intent =
+                            new Intent(
+                                    VaultActivity.this,
+                                    GeneratorActivity.class
+                            );
+
+                    startActivity(
+                            intent
+                    );
+                }
         );
 
         navAlerts.setOnClickListener(

@@ -6,6 +6,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
+import android.content.Intent;
 
 import com.safekey.app.session.ProtectedActivity;
 import androidx.appcompat.widget.AppCompatEditText;
@@ -15,6 +16,8 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.appcompat.widget.AppCompatImageButton;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
@@ -23,6 +26,7 @@ import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.generator.GeneratorActivity;
 
 public class AddCredentialActivity extends ProtectedActivity {
 
@@ -40,6 +44,37 @@ public class AddCredentialActivity extends ProtectedActivity {
     private long credentialId = 0L;
     private SecureVaultCoordinator secureVaultCoordinator;
     private Credential loadedCredential;
+    private TextView buttonGenerateCredentialPassword;
+
+    private final ActivityResultLauncher<Intent> generatorLauncher =
+            registerForActivityResult(
+                    new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+
+                        if (result.getResultCode() != RESULT_OK
+                                || result.getData() == null) {
+                            return;
+                        }
+
+                        String generatedPassword =
+                                result.getData().getStringExtra(
+                                        GeneratorActivity.EXTRA_GENERATED_PASSWORD
+                                );
+
+                        if (generatedPassword == null
+                                || generatedPassword.isEmpty()) {
+                            return;
+                        }
+
+                        editCredentialPassword.setText(
+                                generatedPassword
+                        );
+
+                        editCredentialPassword.setSelection(
+                                editCredentialPassword.length()
+                        );
+                    }
+            );
 
     public static final String EXTRA_EDIT_MODE =
             "edit_mode";
@@ -169,6 +204,11 @@ public class AddCredentialActivity extends ProtectedActivity {
         editCredentialNotes =
                 findViewById(
                         R.id.editCredentialNotes
+                );
+
+        buttonGenerateCredentialPassword =
+                findViewById(
+                        R.id.buttonGenerateCredentialPassword
                 );
     }
 
@@ -330,6 +370,29 @@ public class AddCredentialActivity extends ProtectedActivity {
         buttonToggleCredentialPassword.setOnClickListener(
                 view ->
                         togglePasswordVisibility()
+        );
+
+        buttonGenerateCredentialPassword.setOnClickListener(
+                view ->
+                        openPasswordGenerator()
+        );
+    }
+
+    private void openPasswordGenerator() {
+
+        Intent intent =
+                new Intent(
+                        AddCredentialActivity.this,
+                        GeneratorActivity.class
+                );
+
+        intent.putExtra(
+                GeneratorActivity.EXTRA_SELECTION_MODE,
+                true
+        );
+
+        generatorLauncher.launch(
+                intent
         );
     }
 
