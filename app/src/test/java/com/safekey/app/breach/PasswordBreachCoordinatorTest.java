@@ -10,10 +10,13 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class PasswordBreachCoordinatorTest {
@@ -92,10 +95,6 @@ public class PasswordBreachCoordinatorTest {
                     result.get().getErrorReason()
             );
 
-            /*
-             * Only the first five hexadecimal SHA-1
-             * characters reached the HIBP source.
-             */
             assertEquals(
                     "5BAA6",
                     source.getLastHashPrefix()
@@ -310,8 +309,13 @@ public class PasswordBreachCoordinatorTest {
         }
     }
 
+    /**
+     * Regression:
+     * cancellation after the HIBP request starts must
+     * suppress a late successful callback.
+     */
     @Test
-    public void check_cancellation_discardsLateSuccessAsNotChecked()
+    public void check_cancellation_suppressesLateSuccessCallback()
             throws Exception {
 
         DeferredHibpRangeSource source =
@@ -327,11 +331,8 @@ public class PasswordBreachCoordinatorTest {
                         Runnable::run
                 );
 
-        AtomicReference<PasswordBreachResult> result =
-                new AtomicReference<>();
-
-        CountDownLatch completed =
-                new CountDownLatch(1);
+        AtomicInteger callbackCount =
+                new AtomicInteger();
 
         char[] password =
                 "password".toCharArray();
@@ -341,14 +342,7 @@ public class PasswordBreachCoordinatorTest {
             PasswordBreachCoordinator.Request request =
                     coordinator.check(
                             password,
-                            breachResult -> {
-
-                                result.set(
-                                        breachResult
-                                );
-
-                                completed.countDown();
-                            }
+                            result -> callbackCount.incrementAndGet()
                     );
 
             assertTrue(
@@ -374,24 +368,13 @@ public class PasswordBreachCoordinatorTest {
                     PASSWORD_SUFFIX + ":5\n"
             );
 
-            assertTrue(
-                    completed.await(
-                            5,
-                            TimeUnit.SECONDS
-                    )
-            );
-
-            assertNotNull(
-                    result.get()
+            waitForWorkerIdle(
+                    worker
             );
 
             assertEquals(
-                    PasswordBreachResult.Status.NOT_CHECKED,
-                    result.get().getStatus()
-            );
-
-            assertFalse(
-                    result.get().isChecked()
+                    0,
+                    callbackCount.get()
             );
 
         } finally {
@@ -533,6 +516,361 @@ public class PasswordBreachCoordinatorTest {
         );
     }
 
+    /**
+     * Regression requested by review:
+     * closing a request while preparation is still queued
+     * must clear the caller's password immediately.
+     */
+    @Test
+    public void close_beforeQueuedPreparationStarts_clearsPassword()
+            throws Exception {
+
+        TrackingHibpRangeSource source =
+                new TrackingHibpRangeSource();
+
+        ExecutorService worker =
+                Executors.newSingleThreadExecutor();
+
+        CountDownLatch blockerStarted =
+                new CountDownLatch(1);
+
+        CountDownLatch releaseBlocker =
+                new CountDownLatch(1);
+
+        blockWorker(
+                worker,
+                blockerStarted,
+                releaseBlocker
+        );
+
+        assertTrue(
+                blockerStarted.await(
+                        5,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        PasswordBreachCoordinator coordinator =
+                new PasswordBreachCoordinator(
+                        source,
+                        worker,
+                        Runnable::run
+                );
+
+        char[] password =
+                "password".toCharArray();
+
+        AtomicInteger callbackCount =
+                new AtomicInteger();
+
+        try {
+
+            PasswordBreachCoordinator.Request request =
+                    coordinator.check(
+                            password,
+                            result -> callbackCount.incrementAndGet()
+                    );
+
+            /*
+             * The only worker thread is blocked, so the
+             * password preparation task cannot have started.
+             */
+            request.close();
+
+            assertTrue(
+                    request.isClosed()
+            );
+
+            /*
+             * Password must already be cleared even though
+             * preparation has never executed.
+             */
+            assertCleared(
+                    password
+            );
+
+            releaseBlocker.countDown();
+
+            waitForWorkerIdle(
+                    worker
+            );
+
+            /*
+             * The cancelled queued task must not reach HIBP.
+             */
+            assertEquals(
+                    0,
+                    source.getRequestCount()
+            );
+
+            assertEquals(
+                    0,
+                    callbackCount.get()
+            );
+
+        } finally {
+
+            releaseBlocker.countDown();
+
+            coordinator.shutdown();
+        }
+    }
+
+    /**
+     * Regression requested by review:
+     * shutdown while preparation is still queued must
+     * clear the password even when shutdownNow discards
+     * the queued preparation task.
+     */
+    @Test
+    public void shutdown_beforeQueuedPreparationStarts_clearsPassword()
+            throws Exception {
+
+        TrackingHibpRangeSource source =
+                new TrackingHibpRangeSource();
+
+        ExecutorService worker =
+                Executors.newSingleThreadExecutor();
+
+        CountDownLatch blockerStarted =
+                new CountDownLatch(1);
+
+        CountDownLatch releaseBlocker =
+                new CountDownLatch(1);
+
+        blockWorker(
+                worker,
+                blockerStarted,
+                releaseBlocker
+        );
+
+        assertTrue(
+                blockerStarted.await(
+                        5,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        PasswordBreachCoordinator coordinator =
+                new PasswordBreachCoordinator(
+                        source,
+                        worker,
+                        Runnable::run
+                );
+
+        char[] password =
+                "password".toCharArray();
+
+        AtomicInteger callbackCount =
+                new AtomicInteger();
+
+        PasswordBreachCoordinator.Request request =
+                coordinator.check(
+                        password,
+                        result -> callbackCount.incrementAndGet()
+                );
+
+        /*
+         * Preparation is still queued behind the blocker.
+         */
+        coordinator.shutdown();
+
+        assertTrue(
+                request.isClosed()
+        );
+
+        assertCleared(
+                password
+        );
+
+        assertTrue(
+                worker.awaitTermination(
+                        5,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        assertEquals(
+                0,
+                source.getRequestCount()
+        );
+
+        assertEquals(
+                0,
+                callbackCount.get()
+        );
+
+        releaseBlocker.countDown();
+    }
+
+    /**
+     * Regression requested by review:
+     * closing a request after BREACHED has been calculated
+     * but before its queued callback executes must suppress
+     * that callback.
+     */
+    @Test
+    public void close_afterResultQueued_suppressesDelivery()
+            throws Exception {
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        PASSWORD_SUFFIX + ":42\n"
+                );
+
+        ExecutorService worker =
+                Executors.newSingleThreadExecutor();
+
+        QueuedCallbackExecutor callbackExecutor =
+                new QueuedCallbackExecutor();
+
+        PasswordBreachCoordinator coordinator =
+                new PasswordBreachCoordinator(
+                        source,
+                        worker,
+                        callbackExecutor
+                );
+
+        AtomicInteger callbackCount =
+                new AtomicInteger();
+
+        AtomicReference<PasswordBreachResult> deliveredResult =
+                new AtomicReference<>();
+
+        char[] password =
+                "password".toCharArray();
+
+        try {
+
+            PasswordBreachCoordinator.Request request =
+                    coordinator.check(
+                            password,
+                            result -> {
+
+                                deliveredResult.set(
+                                        result
+                                );
+
+                                callbackCount.incrementAndGet();
+                            }
+                    );
+
+            /*
+             * Wait until the BREACHED result has been
+             * calculated and its delivery runnable has
+             * actually been queued.
+             */
+            assertTrue(
+                    callbackExecutor.awaitTask()
+            );
+
+            assertCleared(
+                    password
+            );
+
+            request.close();
+
+            /*
+             * Execute the callback runnable only after
+             * cancellation.
+             */
+            callbackExecutor.runQueuedTask();
+
+            assertEquals(
+                    0,
+                    callbackCount.get()
+            );
+
+            assertEquals(
+                    null,
+                    deliveredResult.get()
+            );
+
+        } finally {
+
+            coordinator.shutdown();
+        }
+    }
+
+    /**
+     * Regression requested by review:
+     * coordinator shutdown after BREACHED has been
+     * calculated but before callback execution must
+     * suppress that queued result.
+     */
+    @Test
+    public void shutdown_afterResultQueued_suppressesDelivery()
+            throws Exception {
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        PASSWORD_SUFFIX + ":42\n"
+                );
+
+        ExecutorService worker =
+                Executors.newSingleThreadExecutor();
+
+        QueuedCallbackExecutor callbackExecutor =
+                new QueuedCallbackExecutor();
+
+        PasswordBreachCoordinator coordinator =
+                new PasswordBreachCoordinator(
+                        source,
+                        worker,
+                        callbackExecutor
+                );
+
+        AtomicInteger callbackCount =
+                new AtomicInteger();
+
+        AtomicReference<PasswordBreachResult> deliveredResult =
+                new AtomicReference<>();
+
+        char[] password =
+                "password".toCharArray();
+
+        coordinator.check(
+                password,
+                result -> {
+
+                    deliveredResult.set(
+                            result
+                    );
+
+                    callbackCount.incrementAndGet();
+                }
+        );
+
+        /*
+         * A result exists, but delivery has not executed.
+         */
+        assertTrue(
+                callbackExecutor.awaitTask()
+        );
+
+        assertCleared(
+                password
+        );
+
+        /*
+         * shutdown() must still know about this request
+         * while its callback is waiting.
+         */
+        coordinator.shutdown();
+
+        callbackExecutor.runQueuedTask();
+
+        assertEquals(
+                0,
+                callbackCount.get()
+        );
+
+        assertEquals(
+                null,
+                deliveredResult.get()
+        );
+    }
+
     private static PasswordBreachResult runCheck(
             HibpRangeSource source,
             char[] password
@@ -637,8 +975,54 @@ public class PasswordBreachCoordinatorTest {
     }
 
     /**
-     * Source used to verify that invalid local input
-     * never reaches the network boundary.
+     * Places a blocking task at the front of a
+     * single-thread executor so later preparation work
+     * remains queued.
+     */
+    private static void blockWorker(
+            ExecutorService worker,
+            CountDownLatch blockerStarted,
+            CountDownLatch releaseBlocker
+    ) {
+
+        worker.execute(
+                () -> {
+
+                    blockerStarted.countDown();
+
+                    try {
+
+                        releaseBlocker.await();
+
+                    } catch (InterruptedException exception) {
+
+                        Thread.currentThread().interrupt();
+                    }
+                }
+        );
+    }
+
+    /**
+     * Waits until all worker tasks submitted before this
+     * method have completed.
+     */
+    private static void waitForWorkerIdle(
+            ExecutorService worker
+    ) throws Exception {
+
+        worker.submit(
+                () -> {
+                    // Queue barrier.
+                }
+        ).get(
+                5,
+                TimeUnit.SECONDS
+        );
+    }
+
+    /**
+     * Source used to verify that cancelled or invalid
+     * local work never reaches the HIBP boundary.
      */
     private static final class TrackingHibpRangeSource
             implements HibpRangeSource {
@@ -661,8 +1045,8 @@ public class PasswordBreachCoordinatorTest {
     }
 
     /**
-     * Source that stores the callback so tests can simulate
-     * delayed or repeated network responses.
+     * Source that stores its callback so tests can
+     * simulate delayed or repeated network responses.
      */
     private static final class DeferredHibpRangeSource
             implements HibpRangeSource {
@@ -720,6 +1104,69 @@ public class PasswordBreachCoordinatorTest {
                         responseBody
                 );
             }
+        }
+    }
+
+    /**
+     * Callback executor controlled by the test.
+     *
+     * execute() stores the callback instead of running it.
+     * The test can then cancel/shutdown before explicitly
+     * executing the queued callback.
+     */
+    private static final class QueuedCallbackExecutor
+            implements Executor {
+
+        private final CountDownLatch taskQueued =
+                new CountDownLatch(1);
+
+        private final AtomicReference<Runnable> queuedTask =
+                new AtomicReference<>();
+
+        @Override
+        public void execute(
+                Runnable command
+        ) {
+
+            Objects.requireNonNull(
+                    command,
+                    "command"
+            );
+
+            if (!queuedTask.compareAndSet(
+                    null,
+                    command
+            )) {
+
+                throw new IllegalStateException(
+                        "Only one queued callback is expected."
+                );
+            }
+
+            taskQueued.countDown();
+        }
+
+        private boolean awaitTask()
+                throws InterruptedException {
+
+            return taskQueued.await(
+                    5,
+                    TimeUnit.SECONDS
+            );
+        }
+
+        private void runQueuedTask() {
+
+            Runnable command =
+                    queuedTask.getAndSet(
+                            null
+                    );
+
+            assertNotNull(
+                    command
+            );
+
+            command.run();
         }
     }
 }

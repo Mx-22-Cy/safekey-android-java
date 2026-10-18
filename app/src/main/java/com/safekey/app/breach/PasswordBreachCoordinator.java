@@ -31,6 +31,13 @@ public final class PasswordBreachCoordinator {
     private final ExecutorService workerExecutor;
     private final Executor callbackExecutor;
 
+    /*
+     * Requests remain active until their callback has
+     * actually executed, or until they are cancelled.
+     *
+     * This allows shutdown() to cancel a completed result
+     * that is still waiting in the callback executor.
+     */
     private final Set<Request> activeRequests =
             ConcurrentHashMap.newKeySet();
 
@@ -83,7 +90,11 @@ public final class PasswordBreachCoordinator {
      * Starts one password breach check.
      *
      * The coordinator takes ownership of the supplied
-     * password array and clears it after local preparation.
+     * password array immediately.
+     *
+     * The password is cleared after local preparation,
+     * or earlier if the request is cancelled/shut down
+     * before preparation starts.
      *
      * The returned Request must be closed when the request
      * is cancelled or the vault/session locks.
@@ -100,6 +111,7 @@ public final class PasswordBreachCoordinator {
 
         Request request =
                 new Request(
+                        password,
                         callback,
                         callbackExecutor,
                         activeRequests::remove
@@ -113,16 +125,11 @@ public final class PasswordBreachCoordinator {
 
             workerExecutor.execute(
                     () -> prepareAndStart(
-                            password,
                             request
                     )
             );
 
         } catch (RuntimeException exception) {
-
-            clearPassword(
-                    password
-            );
 
             PasswordBreachResult result =
                     request.finishWithoutPrepared(
@@ -138,27 +145,23 @@ public final class PasswordBreachCoordinator {
     }
 
     private void prepareAndStart(
-            char[] password,
             Request request
     ) {
-
-        if (request.isClosed()) {
-
-            clearPassword(
-                    password
-            );
-
-            return;
-        }
 
         PreparedPasswordBreachCheck preparedCheck;
 
         try {
 
+            /*
+             * Request owns the password array.
+             *
+             * preparePassword() clears it in all cases.
+             * If the request was cancelled before this
+             * worker task started, it returns null because
+             * close() has already cleared the password.
+             */
             preparedCheck =
-                    PasswordBreachChecker.prepare(
-                            password
-                    );
+                    request.preparePassword();
 
         } catch (IllegalArgumentException exception) {
 
@@ -187,18 +190,34 @@ public final class PasswordBreachCoordinator {
             );
 
             return;
-
-        } finally {
-
-            clearPassword(
-                    password
-            );
         }
 
+        /*
+         * null means the request was cancelled before
+         * preparation started.
+         */
+        if (preparedCheck == null) {
+            return;
+        }
+
+        /*
+         * Cancellation can happen after preparation
+         * finishes but before the prepared check is
+         * attached. attach() closes the prepared hash
+         * immediately when that happens.
+         */
         if (!request.attach(
                 preparedCheck
         )) {
 
+            return;
+        }
+
+        /*
+         * Avoid starting the request when cancellation
+         * happened immediately after attachment.
+         */
+        if (request.isCancelled()) {
             return;
         }
 
@@ -294,6 +313,12 @@ public final class PasswordBreachCoordinator {
 
         } catch (RuntimeException exception) {
 
+            /*
+             * If shutdown/cancellation prevents the
+             * worker operation from running, closing the
+             * request clears any retained prepared hash
+             * and suppresses result delivery.
+             */
             request.close();
         }
     }
@@ -315,9 +340,9 @@ public final class PasswordBreachCoordinator {
         }
 
         /*
-         * HibpHttpException extends IOException.
+         * HibpHttpException is an IOException.
          * HTTP failures and other IO failures remain
-         * NETWORK_ERROR for the password-check result model.
+         * NETWORK_ERROR in the result model.
          */
         if (exception
                 instanceof IOException) {
@@ -355,8 +380,13 @@ public final class PasswordBreachCoordinator {
     }
 
     /**
-     * Cancels all pending checks owned by this coordinator
-     * and stops its worker executor.
+     * Cancels every request that has not yet delivered
+     * its callback, then stops the worker executor.
+     *
+     * This includes:
+     * - queued password preparation
+     * - in-progress HIBP checks
+     * - completed results waiting for callback delivery
      */
     public void shutdown() {
 
@@ -392,16 +422,33 @@ public final class PasswordBreachCoordinator {
         private final Executor callbackExecutor;
         private final Consumer<Request> terminalListener;
 
+        /*
+         * The Request owns the password immediately.
+         *
+         * Keeping it here allows close()/shutdown() to
+         * clear it even when its worker task is still
+         * queued and never starts.
+         */
+        private char[] pendingPassword;
+        private boolean passwordPending;
+
         private PreparedPasswordBreachCheck preparedCheck;
 
         private boolean cancelled;
         private boolean terminal;
 
         private Request(
+                char[] password,
                 Callback callback,
                 Executor callbackExecutor,
                 Consumer<Request> terminalListener
         ) {
+
+            this.pendingPassword =
+                    password;
+
+            this.passwordPending =
+                    true;
 
             this.callback =
                     callback;
@@ -411,6 +458,39 @@ public final class PasswordBreachCoordinator {
 
             this.terminalListener =
                     terminalListener;
+        }
+
+        /**
+         * Prepares the local password hash while the
+         * Request owns the password.
+         *
+         * Synchronization prevents close() from racing
+         * with preparation. If cancellation happened
+         * before preparation began, null is returned.
+         *
+         * The password array is always cleared before
+         * this method finishes.
+         */
+        private synchronized PreparedPasswordBreachCheck
+        preparePassword() {
+
+            if (cancelled
+                    || terminal
+                    || !passwordPending) {
+
+                return null;
+            }
+
+            try {
+
+                return PasswordBreachChecker.prepare(
+                        pendingPassword
+                );
+
+            } finally {
+
+                clearPendingPasswordLocked();
+            }
         }
 
         private synchronized boolean attach(
@@ -440,10 +520,6 @@ public final class PasswordBreachCoordinator {
                 String responseBody
         ) {
 
-            PasswordBreachResult result;
-            boolean becameTerminal =
-                    false;
-
             synchronized (this) {
 
                 if (cancelled
@@ -453,7 +529,7 @@ public final class PasswordBreachCoordinator {
                     return PasswordBreachResult.notChecked();
                 }
 
-                result =
+                PasswordBreachResult result =
                         preparedCheck.complete(
                                 responseBody
                         );
@@ -464,27 +540,21 @@ public final class PasswordBreachCoordinator {
                 terminal =
                         true;
 
-                becameTerminal =
-                        true;
+                /*
+                 * Do NOT remove from activeRequests here.
+                 *
+                 * The result may still be sitting in the
+                 * callback executor. Keeping this Request
+                 * active allows close()/shutdown() to
+                 * suppress that queued delivery.
+                 */
+                return result;
             }
-
-            if (becameTerminal) {
-
-                terminalListener.accept(
-                        this
-                );
-            }
-
-            return result;
         }
 
         private PasswordBreachResult fail(
                 PasswordBreachResult.ErrorReason reason
         ) {
-
-            PasswordBreachResult result;
-            boolean becameTerminal =
-                    false;
 
             synchronized (this) {
 
@@ -495,7 +565,7 @@ public final class PasswordBreachCoordinator {
                     return PasswordBreachResult.notChecked();
                 }
 
-                result =
+                PasswordBreachResult result =
                         preparedCheck.fail(
                                 reason
                         );
@@ -506,26 +576,17 @@ public final class PasswordBreachCoordinator {
                 terminal =
                         true;
 
-                becameTerminal =
-                        true;
+                /*
+                 * Removal is deferred until callback
+                 * execution for cancellation safety.
+                 */
+                return result;
             }
-
-            if (becameTerminal) {
-
-                terminalListener.accept(
-                        this
-                );
-            }
-
-            return result;
         }
 
         private PasswordBreachResult finishWithoutPrepared(
                 PasswordBreachResult result
         ) {
-
-            boolean becameTerminal =
-                    false;
 
             synchronized (this) {
 
@@ -535,23 +596,29 @@ public final class PasswordBreachCoordinator {
                     return PasswordBreachResult.notChecked();
                 }
 
+                clearPendingPasswordLocked();
+
                 terminal =
                         true;
 
-                becameTerminal =
-                        true;
+                /*
+                 * Keep the Request tracked until callback
+                 * execution so shutdown can still suppress
+                 * a queued result.
+                 */
+                return result;
             }
-
-            if (becameTerminal) {
-
-                terminalListener.accept(
-                        this
-                );
-            }
-
-            return result;
         }
 
+        /**
+         * Schedules result delivery.
+         *
+         * Cancellation is checked when the callback
+         * actually executes, not only when it is queued.
+         * Therefore close()/shutdown() can suppress a
+         * completed BREACHED result that has not yet been
+         * delivered to the UI.
+         */
         private void dispatch(
                 PasswordBreachResult result
         ) {
@@ -559,14 +626,55 @@ public final class PasswordBreachCoordinator {
             try {
 
                 callbackExecutor.execute(
-                        () -> callback.onResult(
-                                result
-                        )
+                        () -> {
+
+                            try {
+
+                                /*
+                                 * Hold this Request lock while
+                                 * deciding whether delivery is
+                                 * still allowed.
+                                 *
+                                 * If close() acquired the lock
+                                 * first, cancelled is true and
+                                 * this callback is suppressed.
+                                 */
+                                synchronized (this) {
+
+                                    if (cancelled) {
+                                        return;
+                                    }
+
+                                    callback.onResult(
+                                            result
+                                    );
+                                }
+
+                            } finally {
+
+                                /*
+                                 * A request is no longer active
+                                 * only after callback execution
+                                 * has occurred or been suppressed.
+                                 */
+                                terminalListener.accept(
+                                        this
+                                );
+                            }
+                        }
                 );
 
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException exception) {
 
-                // Result delivery is no longer possible.
+                /*
+                 * Callback delivery is impossible.
+                 * The sensitive material is already cleared
+                 * by the terminal operation, so only remove
+                 * the tracking reference.
+                 */
+                terminalListener.accept(
+                        this
+                );
             }
         }
 
@@ -576,14 +684,27 @@ public final class PasswordBreachCoordinator {
                     || terminal;
         }
 
+        private synchronized boolean isCancelled() {
+
+            return cancelled;
+        }
+
+        /**
+         * Cancels this request.
+         *
+         * This clears either:
+         * - the password waiting for preparation, or
+         * - the retained prepared full hash.
+         *
+         * A result already queued for callback delivery
+         * will observe cancelled=true when it executes
+         * and will therefore be suppressed.
+         */
         @Override
         public void close() {
 
             PreparedPasswordBreachCheck checkToClose =
                     null;
-
-            boolean notifyTerminal =
-                    false;
 
             synchronized (this) {
 
@@ -594,6 +715,11 @@ public final class PasswordBreachCoordinator {
                 cancelled =
                         true;
 
+                terminal =
+                        true;
+
+                clearPendingPasswordLocked();
+
                 if (preparedCheck != null) {
 
                     checkToClose =
@@ -602,15 +728,6 @@ public final class PasswordBreachCoordinator {
                     preparedCheck =
                             null;
                 }
-
-                if (!terminal) {
-
-                    terminal =
-                            true;
-
-                    notifyTerminal =
-                            true;
-                }
             }
 
             if (checkToClose != null) {
@@ -618,12 +735,32 @@ public final class PasswordBreachCoordinator {
                 checkToClose.close();
             }
 
-            if (notifyTerminal) {
+            /*
+             * Remove immediately on cancellation.
+             * Any already queued callback still has this
+             * Request object and will check cancelled=true
+             * before attempting delivery.
+             */
+            terminalListener.accept(
+                    this
+            );
+        }
 
-                terminalListener.accept(
-                        this
-                );
+        private void clearPendingPasswordLocked() {
+
+            if (!passwordPending) {
+                return;
             }
+
+            clearPassword(
+                    pendingPassword
+            );
+
+            pendingPassword =
+                    null;
+
+            passwordPending =
+                    false;
         }
     }
 }
