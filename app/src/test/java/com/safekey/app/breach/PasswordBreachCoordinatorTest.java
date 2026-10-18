@@ -871,6 +871,221 @@ public class PasswordBreachCoordinatorTest {
         );
     }
 
+    /**
+     * Regression requested by review:
+     * a check that overlaps with shutdown must not escape
+     * the shutdown request snapshot.
+     *
+     * Once shutdown has started, the overlapping request
+     * must be rejected, its password must be cleared
+     * immediately, and it must never reach HIBP.
+     */
+    @Test
+    public void check_overlappingShutdown_clearsPasswordAndRejectsRequest()
+            throws Exception {
+
+        FakeHibpRangeSource source =
+                FakeHibpRangeSource.success(
+                        PASSWORD_SUFFIX + ":42\n"
+                );
+
+        ExecutorService worker =
+                Executors.newSingleThreadExecutor();
+
+        PasswordBreachCoordinator coordinator =
+                new PasswordBreachCoordinator(
+                        source,
+                        worker,
+                        Runnable::run
+                );
+
+        CountDownLatch firstCallbackStarted =
+                new CountDownLatch(1);
+
+        CountDownLatch releaseFirstCallback =
+                new CountDownLatch(1);
+
+        AtomicInteger overlappingCallbackCount =
+                new AtomicInteger();
+
+        char[] firstPassword =
+                "password".toCharArray();
+
+        char[] overlappingPassword =
+                "second-password".toCharArray();
+
+        Thread shutdownThread =
+                null;
+
+        try {
+
+            /*
+             * The first request completes its breach result,
+             * but the callback stays blocked while holding
+             * the Request monitor.
+             *
+             * This gives shutdown() a deterministic place
+             * to pause after shutdown has begun.
+             */
+            coordinator.check(
+                    firstPassword,
+                    result -> {
+
+                        firstCallbackStarted.countDown();
+
+                        try {
+
+                            releaseFirstCallback.await();
+
+                        } catch (InterruptedException exception) {
+
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+            );
+
+            assertTrue(
+                    firstCallbackStarted.await(
+                            5,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            assertCleared(
+                    firstPassword
+            );
+
+            assertEquals(
+                    1,
+                    source.getRequestCount()
+            );
+
+            /*
+             * Start shutdown on another thread.
+             *
+             * shutdown() sets the shutdown state before
+             * trying to close the existing request.
+             */
+            shutdownThread =
+                    new Thread(
+                            coordinator::shutdown
+                    );
+
+            shutdownThread.start();
+
+            /*
+             * The first callback is still holding the
+             * Request monitor, so shutdown should block
+             * while closing that existing request.
+             *
+             * At this point shutdown has already started.
+             */
+            long deadline =
+                    System.nanoTime()
+                            + TimeUnit.SECONDS.toNanos(
+                            5
+                    );
+
+            while (shutdownThread.getState()
+                    != Thread.State.BLOCKED
+                    && System.nanoTime()
+                    < deadline) {
+
+                Thread.yield();
+            }
+
+            assertEquals(
+                    Thread.State.BLOCKED,
+                    shutdownThread.getState()
+            );
+
+            /*
+             * This check overlaps an already-started
+             * shutdown.
+             *
+             * It must be rejected immediately and its
+             * caller-owned password must be cleared.
+             */
+            PasswordBreachCoordinator.Request overlappingRequest =
+                    coordinator.check(
+                            overlappingPassword,
+                            result ->
+                                    overlappingCallbackCount
+                                            .incrementAndGet()
+                    );
+
+            assertTrue(
+                    overlappingRequest.isClosed()
+            );
+
+            assertCleared(
+                    overlappingPassword
+            );
+
+            /*
+             * Only the original request may have reached
+             * the HIBP source.
+             */
+            assertEquals(
+                    1,
+                    source.getRequestCount()
+            );
+
+            assertEquals(
+                    0,
+                    overlappingCallbackCount.get()
+            );
+
+            /*
+             * Allow the first callback to finish so
+             * shutdown can complete.
+             */
+            releaseFirstCallback.countDown();
+
+            shutdownThread.join(
+                    5_000
+            );
+
+            assertFalse(
+                    shutdownThread.isAlive()
+            );
+
+            assertTrue(
+                    worker.awaitTermination(
+                            5,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            assertEquals(
+                    1,
+                    source.getRequestCount()
+            );
+
+            assertEquals(
+                    0,
+                    overlappingCallbackCount.get()
+            );
+
+        } finally {
+
+            /*
+             * Prevent a failed assertion from leaving the
+             * worker or shutdown thread blocked.
+             */
+            releaseFirstCallback.countDown();
+
+            if (shutdownThread != null) {
+
+                shutdownThread.join(
+                        5_000
+                );
+            }
+
+            coordinator.shutdown();
+        }
+    }
+
     private static PasswordBreachResult runCheck(
             HibpRangeSource source,
             char[] password

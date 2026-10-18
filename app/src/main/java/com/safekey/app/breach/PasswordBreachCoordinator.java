@@ -32,6 +32,21 @@ public final class PasswordBreachCoordinator {
     private final Executor callbackExecutor;
 
     /*
+     * Registration of a new request and the transition
+     * into shutdown are protected by the same lock.
+     *
+     * Therefore a request is either:
+     * 1. fully registered before shutdown begins, so
+     *    shutdown will close it, or
+     * 2. rejected after shutdown begins, so check()
+     *    closes it immediately.
+     */
+    private final Object lifecycleLock =
+            new Object();
+
+    private boolean shuttingDown;
+
+    /*
      * Requests remain active until their callback has
      * actually executed, or until they are cancelled.
      *
@@ -96,6 +111,9 @@ public final class PasswordBreachCoordinator {
      * or earlier if the request is cancelled/shut down
      * before preparation starts.
      *
+     * Registration and shutdown are atomic with respect
+     * to each other.
+     *
      * The returned Request must be closed when the request
      * is cancelled or the vault/session locks.
      */
@@ -109,27 +127,66 @@ public final class PasswordBreachCoordinator {
                 "callback"
         );
 
-        Request request =
-                new Request(
-                        password,
-                        callback,
-                        callbackExecutor,
-                        activeRequests::remove
-                );
+        Request request;
 
-        activeRequests.add(
-                request
-        );
+        boolean schedulingFailed =
+                false;
 
-        try {
+        synchronized (lifecycleLock) {
 
-            workerExecutor.execute(
-                    () -> prepareAndStart(
-                            request
-                    )
+            request =
+                    new Request(
+                            password,
+                            callback,
+                            callbackExecutor,
+                            activeRequests::remove
+                    );
+
+            /*
+             * Once shutdown has started, no new request
+             * may be registered or scheduled.
+             *
+             * close() clears the caller password even
+             * though preparation never started.
+             */
+            if (shuttingDown) {
+
+                request.close();
+
+                return request;
+            }
+
+            /*
+             * Add the request while holding the same lock
+             * used to start shutdown.
+             *
+             * If this happens first, shutdown's snapshot
+             * must contain this request.
+             */
+            activeRequests.add(
+                    request
             );
 
-        } catch (RuntimeException exception) {
+            try {
+
+                workerExecutor.execute(
+                        () -> prepareAndStart(
+                                request
+                        )
+                );
+
+            } catch (RuntimeException exception) {
+
+                schedulingFailed =
+                        true;
+            }
+        }
+
+        /*
+         * Do not invoke callback delivery while holding
+         * lifecycleLock.
+         */
+        if (schedulingFailed) {
 
             PasswordBreachResult result =
                     request.finishWithoutPrepared(
@@ -380,24 +437,55 @@ public final class PasswordBreachCoordinator {
     }
 
     /**
-     * Cancels every request that has not yet delivered
-     * its callback, then stops the worker executor.
+     * Atomically prevents new request registration,
+     * closes every currently registered request, then
+     * stops the worker executor.
      *
-     * This includes:
-     * - queued password preparation
-     * - in-progress HIBP checks
-     * - completed results waiting for callback delivery
+     * A concurrent check() can no longer fall between
+     * the active-request snapshot and shutdownNow().
      */
     public void shutdown() {
 
+        Request[] requestsToClose;
+
+        synchronized (lifecycleLock) {
+
+            if (shuttingDown) {
+                return;
+            }
+
+            /*
+             * This is the shutdown linearization point.
+             *
+             * After this assignment, check() cannot add
+             * another request. A check that reaches the
+             * lock later will close its password locally
+             * and return a cancelled Request.
+             */
+            shuttingDown =
+                    true;
+
+            requestsToClose =
+                    activeRequests.toArray(
+                            new Request[0]
+                    );
+        }
+
+        /*
+         * Close outside lifecycleLock to avoid holding the
+         * coordinator lock while taking individual Request
+         * locks or interacting with terminal listeners.
+         */
         for (Request request :
-                activeRequests.toArray(
-                        new Request[0]
-                )) {
+                requestsToClose) {
 
             request.close();
         }
 
+        /*
+         * No new requests can be registered now because
+         * shuttingDown is permanently true.
+         */
         activeRequests.clear();
 
         workerExecutor.shutdownNow();
