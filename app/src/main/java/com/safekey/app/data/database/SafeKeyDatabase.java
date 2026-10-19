@@ -10,14 +10,13 @@ import java.util.Arrays;
 public class SafeKeyDatabase {
 
     private static final String DEFAULT_DATABASE_NAME = "safekey.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
     public static final int DATABASE_KEY_LENGTH_BYTES = 32;
 
     private final Context context;
     private final String databaseName;
 
     private SQLiteDatabase database;
-
 
     static {
         System.loadLibrary("sqlcipher");
@@ -123,18 +122,7 @@ public class SafeKeyDatabase {
                 );
             }
 
-            if (currentVersion == 0) {
-                createVersion1Schema(
-                        db
-                );
-
-                db.setVersion(
-                        DATABASE_VERSION
-                );
-
-            } else if (
-                    currentVersion < DATABASE_VERSION
-            ) {
+            if (currentVersion < DATABASE_VERSION) {
                 migrateDatabase(
                         db,
                         currentVersion,
@@ -182,35 +170,9 @@ public class SafeKeyDatabase {
         }
     }
 
-
-    private void createVersion1Schema(
-            SQLiteDatabase db
-    ) {
-
-        db.beginTransaction();
-
-        try {
-
-            createCredentialsTable(
-                    db
-            );
-
-            createSecureNotesTable(
-                    db
-            );
-
-            db.setTransactionSuccessful();
-
-        } finally {
-
-            db.endTransaction();
-        }
-    }
-
     private void createCredentialsTable(
             SQLiteDatabase db
     ) {
-
         db.execSQL(
                 "CREATE TABLE IF NOT EXISTS credentials (" +
                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -230,7 +192,6 @@ public class SafeKeyDatabase {
     private void createSecureNotesTable(
             SQLiteDatabase db
     ) {
-
         db.execSQL(
                 "CREATE TABLE IF NOT EXISTS secure_notes (" +
                         "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -247,20 +208,35 @@ public class SafeKeyDatabase {
             int oldVersion,
             int newVersion
     ) {
-
         int version =
                 oldVersion;
 
         db.beginTransaction();
 
         try {
+            // Fresh databases use the same upgrade path as existing vaults.
+            // Table creation, migration and user_version commit together.
+            if (version == 0) {
+                createCredentialsTable(db);
+                createSecureNotesTable(db);
+                version = 1;
+            }
 
             while (version < newVersion) {
 
                 switch (version) {
 
-                    default:
+                    case 1:
+                        db.execSQL(
+                                "ALTER TABLE credentials ADD COLUMN "
+                                        + "breach_status TEXT NOT NULL DEFAULT 'NOT_CHECKED' "
+                                        + "CHECK (breach_status IN ("
+                                        + "'NOT_CHECKED', 'NOT_FOUND', 'BREACHED', 'ERROR'))"
+                        );
+                        version = 2;
+                        break;
 
+                    default:
                         throw new IllegalStateException(
                                 "No migration available from database version "
                                         + version
@@ -275,27 +251,22 @@ public class SafeKeyDatabase {
             db.setTransactionSuccessful();
 
         } finally {
-
             db.endTransaction();
         }
     }
 
     public void close() {
-
         try {
-
             if (database != null) {
                 database.close();
             }
 
         } finally {
-
             database = null;
         }
     }
 
     public boolean isOpen() {
-
         return database != null
                 && database.isOpen();
     }

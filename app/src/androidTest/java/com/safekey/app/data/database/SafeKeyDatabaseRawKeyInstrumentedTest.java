@@ -267,7 +267,7 @@ public class SafeKeyDatabaseRawKeyInstrumentedTest {
             );
 
             assertEquals(
-                    1,
+                    2,
                     database.getVersion()
             );
 
