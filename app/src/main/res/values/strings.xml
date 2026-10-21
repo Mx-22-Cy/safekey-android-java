@@ -275,4 +275,37 @@
     <string name="home_vault_count_unavailable" translatable="false">—</string>
     <string name="home_vault_count_value" translatable="false">%1$d</string>
     <string name="home_vault_counts_error">Could not load vault counts. Tap Home to retry.</string>
+
+    <!-- Week 9 Security Alerts -->
+    <string name="alerts_title">Security Alerts</string>
+
+    <!-- Filters -->
+    <string name="alerts_filter_all">All</string>
+    <string name="alerts_filter_breached">Breached</string>
+    <string name="alerts_filter_attention">Attention</string>
+    <string name="alerts_filter_passed">Passed</string>
+
+    <!-- Section headings -->
+    <string name="alerts_section_breached">High Priority — Breached</string>
+    <string name="alerts_section_attention">Needs Attention</string>
+    <string name="alerts_section_passed">No Known Breach</string>
+
+    <!-- Credential status messages -->
+    <string name="alerts_status_breached">Compromised password detected</string>
+    <string name="alerts_status_not_checked">Password not checked yet</string>
+    <string name="alerts_status_offline">Check unavailable — Offline</string>
+    <string name="alerts_status_error">Unable to check password</string>
+    <string name="alerts_status_passed">Not found in known breach data</string>
+    <string name="alerts_occurrences">%1$d occurrences</string>
+
+    <!-- Actions -->
+    <string name="alerts_retry_all">Retry All</string>
+
+    <!-- Loading, empty and error states -->
+    <string name="alerts_loading">Checking saved credentials…</string>
+    <string name="alerts_empty_title">No credentials to check</string>
+    <string name="alerts_empty_message">Add a credential to your vault to see its breach status here.</string>
+    <string name="alerts_no_filter_results">No credentials in this category.</string>
+    <string name="alerts_load_error">Couldn’t load security alerts.</string>
+
 </resources>

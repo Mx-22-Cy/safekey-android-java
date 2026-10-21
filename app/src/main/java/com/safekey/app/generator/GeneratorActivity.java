@@ -28,6 +28,7 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.vault.VaultActivity;
+import com.safekey.app.alerts.AlertsActivity;
 
 import java.util.Arrays;
 import java.util.List;
@@ -746,11 +747,13 @@ public class GeneratorActivity extends ProtectedActivity {
                         return;
                     }
 
-                    Toast.makeText(
-                            GeneratorActivity.this,
-                            R.string.home_alerts_navigation_pending,
-                            Toast.LENGTH_SHORT
-                    ).show();
+                    Intent intent =
+                            new Intent(
+                                    GeneratorActivity.this,
+                                    AlertsActivity.class
+                            );
+
+                    startActivity(intent);
                 }
         );
 
