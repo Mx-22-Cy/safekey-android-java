@@ -8,8 +8,24 @@ import java.util.Objects;
 
 public final class VaultKeyEnvelopeStore {
 
+    /*
+     * Existing real-vault preferences name.
+     *
+     * Keep this unchanged so all existing users,
+     * tests and real-vault code continue to use
+     * the same stored envelope.
+     */
     static final String PREFERENCES_NAME =
             "safekey_vault_key_envelope";
+
+    /*
+     * Week 10 Decoy Vault.
+     *
+     * The decoy vault must never share its wrapped
+     * database key or salt with the real vault.
+     */
+    static final String DECOY_PREFERENCES_NAME =
+            "safekey_decoy_vault_key_envelope";
 
     static final String KEY_FORMAT_VERSION =
             "format_version";
@@ -25,19 +41,56 @@ public final class VaultKeyEnvelopeStore {
 
     private final SharedPreferences preferences;
 
+    /**
+     * Existing constructor.
+     *
+     * This always refers to the real vault and is
+     * intentionally kept unchanged for compatibility.
+     */
     public VaultKeyEnvelopeStore(
             Context context
+    ) {
+        this(
+                context,
+                PREFERENCES_NAME
+        );
+    }
+
+    /**
+     * Creates an envelope store dedicated to the
+     * Decoy Vault.
+     *
+     * The decoy envelope is stored in a completely
+     * separate SharedPreferences file.
+     */
+    public static VaultKeyEnvelopeStore forDecoy(
+            Context context
+    ) {
+        return new VaultKeyEnvelopeStore(
+                context,
+                DECOY_PREFERENCES_NAME
+        );
+    }
+
+    private VaultKeyEnvelopeStore(
+            Context context,
+            String preferencesName
     ) {
         Objects.requireNonNull(
                 context,
                 "context"
         );
 
+        Objects.requireNonNull(
+                preferencesName,
+                "preferencesName"
+        );
+
         preferences =
                 context
                         .getApplicationContext()
                         .getSharedPreferences(
-                                PREFERENCES_NAME,
+                                preferencesName,
                                 Context.MODE_PRIVATE
                         );
     }
