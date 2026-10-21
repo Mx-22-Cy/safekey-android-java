@@ -7,8 +7,10 @@ import android.os.Looper;
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.repository.CredentialRepository;
 import com.safekey.app.data.repository.SecureNoteRepository;
+import com.safekey.app.data.repository.VaultCountsRepository;
 
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
@@ -25,6 +27,7 @@ public class VaultDataService {
 
     private CredentialRepository credentialRepository;
     private SecureNoteRepository secureNoteRepository;
+    private VaultCountsRepository vaultCountsRepository;
 
     public VaultDataService(
             Context context
@@ -129,11 +132,17 @@ public class VaultDataService {
                                     database
                             );
 
+                    VaultCountsRepository openedVaultCountsRepository =
+                            new VaultCountsRepository(database);
+
                     credentialRepository =
                             openedCredentialRepository;
 
                     secureNoteRepository =
                             openedSecureNoteRepository;
+
+                    vaultCountsRepository =
+                            openedVaultCountsRepository;
 
                 } catch (Exception exception) {
 
@@ -186,6 +195,7 @@ public class VaultDataService {
             } finally {
                 credentialRepository = null;
                 secureNoteRepository = null;
+                vaultCountsRepository = null;
             }
 
             deliverSimpleSuccess(callback);
@@ -195,6 +205,23 @@ public class VaultDataService {
     public boolean isVaultOpen() {
 
         return databaseManager.isOpen();
+    }
+
+    public void getVaultCounts(
+            ResultCallback<VaultCounts> callback
+    ) {
+        executorService.execute(() -> {
+            final VaultCounts counts;
+
+            try {
+                counts = requireVaultCountsRepository().getCounts();
+            } catch (Exception exception) {
+                deliverResultError(callback, exception);
+                return;
+            }
+
+            deliverResultSuccess(callback, counts);
+        });
     }
 
     public void addCredential(
@@ -661,6 +688,14 @@ public class VaultDataService {
         return secureNoteRepository;
     }
 
+    private VaultCountsRepository requireVaultCountsRepository() {
+        if (vaultCountsRepository == null) {
+            throw new IllegalStateException("Vault is not open.");
+        }
+
+        return vaultCountsRepository;
+    }
+
     private void deliverSimpleSuccess(
             SimpleCallback callback
     ) {
@@ -727,6 +762,7 @@ public class VaultDataService {
 
                 credentialRepository = null;
                 secureNoteRepository = null;
+                vaultCountsRepository = null;
             }
         });
 

@@ -52,7 +52,7 @@ public class SafeKeyDataInstrumentedTest {
      * This value intentionally represents a database
      * created by a newer, unsupported application.
      */
-    private static final int FUTURE_DATABASE_VERSION = 2;
+    private static final int FUTURE_DATABASE_VERSION = 99;
 
     /*
      * Returns fresh deterministic test key material.
@@ -518,7 +518,7 @@ public class SafeKeyDataInstrumentedTest {
             assertEquals(
                     "Database version "
                             + FUTURE_DATABASE_VERSION
-                            + " is newer than supported version 1.",
+                            + " is newer than supported version 2.",
                     expected.getMessage()
             );
 

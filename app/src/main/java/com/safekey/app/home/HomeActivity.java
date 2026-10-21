@@ -8,6 +8,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.safekey.app.session.ProtectedActivity;
+
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -15,6 +16,10 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
+import com.safekey.app.SafeKeyApplication;
+import com.safekey.app.data.model.VaultCounts;
+import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
@@ -31,6 +36,9 @@ public class HomeActivity extends ProtectedActivity {
     private TextView textCredentialCount;
     private TextView textFavoriteCount;
     private TextView textSecureNoteCount;
+
+    private boolean countsActive;
+    private long countRequestGeneration;
 
     @Override
     protected void onCreate(
@@ -155,11 +163,15 @@ public class HomeActivity extends ProtectedActivity {
                         R.id.navSettings
                 );
 
-        showPreviewData();
+        showPreviewSecurityData();
+        showVaultCountsUnavailable();
 
         navHome.setOnClickListener(
-                view ->
-                        requireUnlockedSession()
+                view -> {
+                    if (requireUnlockedSession()) {
+                        refreshVaultCounts();
+                    }
+                }
         );
 
         navVault.setOnClickListener(
@@ -211,6 +223,35 @@ public class HomeActivity extends ProtectedActivity {
                                 R.string.home_credential_creation_pending
                         )
         );
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
+
+        countsActive = true;
+        refreshVaultCounts();
+    }
+
+    @Override
+    protected void onPause() {
+        countsActive = false;
+        countRequestGeneration++;
+        showVaultCountsUnavailable();
+
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        countsActive = false;
+        countRequestGeneration++;
+
+        super.onDestroy();
     }
 
     private boolean requireUnlockedSession() {
@@ -292,13 +333,12 @@ public class HomeActivity extends ProtectedActivity {
         finish();
     }
 
-    private void showPreviewData() {
+    private void showPreviewSecurityData() {
 
         /*
-         * UI PREVIEW DATA ONLY.
-         *
-         * These values are intentionally not read
-         * from the real encrypted vault yet.
+         * Security-panel preview values remain until the
+         * security dashboard integration is complete.
+         * Credential, favorite, and note totals are loaded separately.
          */
 
         securityScoreView.setScore(
@@ -311,18 +351,6 @@ public class HomeActivity extends ProtectedActivity {
 
         textBreachCount.setText(
                 R.string.home_preview_breach_count
-        );
-
-        textCredentialCount.setText(
-                R.string.home_preview_credential_count
-        );
-
-        textFavoriteCount.setText(
-                R.string.home_preview_favorite_count
-        );
-
-        textSecureNoteCount.setText(
-                R.string.home_preview_secure_note_count
         );
 
         /*
@@ -338,12 +366,90 @@ public class HomeActivity extends ProtectedActivity {
          *
          * Never send plaintext passwords
          * to an external breach service.
-         *
-         * TODO(Data/UI integration):
-         *
-         * Replace credential, favorite and note
-         * preview counts with values obtained through
-         * VaultDataService after secure vault unlock.
          */
+    }
+
+    private void refreshVaultCounts() {
+        final long requestGeneration = ++countRequestGeneration;
+
+        showVaultCountsUnavailable();
+
+        if (!canApplyVaultCounts(requestGeneration)) {
+            return;
+        }
+
+        try {
+            SecureVaultCoordinator coordinator =
+                    ((SafeKeyApplication) getApplication())
+                            .getSecureVaultCoordinator();
+
+            coordinator.getVaultCounts(
+                    new VaultDataService.ResultCallback<VaultCounts>() {
+                        @Override
+                        public void onSuccess(VaultCounts counts) {
+                            if (!canApplyVaultCounts(requestGeneration)) {
+                                return;
+                            }
+
+                            textCredentialCount.setText(
+                                    getString(
+                                            R.string.home_vault_count_value,
+                                            counts.getCredentialCount()
+                                    )
+                            );
+
+                            textFavoriteCount.setText(
+                                    getString(
+                                            R.string.home_vault_count_value,
+                                            counts.getFavoriteCount()
+                                    )
+                            );
+
+                            textSecureNoteCount.setText(
+                                    getString(
+                                            R.string.home_vault_count_value,
+                                            counts.getSecureNoteCount()
+                                    )
+                            );
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            showVaultCountsError(requestGeneration);
+                        }
+                    }
+            );
+        } catch (RuntimeException exception) {
+            showVaultCountsError(requestGeneration);
+        }
+    }
+
+    private boolean canApplyVaultCounts(long requestGeneration) {
+        return countsActive
+                && requestGeneration == countRequestGeneration
+                && !isFinishing()
+                && !isDestroyed()
+                && SafeKeySession.getManager()
+                .getRemainingInactivityMillis() > 0L;
+    }
+
+    private void showVaultCountsUnavailable() {
+        textCredentialCount.setText(R.string.home_vault_count_unavailable);
+        textFavoriteCount.setText(R.string.home_vault_count_unavailable);
+        textSecureNoteCount.setText(R.string.home_vault_count_unavailable);
+    }
+
+    private void showVaultCountsError(long requestGeneration) {
+        if (!canApplyVaultCounts(requestGeneration)) {
+            return;
+        }
+
+        showVaultCountsUnavailable();
+
+        Toast.makeText(
+                this,
+                R.string.home_vault_counts_error,
+                Toast.LENGTH_SHORT
+        ).show();
     }
 }

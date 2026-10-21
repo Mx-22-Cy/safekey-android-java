@@ -14,6 +14,7 @@ import com.safekey.app.security.biometric.BiometricAuthenticator;
 import com.safekey.app.security.biometric.BiometricVaultKeyManager;
 import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.Argon2idMasterKeyDeriver;
+import com.safekey.app.data.model.VaultCounts;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -544,6 +545,14 @@ public final class SecureVaultCoordinator {
                 id,
                 favorite,
                 callback
+        );
+    }
+
+    public void getVaultCounts(
+            VaultDataService.ResultCallback<VaultCounts> callback
+    ) {
+        vaultDataService.getVaultCounts(
+                Objects.requireNonNull(callback, "callback")
         );
     }
 

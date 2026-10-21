@@ -28,6 +28,7 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultKeyEnvelopeStore;
 import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
@@ -49,6 +50,19 @@ public class SignUpActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (new VaultKeyEnvelopeStore(this).hasEnvelope()) {
+            Intent intent = new Intent(this, SignInActivity.class);
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
+            );
+
+            startActivity(intent);
+            finish();
+            return;
+        }
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()

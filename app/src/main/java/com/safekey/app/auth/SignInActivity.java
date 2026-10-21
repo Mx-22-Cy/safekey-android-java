@@ -29,6 +29,7 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultKeyEnvelopeStore;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.security.biometric.BiometricAuthenticator;
 import com.safekey.app.auth.logic.BiometricSignInPolicy;
@@ -135,6 +136,12 @@ public class SignInActivity extends AppCompatActivity {
                         R.id.buttonGoToSignUp
                 );
 
+        buttonGoToSignUp.setVisibility(
+                new VaultKeyEnvelopeStore(this).hasEnvelope()
+                        ? View.GONE
+                        : View.VISIBLE
+        );
+
         buttonTogglePassword.setOnClickListener(
                 view -> {
 
@@ -234,6 +241,7 @@ public class SignInActivity extends AppCompatActivity {
                         : View.GONE
         );
     }
+
     private boolean shouldOfferBiometricEnrollment() {
 
         try {
@@ -652,6 +660,7 @@ public class SignInActivity extends AppCompatActivity {
         startActivity(intent);
         finish();
     }
+
     private void setPasswordVisibility(
             boolean visible
     ) {
