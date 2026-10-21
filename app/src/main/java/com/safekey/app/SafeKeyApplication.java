@@ -4,6 +4,7 @@ import android.app.Application;
 import android.util.Log;
 
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.DecoyVaultStorage;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.SafeKeySession;
 
@@ -15,8 +16,21 @@ public final class SafeKeyApplication extends Application {
     public void onCreate() {
         super.onCreate();
 
+        /*
+         * Week 10 Decoy Vault storage requirement.
+         *
+         * Keep the secondary encrypted database present
+         * regardless of whether Decoy enrollment has occurred.
+         * This happens before authentication UI is displayed.
+         */
+        DecoyVaultStorage.ensureDatabaseFile(
+                this
+        );
+
         secureVaultCoordinator =
-                new SecureVaultCoordinator(this);
+                new SecureVaultCoordinator(
+                        this
+                );
 
         registerSessionCleanup();
     }
@@ -41,6 +55,7 @@ public final class SafeKeyApplication extends Application {
                 )
         );
     }
+
     public SecureVaultCoordinator getSecureVaultCoordinator() {
         return secureVaultCoordinator;
     }
