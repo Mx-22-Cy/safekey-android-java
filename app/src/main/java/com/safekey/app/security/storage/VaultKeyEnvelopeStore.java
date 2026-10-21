@@ -6,12 +6,13 @@ import android.util.Base64;
 
 import java.util.Objects;
 
-public final class VaultKeyEnvelopeStore {
+public final class VaultKeyEnvelopeStore
+        implements VaultKeyEnvelopeStorage {
 
     /*
      * Existing real-vault preferences name.
      *
-     * Keep this unchanged so all existing users,
+     * Keep this unchanged so existing users,
      * tests and real-vault code continue to use
      * the same stored envelope.
      */
@@ -21,7 +22,7 @@ public final class VaultKeyEnvelopeStore {
     /*
      * Week 10 Decoy Vault.
      *
-     * The decoy vault must never share its wrapped
+     * The Decoy Vault must never share its wrapped
      * database key or salt with the real vault.
      */
     static final String DECOY_PREFERENCES_NAME =
@@ -42,10 +43,7 @@ public final class VaultKeyEnvelopeStore {
     private final SharedPreferences preferences;
 
     /**
-     * Existing constructor.
-     *
-     * This always refers to the real vault and is
-     * intentionally kept unchanged for compatibility.
+     * Creates storage for the primary real-vault envelope.
      */
     public VaultKeyEnvelopeStore(
             Context context
@@ -57,11 +55,7 @@ public final class VaultKeyEnvelopeStore {
     }
 
     /**
-     * Creates an envelope store dedicated to the
-     * Decoy Vault.
-     *
-     * The decoy envelope is stored in a completely
-     * separate SharedPreferences file.
+     * Creates storage dedicated to the Decoy Vault envelope.
      */
     public static VaultKeyEnvelopeStore forDecoy(
             Context context
@@ -95,6 +89,7 @@ public final class VaultKeyEnvelopeStore {
                         );
     }
 
+    @Override
     public boolean hasEnvelope() {
         return preferences.contains(
                 KEY_FORMAT_VERSION
@@ -107,6 +102,7 @@ public final class VaultKeyEnvelopeStore {
         );
     }
 
+    @Override
     public void save(
             VaultKeyEnvelope envelope
     ) {
@@ -147,6 +143,7 @@ public final class VaultKeyEnvelopeStore {
         }
     }
 
+    @Override
     public VaultKeyEnvelope load() {
         boolean hasVersion =
                 preferences.contains(
@@ -232,6 +229,7 @@ public final class VaultKeyEnvelopeStore {
         }
     }
 
+    @Override
     public void clear() {
         boolean cleared =
                 preferences
