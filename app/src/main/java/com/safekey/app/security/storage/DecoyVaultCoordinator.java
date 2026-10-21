@@ -31,10 +31,11 @@ import java.util.concurrent.Executors;
  * - key envelope
  * - encryption associated-data context
  *
- * It never delegates Decoy operations to SecureVaultCoordinator
- * or its primary VaultDataService.
+ * It never delegates Decoy data operations to
+ * SecureVaultCoordinator or the primary VaultDataService.
  */
-public final class DecoyVaultCoordinator {
+public final class DecoyVaultCoordinator
+        implements VaultOperations {
 
     private static final String DATABASE_KEY_CONTEXT =
             "safekey:decoy-database-key-envelope:v1";
@@ -178,8 +179,8 @@ public final class DecoyVaultCoordinator {
             /*
              * The always-present secondary file currently holds
              * an unconfigured cover database with an intentionally
-             * forgotten random key. Replace it now with the actual
-             * Decoy SQLCipher vault.
+             * forgotten random key. Replace it with the actual
+             * Decoy SQLCipher vault during enrollment.
              */
             DecoyVaultStorage.prepareDatabaseForEnrollment(
                     applicationContext
@@ -386,6 +387,64 @@ public final class DecoyVaultCoordinator {
         );
     }
 
+    @Override
+    public void getCredential(
+            long id,
+            VaultDataService.ResultCallback<Credential> callback
+    ) {
+        vaultDataService.getCredential(
+                id,
+                callback
+        );
+    }
+
+    @Override
+    public void addCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Long> callback
+    ) {
+        vaultDataService.addCredential(
+                credential,
+                callback
+        );
+    }
+
+    @Override
+    public void updateCredential(
+            Credential credential,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateCredential(
+                credential,
+                callback
+        );
+    }
+
+    @Override
+    public void deleteCredential(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteCredential(
+                id,
+                callback
+        );
+    }
+
+    @Override
+    public void setCredentialFavorite(
+            long id,
+            boolean favorite,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.setCredentialFavorite(
+                id,
+                favorite,
+                callback
+        );
+    }
+
+    @Override
     public void getVaultCounts(
             VaultDataService.ResultCallback<VaultCounts> callback
     ) {
@@ -397,16 +456,7 @@ public final class DecoyVaultCoordinator {
         );
     }
 
-    public void addCredential(
-            Credential credential,
-            VaultDataService.ResultCallback<Long> callback
-    ) {
-        vaultDataService.addCredential(
-                credential,
-                callback
-        );
-    }
-
+    @Override
     public void getCredentials(
             VaultDataService.ResultCallback<List<Credential>> callback
     ) {
@@ -415,6 +465,57 @@ public final class DecoyVaultCoordinator {
         );
     }
 
+    /**
+     * Mirrors SecureVaultCoordinator.getSecureNote(...).
+     *
+     * The current data service exposes the secure-note list rather
+     * than direct lookup, so locate the requested note by ID and
+     * return null when no matching note exists.
+     */
+    @Override
+    public void getSecureNote(
+            long id,
+            VaultDataService.ResultCallback<SecureNote> callback
+    ) {
+        vaultDataService.getSecureNotes(
+                new VaultDataService.ResultCallback<List<SecureNote>>() {
+
+                    @Override
+                    public void onSuccess(
+                            List<SecureNote> notes
+                    ) {
+                        SecureNote matchingNote =
+                                null;
+
+                        if (notes != null) {
+                            for (SecureNote note : notes) {
+                                if (note.getId() == id) {
+                                    matchingNote =
+                                            note;
+
+                                    break;
+                                }
+                            }
+                        }
+
+                        callback.onSuccess(
+                                matchingNote
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception exception
+                    ) {
+                        callback.onError(
+                                exception
+                        );
+                    }
+                }
+        );
+    }
+
+    @Override
     public void addSecureNote(
             SecureNote note,
             VaultDataService.ResultCallback<Long> callback
@@ -425,6 +526,29 @@ public final class DecoyVaultCoordinator {
         );
     }
 
+    @Override
+    public void updateSecureNote(
+            SecureNote note,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateSecureNote(
+                note,
+                callback
+        );
+    }
+
+    @Override
+    public void deleteSecureNote(
+            long id,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.deleteSecureNote(
+                id,
+                callback
+        );
+    }
+
+    @Override
     public void getSecureNotes(
             VaultDataService.ResultCallback<List<SecureNote>> callback
     ) {
