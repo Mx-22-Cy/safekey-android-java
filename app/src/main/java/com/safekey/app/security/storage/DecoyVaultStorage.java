@@ -17,16 +17,11 @@ import java.util.Objects;
  * presence alone from revealing whether Decoy setup occurred.
  *
  * Before Decoy setup, the secondary database is initialized
- * with a random throwaway key. The key is intentionally not
- * retained. Decoy enrollment will later replace this cover
- * database with the real Decoy Vault using its independent key.
+ * with a random throwaway key. That key is intentionally
+ * not retained.
  */
 public final class DecoyVaultStorage {
 
-    /*
-     * Use a neutral secondary-storage name.
-     * The file exists regardless of Decoy configuration.
-     */
     public static final String DATABASE_NAME =
             "safekey_secondary.db";
 
@@ -35,22 +30,18 @@ public final class DecoyVaultStorage {
     }
 
     /**
-     * Ensures that the secondary SQLCipher database file exists.
+     * Ensures that a valid encrypted secondary SQLCipher
+     * database exists.
      *
-     * If it already exists, it is left completely unchanged.
-     * If it does not exist, a valid encrypted SQLCipher database
-     * is created with a random temporary key.
+     * If the file already exists, it is left untouched.
      */
     public static synchronized void ensureDatabaseFile(
             Context context
     ) {
-        Objects.requireNonNull(
-                context,
-                "context"
-        );
-
         Context applicationContext =
-                context.getApplicationContext();
+                requireApplicationContext(
+                        context
+                );
 
         File databaseFile =
                 applicationContext.getDatabasePath(
@@ -96,25 +87,71 @@ public final class DecoyVaultStorage {
                     (byte) 0
             );
 
-            /*
-             * Do not leave a partial or unusable file if
-             * initialization failed.
-             */
             if (!createdSuccessfully) {
-                applicationContext.deleteDatabase(
-                        DATABASE_NAME
+                deleteDatabaseIfPresent(
+                        applicationContext
                 );
             }
         }
     }
 
     /**
-     * Reports whether the secondary database artifact exists.
+     * Removes the unconfigured cover database immediately
+     * before a real Decoy Vault is created.
      *
-     * This reports storage-file presence only. It does not mean
-     * that a Decoy Vault has been enrolled.
+     * The Decoy coordinator then recreates this same filename
+     * as a SQLCipher vault with the new independent Decoy key.
      */
+    static synchronized void prepareDatabaseForEnrollment(
+            Context context
+    ) {
+        Context applicationContext =
+                requireApplicationContext(
+                        context
+                );
+
+        deleteDatabaseIfPresent(
+                applicationContext
+        );
+    }
+
+    /**
+     * Restores the always-present encrypted cover database if
+     * Decoy enrollment fails before it is completed.
+     */
+    static synchronized void restoreCoverDatabase(
+            Context context
+    ) {
+        Context applicationContext =
+                requireApplicationContext(
+                        context
+                );
+
+        deleteDatabaseIfPresent(
+                applicationContext
+        );
+
+        ensureDatabaseFile(
+                applicationContext
+        );
+    }
+
     public static boolean databaseFileExists(
+            Context context
+    ) {
+        Context applicationContext =
+                requireApplicationContext(
+                        context
+                );
+
+        return applicationContext
+                .getDatabasePath(
+                        DATABASE_NAME
+                )
+                .exists();
+    }
+
+    private static Context requireApplicationContext(
             Context context
     ) {
         Objects.requireNonNull(
@@ -122,11 +159,32 @@ public final class DecoyVaultStorage {
                 "context"
         );
 
-        return context
-                .getApplicationContext()
-                .getDatabasePath(
+        return context.getApplicationContext();
+    }
+
+    private static void deleteDatabaseIfPresent(
+            Context applicationContext
+    ) {
+        File databaseFile =
+                applicationContext.getDatabasePath(
                         DATABASE_NAME
-                )
-                .exists();
+                );
+
+        if (!databaseFile.exists()) {
+            return;
+        }
+
+        boolean deleted =
+                applicationContext.deleteDatabase(
+                        DATABASE_NAME
+                );
+
+        if (!deleted
+                && databaseFile.exists()) {
+
+            throw new IllegalStateException(
+                    "Unable to reset secondary vault database."
+            );
+        }
     }
 }
