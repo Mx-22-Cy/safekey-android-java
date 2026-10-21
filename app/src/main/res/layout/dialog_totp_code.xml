@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/totpCodeDialog"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/auth_card_bg"
+    android:importantForAutofill="noExcludeDescendants"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:saveEnabled="false">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/fraunces_semibold"
+        android:gravity="center"
+        android:text="@string/totp_signin_title"
+        android:textColor="@color/auth_text_primary"
+        android:textSize="21sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="@string/totp_signin_message"
+        android:textColor="@color/auth_text_secondary"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:labelFor="@id/editTotpCode"
+        android:text="@string/totp_signin_label"
+        android:textColor="@color/auth_text_primary"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/editTotpCode"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/auth_input_bg"
+        android:digits="0123456789"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:hint="@string/totp_signin_hint"
+        android:imeOptions="actionDone"
+        android:importantForAutofill="no"
+        android:inputType="number"
+        android:letterSpacing="0.2"
+        android:maxLength="6"
+        android:padding="12dp"
+        android:saveEnabled="false"
+        android:singleLine="true"
+        android:textColor="@color/auth_text_primary"
+        android:textColorHint="@color/auth_text_hint_signin"
+        android:textSize="22sp" />
+
+    <TextView
+        android:id="@+id/textTotpCodeMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:accessibilityLiveRegion="polite"
+        android:textColor="@color/auth_accent"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/buttonTotpCancel"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/biometric_dialog_secondary_button_bg"
+            android:text="@string/totp_signin_cancel"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_text_secondary"
+            app:backgroundTint="@null" />
+
+        <Space
+            android:layout_width="12dp"
+            android:layout_height="1dp" />
+
+        <Button
+            android:id="@+id/buttonTotpVerify"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/auth_primary_button_bg"
+            android:text="@string/totp_signin_verify"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_primary_button_text"
+            android:textStyle="bold"
+            app:backgroundTint="@null" />
+    </LinearLayout>
+</LinearLayout>

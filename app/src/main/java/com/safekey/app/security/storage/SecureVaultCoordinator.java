@@ -3,18 +3,22 @@ package com.safekey.app.security.storage;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.fragment.app.FragmentActivity;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.model.SecureNote;
+import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.biometric.BiometricAuthenticator;
 import com.safekey.app.security.biometric.BiometricVaultKeyManager;
 import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.Argon2idMasterKeyDeriver;
-import com.safekey.app.data.model.VaultCounts;
+import com.safekey.app.security.totp.TotpSecretStore;
+import com.safekey.app.security.totp.VaultUnlockFlow;
+import com.safekey.app.security.totp.VaultUnlockGate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
@@ -36,81 +40,91 @@ public final class SecureVaultCoordinator {
     private final SecureRandom secureRandom;
     private final ExecutorService securityExecutor;
     private final Handler mainHandler;
+    private final VaultUnlockFlow unlockFlow;
+    private final BiometricUnlockSource biometricUnlockSource;
 
-    public SecureVaultCoordinator(
-            Context context
+    public SecureVaultCoordinator(Context context) {
+        this(context, null, null);
+    }
+
+    // Test injection keeps the real password/SQLCipher path and substitutes
+    // only the TOTP clock/store or the biometric prompt's authenticated result.
+    SecureVaultCoordinator(
+            Context context,
+            VaultUnlockGate suppliedGate,
+            BiometricUnlockSource suppliedBiometricSource
     ) {
+        Objects.requireNonNull(context, "context");
 
-        Objects.requireNonNull(
-                context,
-                "context"
+        Context applicationContext = context.getApplicationContext();
+
+        vaultDataService = new VaultDataService(applicationContext);
+        envelopeStore = new VaultKeyEnvelopeStore(applicationContext);
+        keyDeriver = new Argon2idMasterKeyDeriver();
+        cipher = new AesGcmCipher();
+        secureRandom = new SecureRandom();
+        securityExecutor = Executors.newSingleThreadExecutor();
+        mainHandler = new Handler(Looper.getMainLooper());
+
+        VaultUnlockGate gate = suppliedGate != null
+                ? suppliedGate
+                : new VaultUnlockGate(
+                new TotpSecretStore(applicationContext),
+                System::currentTimeMillis,
+                SystemClock::elapsedRealtime
         );
 
-        Context applicationContext =
-                context.getApplicationContext();
+        unlockFlow = new VaultUnlockFlow(
+                gate,
+                securityExecutor,
+                mainHandler,
+                new VaultUnlockFlow.VaultAccess() {
+                    @Override
+                    public void open(
+                            byte[] key,
+                            VaultDataService.SimpleCallback callback
+                    ) {
+                        vaultDataService.openVault(key, callback);
+                    }
 
-        vaultDataService =
-                new VaultDataService(
-                        applicationContext
-                );
+                    @Override
+                    public void close(VaultDataService.SimpleCallback callback) {
+                        vaultDataService.closeVault(callback);
+                    }
+                }
+        );
 
-        envelopeStore =
-                new VaultKeyEnvelopeStore(
-                        applicationContext
-                );
-
-        keyDeriver =
-                new Argon2idMasterKeyDeriver();
-
-        cipher =
-                new AesGcmCipher();
-
-        secureRandom =
-                new SecureRandom();
-
-        securityExecutor =
-                Executors.newSingleThreadExecutor();
-
-        mainHandler =
-                new Handler(
-                        Looper.getMainLooper()
-                );
+        biometricUnlockSource = suppliedBiometricSource != null
+                ? suppliedBiometricSource
+                : (activity, title, subtitle, callback) ->
+                new BiometricVaultKeyManager(activity)
+                        .unlockWithBiometrics(
+                                title,
+                                subtitle,
+                                callback
+                        );
     }
 
     public boolean hasVault() {
-
         return envelopeStore.hasEnvelope();
     }
 
     public boolean isVaultOpen() {
-
         return vaultDataService.isVaultOpen();
     }
 
     public BiometricAuthenticator.Availability getBiometricAvailability(
             FragmentActivity activity
     ) {
-
-        requireActivity(
-                activity
-        );
-
-        return new BiometricVaultKeyManager(
-                activity
-        ).getAvailability();
+        requireActivity(activity);
+        return new BiometricVaultKeyManager(activity).getAvailability();
     }
 
     public boolean isBiometricUnlockConfigured(
             FragmentActivity activity
     ) throws Exception {
-
-        requireActivity(
-                activity
-        );
-
-        return new BiometricVaultKeyManager(
-                activity
-        ).isConfigured();
+        requireActivity(activity);
+        return new BiometricVaultKeyManager(activity).isConfigured();
     }
 
     public void enableBiometricUnlock(
@@ -120,40 +134,23 @@ public final class SecureVaultCoordinator {
             String subtitle,
             BiometricSetupCallback callback
     ) {
+        requireActivity(activity);
+        Objects.requireNonNull(callback, "callback");
 
-        requireActivity(
-                activity
-        );
-
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
-
-        char[] passwordCopy =
-                copyAndValidatePassword(
-                        masterPassword
-                );
+        char[] passwordCopy = copyAndValidatePassword(masterPassword);
 
         try {
-
-            securityExecutor.execute(
-                    () ->
-                            enableBiometricUnlockInBackground(
-                                    activity,
-                                    passwordCopy,
-                                    title,
-                                    subtitle,
-                                    callback
-                            )
+            securityExecutor.execute(() ->
+                    enableBiometricUnlockInBackground(
+                            activity,
+                            passwordCopy,
+                            title,
+                            subtitle,
+                            callback
+                    )
             );
-
         } catch (RuntimeException schedulingError) {
-
-            clear(
-                    passwordCopy
-            );
-
+            clear(passwordCopy);
             throw schedulingError;
         }
     }
@@ -165,92 +162,57 @@ public final class SecureVaultCoordinator {
             String subtitle,
             BiometricSetupCallback callback
     ) {
-
         byte[] salt = null;
         byte[] derivedMasterKey = null;
         byte[] databaseKey = null;
 
         try {
-
-            VaultKeyEnvelope envelope =
-                    envelopeStore.load();
+            VaultKeyEnvelope envelope = envelopeStore.load();
 
             if (envelope == null) {
-
                 throw new IllegalStateException(
                         "No vault has been created."
                 );
             }
 
-            salt =
-                    envelope.getSalt();
+            salt = envelope.getSalt();
+            derivedMasterKey = keyDeriver.deriveKey(masterPassword, salt);
 
-            derivedMasterKey =
-                    keyDeriver.deriveKey(
-                            masterPassword,
-                            salt
-                    );
-
-            databaseKey =
-                    cipher.decrypt(
-                            envelope.getWrappedDatabaseKey(),
-                            derivedMasterKey,
-                            databaseKeyContext()
-                    );
+            databaseKey = cipher.decrypt(
+                    envelope.getWrappedDatabaseKey(),
+                    derivedMasterKey,
+                    databaseKeyContext()
+            );
 
             final byte[] keyForBiometric =
-                    Arrays.copyOf(
-                            databaseKey,
-                            databaseKey.length
-                    );
+                    Arrays.copyOf(databaseKey, databaseKey.length);
 
-            boolean posted =
-                    mainHandler.post(
-                            () ->
-                                    startBiometricEnrollment(
-                                            activity,
-                                            keyForBiometric,
-                                            title,
-                                            subtitle,
-                                            callback
-                                    )
-                    );
+            boolean posted = mainHandler.post(() ->
+                    startBiometricEnrollment(
+                            activity,
+                            keyForBiometric,
+                            title,
+                            subtitle,
+                            callback
+                    )
+            );
 
             if (!posted) {
-
-                clear(
-                        keyForBiometric
-                );
-
+                clear(keyForBiometric);
                 throw new IllegalStateException(
                         "Unable to start biometric enrollment."
                 );
             }
-
         } catch (Exception exception) {
-
             deliverBiometricSetupError(
                     callback,
                     "Unable to verify the master password or prepare biometric unlock."
             );
-
         } finally {
-
-            clear(
-                    masterPassword
-            );
-
-            clear(
-                    salt
-            );
-
-            clear(
-                    derivedMasterKey
-            );
-
-            clear(
-                    databaseKey
-            );
+            clear(masterPassword);
+            clear(salt);
+            clear(derivedMasterKey);
+            clear(databaseKey);
         }
     }
 
@@ -261,228 +223,160 @@ public final class SecureVaultCoordinator {
             String subtitle,
             BiometricSetupCallback callback
     ) {
-
         try {
-
             BiometricVaultKeyManager biometricManager =
-                    new BiometricVaultKeyManager(
-                            activity
-                    );
+                    new BiometricVaultKeyManager(activity);
 
             biometricManager.enableBiometricUnlock(
                     databaseKey,
                     title,
                     subtitle,
                     new BiometricVaultKeyManager.SetupCallback() {
-
                         @Override
                         public void onEnabled() {
-
                             callback.onEnabled();
                         }
 
                         @Override
-                        public void onError(
-                                String message
-                        ) {
-
-                            callback.onError(
-                                    message
-                            );
+                        public void onError(String message) {
+                            callback.onError(message);
                         }
 
                         @Override
                         public void onFailed() {
-
                             callback.onFailed();
                         }
                     }
             );
-
         } catch (RuntimeException exception) {
-
-            callback.onError(
-                    "Unable to prepare biometric unlock."
-            );
-
+            callback.onError("Unable to prepare biometric unlock.");
         } finally {
-
-            clear(
-                    databaseKey
-            );
+            clear(databaseKey);
         }
     }
 
-    public void unlockVaultWithBiometrics(
+    public VaultUnlockFlow.Request unlockVaultWithBiometrics(
             FragmentActivity activity,
             String title,
             String subtitle,
             BiometricUnlockCallback callback
     ) {
+        requireActivity(activity);
+        Objects.requireNonNull(callback, "callback");
 
-        requireActivity(
-                activity
-        );
+        VaultUnlockFlow.Request request =
+                unlockFlow.begin(new VaultUnlockFlow.Listener() {
+                    @Override
+                    public void onSuccess() {
+                        callback.onSuccess();
+                    }
 
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
+                    @Override
+                    public void onError(Exception error) {
+                        callback.onError(
+                                error.getMessage() != null
+                                        ? error.getMessage()
+                                        : "Unable to unlock the vault."
+                        );
+                    }
 
-        boolean posted =
-                mainHandler.post(
-                        () -> {
-
-                            try {
-
-                                BiometricVaultKeyManager biometricManager =
-                                        new BiometricVaultKeyManager(
-                                                activity
-                                        );
-
-                                biometricManager.unlockWithBiometrics(
-                                        title,
-                                        subtitle,
-                                        new BiometricVaultKeyManager.UnlockCallback() {
-
-                                            @Override
-                                            public void onUnlocked(
-                                                    byte[] vaultKey
-                                            ) {
-
-                                                openVaultAfterBiometricAuthentication(
-                                                        vaultKey,
-                                                        callback
-                                                );
-                                            }
-
-                                            @Override
-                                            public void onError(
-                                                    String message
-                                            ) {
-
-                                                callback.onError(
-                                                        message
-                                                );
-                                            }
-
-                                            @Override
-                                            public void onFailed() {
-
-                                                callback.onFailed();
-                                            }
-                                        }
-                                );
-
-                            } catch (RuntimeException exception) {
-
-                                callback.onError(
-                                        "Unable to prepare biometric authentication."
-                                );
-                            }
-                        }
-                );
-
-        if (!posted) {
-
-            callback.onError(
-                    "Unable to start biometric authentication."
-            );
-        }
-    }
-
-    private void openVaultAfterBiometricAuthentication(
-            byte[] vaultKey,
-            BiometricUnlockCallback callback
-    ) {
-
-        if (vaultKey == null) {
-
-            callback.onError(
-                    "Biometric authentication returned no vault key."
-            );
-
-            return;
-        }
-
-        try {
-
-            vaultDataService.openVault(
-                    vaultKey,
-                    new VaultDataService.SimpleCallback() {
-
-                        @Override
-                        public void onSuccess() {
-
-                            callback.onSuccess();
-                        }
-
-                        @Override
-                        public void onError(
-                                Exception exception
-                        ) {
-
-                            callback.onError(
-                                    "Biometric authentication succeeded, but the vault could not be opened."
+                    @Override
+                    public void onTotpRequired(VaultUnlockFlow.Request pending) {
+                        if (callback instanceof TotpBiometricUnlockCallback) {
+                            ((TotpBiometricUnlockCallback) callback)
+                                    .onTotpRequired(pending);
+                        } else {
+                            unlockFlow.fail(
+                                    pending,
+                                    new IllegalStateException(
+                                            "Authenticator code required."
+                                    )
                             );
                         }
                     }
-            );
 
-        } catch (RuntimeException exception) {
+                    @Override
+                    public void onPrimaryFailed() {
+                        callback.onFailed();
+                    }
 
-            callback.onError(
-                    "Biometric authentication succeeded, but the vault could not be opened."
-            );
+                    @Override
+                    public boolean requiresSessionClaim() {
+                        return callback instanceof TotpBiometricUnlockCallback;
+                    }
+                });
 
-        } finally {
+        boolean posted = mainHandler.post(() -> {
+            if (!request.isActive()) {
+                return;
+            }
 
-            clear(
-                    vaultKey
+            try {
+                biometricUnlockSource.unlock(
+                        activity,
+                        title,
+                        subtitle,
+                        new BiometricVaultKeyManager.UnlockCallback() {
+                            @Override
+                            public void onUnlocked(byte[] vaultKey) {
+                                try {
+                                    unlockFlow.acceptPrimary(request, vaultKey);
+                                } finally {
+                                    clear(vaultKey);
+                                }
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                unlockFlow.fail(
+                                        request,
+                                        new IllegalStateException(message)
+                                );
+                            }
+
+                            @Override
+                            public void onFailed() {
+                                unlockFlow.primaryFailed(request);
+                            }
+                        }
+                );
+            } catch (RuntimeException error) {
+                unlockFlow.fail(request, error);
+            }
+        });
+
+        if (!posted) {
+            unlockFlow.fail(
+                    request,
+                    new IllegalStateException(
+                            "Unable to start biometric authentication."
+                    )
             );
         }
+
+        return request;
     }
 
     public void disableBiometricUnlock(
             FragmentActivity activity,
             VaultDataService.SimpleCallback callback
     ) {
+        requireActivity(activity);
+        Objects.requireNonNull(callback, "callback");
 
-        requireActivity(
-                activity
-        );
+        boolean posted = mainHandler.post(() -> {
+            try {
+                BiometricVaultKeyManager biometricManager =
+                        new BiometricVaultKeyManager(activity);
 
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
-
-        boolean posted =
-                mainHandler.post(
-                        () -> {
-
-                            try {
-
-                                BiometricVaultKeyManager biometricManager =
-                                        new BiometricVaultKeyManager(
-                                                activity
-                                        );
-
-                                biometricManager.disableBiometricUnlock();
-
-                                callback.onSuccess();
-
-                            } catch (Exception exception) {
-
-                                callback.onError(
-                                        exception
-                                );
-                            }
-                        }
-                );
+                biometricManager.disableBiometricUnlock();
+                callback.onSuccess();
+            } catch (Exception exception) {
+                callback.onError(exception);
+            }
+        });
 
         if (!posted) {
-
             callback.onError(
                     new IllegalStateException(
                             "Unable to disable biometric unlock."
@@ -495,44 +389,28 @@ public final class SecureVaultCoordinator {
             long id,
             VaultDataService.ResultCallback<Credential> callback
     ) {
-
-        vaultDataService.getCredential(
-                id,
-                callback
-        );
+        vaultDataService.getCredential(id, callback);
     }
 
     public void addCredential(
             Credential credential,
             VaultDataService.ResultCallback<Long> callback
     ) {
-
-        vaultDataService.addCredential(
-                credential,
-                callback
-        );
+        vaultDataService.addCredential(credential, callback);
     }
 
     public void updateCredential(
             Credential credential,
             VaultDataService.ResultCallback<Integer> callback
     ) {
-
-        vaultDataService.updateCredential(
-                credential,
-                callback
-        );
+        vaultDataService.updateCredential(credential, callback);
     }
 
     public void deleteCredential(
             long id,
             VaultDataService.ResultCallback<Integer> callback
     ) {
-
-        vaultDataService.deleteCredential(
-                id,
-                callback
-        );
+        vaultDataService.deleteCredential(id, callback);
     }
 
     public void setCredentialFavorite(
@@ -540,12 +418,7 @@ public final class SecureVaultCoordinator {
             boolean favorite,
             VaultDataService.ResultCallback<Integer> callback
     ) {
-
-        vaultDataService.setCredentialFavorite(
-                id,
-                favorite,
-                callback
-        );
+        vaultDataService.setCredentialFavorite(id, favorite, callback);
     }
 
     public void getVaultCounts(
@@ -559,55 +432,34 @@ public final class SecureVaultCoordinator {
     public void getCredentials(
             VaultDataService.ResultCallback<List<Credential>> callback
     ) {
-
-        vaultDataService.getCredentials(
-                callback
-        );
+        vaultDataService.getCredentials(callback);
     }
 
     public void getSecureNote(
             long id,
             VaultDataService.ResultCallback<SecureNote> callback
     ) {
-
         vaultDataService.getSecureNotes(
                 new VaultDataService.ResultCallback<List<SecureNote>>() {
-
                     @Override
-                    public void onSuccess(
-                            List<SecureNote> notes
-                    ) {
-
-                        SecureNote matchingNote =
-                                null;
+                    public void onSuccess(List<SecureNote> notes) {
+                        SecureNote matchingNote = null;
 
                         if (notes != null) {
-
                             for (SecureNote note : notes) {
-
                                 if (note.getId() == id) {
-
-                                    matchingNote =
-                                            note;
-
+                                    matchingNote = note;
                                     break;
                                 }
                             }
                         }
 
-                        callback.onSuccess(
-                                matchingNote
-                        );
+                        callback.onSuccess(matchingNote);
                     }
 
                     @Override
-                    public void onError(
-                            Exception exception
-                    ) {
-
-                        callback.onError(
-                                exception
-                        );
+                    public void onError(Exception exception) {
+                        callback.onError(exception);
                     }
                 }
         );
@@ -617,75 +469,43 @@ public final class SecureVaultCoordinator {
             SecureNote note,
             VaultDataService.ResultCallback<Long> callback
     ) {
-
-        vaultDataService.addSecureNote(
-                note,
-                callback
-        );
+        vaultDataService.addSecureNote(note, callback);
     }
 
     public void updateSecureNote(
             SecureNote note,
             VaultDataService.ResultCallback<Integer> callback
     ) {
-
-        vaultDataService.updateSecureNote(
-                note,
-                callback
-        );
+        vaultDataService.updateSecureNote(note, callback);
     }
 
     public void deleteSecureNote(
             long id,
             VaultDataService.ResultCallback<Integer> callback
     ) {
-
-        vaultDataService.deleteSecureNote(
-                id,
-                callback
-        );
+        vaultDataService.deleteSecureNote(id, callback);
     }
 
     public void getSecureNotes(
             VaultDataService.ResultCallback<List<SecureNote>> callback
     ) {
-
-        vaultDataService.getSecureNotes(
-                callback
-        );
+        vaultDataService.getSecureNotes(callback);
     }
 
     public void createVault(
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
+        Objects.requireNonNull(callback, "callback");
 
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
-
-        char[] passwordCopy =
-                copyAndValidatePassword(
-                        masterPassword
-                );
+        char[] passwordCopy = copyAndValidatePassword(masterPassword);
 
         try {
-
-            securityExecutor.execute(
-                    () ->
-                            createVaultInBackground(
-                                    passwordCopy,
-                                    callback
-                            )
+            securityExecutor.execute(() ->
+                    createVaultInBackground(passwordCopy, callback)
             );
-
         } catch (RuntimeException schedulingError) {
-
-            clear(
-                    passwordCopy
-            );
-
+            clear(passwordCopy);
             throw schedulingError;
         }
     }
@@ -694,267 +514,186 @@ public final class SecureVaultCoordinator {
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
-
         byte[] salt = null;
         byte[] derivedMasterKey = null;
         byte[] databaseKey = null;
-
-        boolean envelopeSaved =
-                false;
+        boolean envelopeSaved = false;
 
         try {
-
             if (envelopeStore.hasEnvelope()) {
-
                 throw new IllegalStateException(
                         "A vault has already been created."
                 );
             }
 
-            salt =
-                    keyDeriver.generateSalt();
-
-            derivedMasterKey =
-                    keyDeriver.deriveKey(
-                            masterPassword,
-                            salt
-                    );
+            salt = keyDeriver.generateSalt();
+            derivedMasterKey = keyDeriver.deriveKey(masterPassword, salt);
 
             databaseKey =
-                    new byte[
-                            SafeKeyDatabase
-                                    .DATABASE_KEY_LENGTH_BYTES
-                            ];
+                    new byte[SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES];
+            secureRandom.nextBytes(databaseKey);
 
-            secureRandom.nextBytes(
-                    databaseKey
+            String wrappedDatabaseKey = cipher.encrypt(
+                    databaseKey,
+                    derivedMasterKey,
+                    databaseKeyContext()
             );
-
-            String wrappedDatabaseKey =
-                    cipher.encrypt(
-                            databaseKey,
-                            derivedMasterKey,
-                            databaseKeyContext()
-                    );
 
             VaultKeyEnvelope envelope =
-                    new VaultKeyEnvelope(
-                            salt,
-                            wrappedDatabaseKey
-                    );
+                    new VaultKeyEnvelope(salt, wrappedDatabaseKey);
 
-            envelopeStore.save(
-                    envelope
-            );
-
-            envelopeSaved =
-                    true;
+            envelopeStore.save(envelope);
+            envelopeSaved = true;
 
             vaultDataService.openVault(
                     databaseKey,
                     new VaultDataService.SimpleCallback() {
-
                         @Override
                         public void onSuccess() {
-
                             callback.onSuccess();
                         }
 
                         @Override
-                        public void onError(
-                                Exception exception
-                        ) {
-
-                            clearEnvelopeAfterCreationFailure(
-                                    exception
-                            );
-
-                            callback.onError(
-                                    exception
-                            );
+                        public void onError(Exception exception) {
+                            clearEnvelopeAfterCreationFailure(exception);
+                            callback.onError(exception);
                         }
                     }
             );
-
         } catch (Exception exception) {
-
             if (envelopeSaved) {
-
-                clearEnvelopeAfterCreationFailure(
-                        exception
-                );
+                clearEnvelopeAfterCreationFailure(exception);
             }
 
-            deliverError(
-                    callback,
-                    exception
-            );
-
+            deliverError(callback, exception);
         } finally {
-
-            clear(
-                    masterPassword
-            );
-
-            clear(
-                    salt
-            );
-
-            clear(
-                    derivedMasterKey
-            );
-
-            clear(
-                    databaseKey
-            );
+            clear(masterPassword);
+            clear(salt);
+            clear(derivedMasterKey);
+            clear(databaseKey);
         }
     }
 
-    public void unlockVault(
+    public VaultUnlockFlow.Request unlockVault(
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
+        Objects.requireNonNull(callback, "callback");
 
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
-
-        char[] passwordCopy =
-                copyAndValidatePassword(
-                        masterPassword
-                );
+        char[] passwordCopy = copyAndValidatePassword(masterPassword);
+        VaultUnlockFlow.Request request = null;
 
         try {
+            request = unlockFlow.begin(new VaultUnlockFlow.Listener() {
+                @Override
+                public void onSuccess() {
+                    callback.onSuccess();
+                }
 
-            securityExecutor.execute(
-                    () ->
-                            unlockVaultInBackground(
-                                    passwordCopy,
-                                    callback
-                            )
+                @Override
+                public void onError(Exception error) {
+                    callback.onError(error);
+                }
+
+                @Override
+                public boolean requiresSessionClaim() {
+                    return callback instanceof TotpUnlockCallback;
+                }
+
+                @Override
+                public void onTotpRequired(VaultUnlockFlow.Request pending) {
+                    if (callback instanceof TotpUnlockCallback) {
+                        ((TotpUnlockCallback) callback).onTotpRequired(pending);
+                    } else {
+                        unlockFlow.fail(
+                                pending,
+                                new IllegalStateException(
+                                        "Authenticator code required."
+                                )
+                        );
+                    }
+                }
+            });
+
+            VaultUnlockFlow.Request scheduled = request;
+
+            securityExecutor.execute(() ->
+                    unlockVaultInBackground(passwordCopy, scheduled)
             );
 
-        } catch (RuntimeException schedulingError) {
+            return request;
+        } catch (RuntimeException error) {
+            clear(passwordCopy);
 
-            clear(
-                    passwordCopy
-            );
+            if (request != null) {
+                request.close();
+            }
 
-            throw schedulingError;
+            throw error;
         }
     }
 
     private void unlockVaultInBackground(
             char[] masterPassword,
-            VaultDataService.SimpleCallback callback
+            VaultUnlockFlow.Request request
     ) {
-
         byte[] salt = null;
         byte[] derivedMasterKey = null;
         byte[] databaseKey = null;
 
         try {
+            if (!request.isActive()) {
+                return;
+            }
 
-            VaultKeyEnvelope envelope =
-                    envelopeStore.load();
+            VaultKeyEnvelope envelope = envelopeStore.load();
 
             if (envelope == null) {
-
                 throw new IllegalStateException(
                         "No vault has been created."
                 );
             }
 
-            salt =
-                    envelope.getSalt();
+            salt = envelope.getSalt();
+            derivedMasterKey = keyDeriver.deriveKey(masterPassword, salt);
 
-            derivedMasterKey =
-                    keyDeriver.deriveKey(
-                            masterPassword,
-                            salt
-                    );
-
-            databaseKey =
-                    cipher.decrypt(
-                            envelope.getWrappedDatabaseKey(),
-                            derivedMasterKey,
-                            databaseKeyContext()
-                    );
-
-            vaultDataService.openVault(
-                    databaseKey,
-                    callback
+            databaseKey = cipher.decrypt(
+                    envelope.getWrappedDatabaseKey(),
+                    derivedMasterKey,
+                    databaseKeyContext()
             );
 
-        } catch (Exception exception) {
-
-            deliverError(
-                    callback,
-                    exception
-            );
-
+            unlockFlow.acceptPrimary(request, databaseKey);
+        } catch (Exception error) {
+            unlockFlow.fail(request, error);
         } finally {
-
-            clear(
-                    masterPassword
-            );
-
-            clear(
-                    salt
-            );
-
-            clear(
-                    derivedMasterKey
-            );
-
-            clear(
-                    databaseKey
-            );
+            clear(masterPassword);
+            clear(salt);
+            clear(derivedMasterKey);
+            clear(databaseKey);
         }
     }
 
-    public void closeVault(
-            VaultDataService.SimpleCallback callback
-    ) {
-
-        Objects.requireNonNull(
-                callback,
-                "callback"
-        );
-
-        vaultDataService.closeVault(
-                callback
-        );
+    public void closeVault(VaultDataService.SimpleCallback callback) {
+        unlockFlow.closeVault(callback);
     }
 
     public void shutdown() {
+        unlockFlow.shutdown();
 
         if (securityExecutor.isShutdown()) {
-
             return;
         }
 
-        securityExecutor.execute(
-                vaultDataService::shutdown
-        );
-
+        securityExecutor.execute(vaultDataService::shutdown);
         securityExecutor.shutdown();
     }
 
-    private void clearEnvelopeAfterCreationFailure(
-            Exception originalError
-    ) {
-
+    private void clearEnvelopeAfterCreationFailure(Exception originalError) {
         try {
-
             envelopeStore.clear();
-
         } catch (RuntimeException clearingError) {
-
-            originalError.addSuppressed(
-                    clearingError
-            );
+            originalError.addSuppressed(clearingError);
         }
     }
 
@@ -962,114 +701,80 @@ public final class SecureVaultCoordinator {
             VaultDataService.SimpleCallback callback,
             Exception exception
     ) {
-
-        mainHandler.post(
-                () ->
-                        callback.onError(
-                                exception
-                        )
-        );
+        mainHandler.post(() -> callback.onError(exception));
     }
 
     private void deliverBiometricSetupError(
             BiometricSetupCallback callback,
             String message
     ) {
-
-        mainHandler.post(
-                () ->
-                        callback.onError(
-                                message
-                        )
-        );
+        mainHandler.post(() -> callback.onError(message));
     }
 
-    private static char[] copyAndValidatePassword(
-            char[] masterPassword
-    ) {
-
+    private static char[] copyAndValidatePassword(char[] masterPassword) {
         if (masterPassword == null) {
-
             throw new IllegalArgumentException(
                     "Master password cannot be null."
             );
         }
 
         if (masterPassword.length == 0) {
-
             throw new IllegalArgumentException(
                     "Master password cannot be empty."
             );
         }
 
-        return Arrays.copyOf(
-                masterPassword,
-                masterPassword.length
-        );
+        return Arrays.copyOf(masterPassword, masterPassword.length);
     }
 
-    private static FragmentActivity requireActivity(
-            FragmentActivity activity
-    ) {
-
-        return Objects.requireNonNull(
-                activity,
-                "activity"
-        );
+    private static FragmentActivity requireActivity(FragmentActivity activity) {
+        return Objects.requireNonNull(activity, "activity");
     }
 
     private static byte[] databaseKeyContext() {
-
-        return DATABASE_KEY_CONTEXT.getBytes(
-                StandardCharsets.UTF_8
-        );
+        return DATABASE_KEY_CONTEXT.getBytes(StandardCharsets.UTF_8);
     }
 
-    private static void clear(
-            byte[] value
-    ) {
-
+    private static void clear(byte[] value) {
         if (value != null) {
-
-            Arrays.fill(
-                    value,
-                    (byte) 0
-            );
+            Arrays.fill(value, (byte) 0);
         }
     }
 
-    private static void clear(
-            char[] value
-    ) {
-
+    private static void clear(char[] value) {
         if (value != null) {
-
-            Arrays.fill(
-                    value,
-                    '\0'
-            );
+            Arrays.fill(value, '\0');
         }
     }
 
     public interface BiometricSetupCallback {
-
         void onEnabled();
-
-        void onError(
-                String message
-        );
-
+        void onError(String message);
         void onFailed();
     }
 
     public interface BiometricUnlockCallback {
-
         void onSuccess();
-
-        void onError(
-                String message
-        );
-
+        void onError(String message);
         void onFailed();
+    }
+
+    public interface TotpUnlockCallback
+            extends VaultDataService.SimpleCallback {
+        void onTotpRequired(VaultUnlockFlow.Request request);
+    }
+
+    public interface TotpBiometricUnlockCallback
+            extends BiometricUnlockCallback {
+        void onTotpRequired(VaultUnlockFlow.Request request);
+    }
+
+    interface BiometricUnlockSource {
+        void unlock(
+                FragmentActivity activity,
+                String title,
+                String subtitle,
+                BiometricVaultKeyManager.UnlockCallback callback
+        );
     }
 }
