@@ -140,6 +140,9 @@ public class AlertsActivity extends ProtectedActivity {
 
                         showUncheckedCredentials(credentials);
 
+                        for (Credential credential : credentials) {
+                            checkCredentialPassword(credential);
+                        }
                     }
 
                     @Override
@@ -207,6 +210,156 @@ public class AlertsActivity extends ProtectedActivity {
             });
 
             attentionCards.addView(card);
+        }
+    }
+
+    private void refreshAlertsDashboard() {
+
+        if (!activityStarted
+                || isFinishing()
+                || isDestroyed()
+                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+            return;
+        }
+
+        LinearLayout breachedCards =
+                findViewById(R.id.layoutAlertsBreachedCards);
+
+        LinearLayout attentionCards =
+                findViewById(R.id.layoutAlertsAttentionCards);
+
+        LinearLayout passedCards =
+                findViewById(R.id.layoutAlertsPassedCards);
+
+        breachedCards.removeAllViews();
+        attentionCards.removeAllViews();
+        passedCards.removeAllViews();
+
+        for (Credential credential : loadedCredentials) {
+
+            PasswordBreachResult result =
+                    breachResults.get(credential.getId());
+
+            PasswordBreachResult.Status status =
+                    result == null
+                            ? PasswordBreachResult.Status.NOT_CHECKED
+                            : result.getStatus();
+
+            LinearLayout targetContainer;
+
+            switch (status) {
+                case BREACHED:
+                    targetContainer = breachedCards;
+                    break;
+
+                case NOT_FOUND:
+                    targetContainer = passedCards;
+                    break;
+
+                case NOT_CHECKED:
+                case ERROR:
+                default:
+                    targetContainer = attentionCards;
+                    break;
+            }
+
+            View card = LayoutInflater.from(this).inflate(
+                    R.layout.item_alert_credential,
+                    targetContainer,
+                    false
+            );
+
+            TextView name =
+                    card.findViewById(R.id.textAlertCredentialName);
+
+            TextView statusText =
+                    card.findViewById(R.id.textAlertCredentialStatus);
+
+            TextView occurrences =
+                    card.findViewById(R.id.textAlertOccurrences);
+
+            switch (status) {
+                case BREACHED:
+                    card.setBackgroundResource(
+                            R.drawable.alerts_breached_card_bg
+                    );
+                    break;
+
+                case NOT_FOUND:
+                    card.setBackgroundResource(
+                            R.drawable.alerts_passed_card_bg
+                    );
+                    break;
+
+                case NOT_CHECKED:
+                case ERROR:
+                default:
+                    card.setBackgroundResource(
+                            R.drawable.alerts_attention_card_bg
+                    );
+                    break;
+            }
+
+            name.setText(credential.getTitle());
+
+            switch (status) {
+                case BREACHED:
+                    statusText.setText(R.string.alerts_status_breached);
+
+                    if (result != null && result.getOccurrenceCount() > 0) {
+                        occurrences.setText(
+                                getString(
+                                        R.string.alerts_occurrences,
+                                        result.getOccurrenceCount()
+                                )
+                        );
+                        occurrences.setVisibility(View.VISIBLE);
+                    }
+                    break;
+
+                case NOT_FOUND:
+                    statusText.setText(R.string.alerts_status_passed);
+                    break;
+
+                case ERROR:
+                    if (result != null
+                            && result.getErrorReason()
+                            == PasswordBreachResult.ErrorReason.OFFLINE) {
+                        statusText.setText(R.string.alerts_status_offline);
+                    } else {
+                        statusText.setText(R.string.alerts_status_error);
+                    }
+                    break;
+
+                case NOT_CHECKED:
+                default:
+                    statusText.setText(R.string.alerts_status_not_checked);
+                    break;
+            }
+
+            final long credentialId = credential.getId();
+
+            card.setOnClickListener(view -> {
+
+                if (SafeKeySession.getState() != SessionState.UNLOCKED
+                        || !SafeKeySession.recordActivity()) {
+                    return;
+                }
+
+                Intent intent = new Intent(
+                        AlertsActivity.this,
+                        CredentialDetailsActivity.class
+                );
+
+                intent.putExtra(
+                        CredentialDetailsActivity.EXTRA_ID,
+                        credentialId
+                );
+
+                startActivity(intent);
+            });
+
+            targetContainer.addView(card);
         }
     }
 
