@@ -296,20 +296,20 @@
     <string name="alerts_status_offline">Check unavailable — Offline</string>
     <string name="alerts_status_error">Unable to check password</string>
     <string name="alerts_status_passed">Not found in known breach data</string>
-    <string name="alerts_occurrences">%1$d occurrences</string>
+    <plurals name="alerts_occurrences">
+        <item quantity="one">%d occurrence</item>
+        <item quantity="other">%d occurrences</item>
+    </plurals>
 
     <!-- Actions -->
     <string name="alerts_retry_all">Retry All</string>
 
     <!-- Loading, empty and error states -->
     <string name="alerts_loading">Checking saved credentials…</string>
-    <string name="alerts_empty_title">No credentials to check</string>
-    <string name="alerts_empty_message">Add a credential to your vault to see its breach status here.</string>
-    <string name="alerts_no_filter_results">No credentials in this category.</string>
-    <string name="alerts_load_error">Couldn’t load security alerts.</string>
+    <string name="alerts_load_error">Couldn’t load security alerts. Tap here to retry.</string>
 
-    <string name="alerts_empty_all">No credentials to display.</string>
-    <string name="alerts_empty_breached">No known breached passwords found among the credentials checked so far.</string>
-    <string name="alerts_empty_attention">No credentials currently need attention.</string>
-    <string name="alerts_empty_passed">No credentials currently have a completed check with no known breach match.</string>
+    <string name="alerts_empty_all">No credentials to check yet.</string>
+    <string name="alerts_empty_breached">No known breaches found.</string>
+    <string name="alerts_empty_attention">Nothing needs attention.</string>
+    <string name="alerts_empty_passed">No completed checks yet.</string>
 </resources>

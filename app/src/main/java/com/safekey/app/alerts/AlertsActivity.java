@@ -54,6 +54,8 @@ public class AlertsActivity extends ProtectedActivity {
     }
     private AlertFilter selectedFilter = AlertFilter.ALL;
     private boolean activityStarted = false;
+    private boolean credentialsLoading = false;
+    private boolean credentialsLoadFailed = false;
     private int credentialLoadGeneration = 0;
     private long nextBreachCheckId = 0;
     private final Map<Long, Long> latestBreachCheckIds =
@@ -106,6 +108,9 @@ public class AlertsActivity extends ProtectedActivity {
 
         setupNavigation();
         setupAlertFilters();
+        findViewById(R.id.buttonAlertsRetryAll).setOnClickListener(
+                view -> retryAttentionCredentials()
+        );
     }
 
     @Override
@@ -120,6 +125,27 @@ public class AlertsActivity extends ProtectedActivity {
     }
 
     private void loadCredentials() {
+
+        credentialsLoading = true;
+        credentialsLoadFailed = false;
+
+        TextView loadingMessage =
+                findViewById(R.id.textAlertsEmptyState);
+
+        loadingMessage.setOnClickListener(null);
+        loadingMessage.setClickable(false);
+
+        loadingMessage.setText(R.string.alerts_loading);
+        loadingMessage.setVisibility(View.VISIBLE);
+
+        findViewById(R.id.layoutAlertsBreachedSection)
+                .setVisibility(View.GONE);
+
+        findViewById(R.id.layoutAlertsAttentionSection)
+                .setVisibility(View.GONE);
+
+        findViewById(R.id.layoutAlertsPassedSection)
+                .setVisibility(View.GONE);
 
         final int thisLoadGeneration = ++credentialLoadGeneration;
         secureVaultCoordinator.getCredentials(
@@ -136,6 +162,8 @@ public class AlertsActivity extends ProtectedActivity {
                             return;
                         }
 
+                        credentialsLoading = false;
+                        credentialsLoadFailed = false;
                         loadedCredentials.clear();
                         loadedCredentials.addAll(credentials);
                         breachResults.clear();
@@ -165,7 +193,30 @@ public class AlertsActivity extends ProtectedActivity {
                             return;
                         }
 
-                        // We will display the loading error state later.
+                        credentialsLoading = false;
+                        credentialsLoadFailed = true;
+                        TextView errorMessage =
+                                findViewById(R.id.textAlertsEmptyState);
+
+                        errorMessage.setText(R.string.alerts_load_error);
+                        errorMessage.setVisibility(View.VISIBLE);
+
+                        errorMessage.setOnClickListener(view -> {
+                            if (activityStarted
+                                    && SafeKeySession.getState() == SessionState.UNLOCKED
+                                    && SafeKeySession.recordActivity()) {
+                                loadCredentials();
+                            }
+                        });
+
+                        findViewById(R.id.layoutAlertsBreachedSection)
+                                .setVisibility(View.GONE);
+
+                        findViewById(R.id.layoutAlertsAttentionSection)
+                                .setVisibility(View.GONE);
+
+                        findViewById(R.id.layoutAlertsPassedSection)
+                                .setVisibility(View.GONE);
                     }
                 }
         );
@@ -174,6 +225,8 @@ public class AlertsActivity extends ProtectedActivity {
     private void refreshAlertsDashboard() {
 
         if (!activityStarted
+                || credentialsLoading
+                || credentialsLoadFailed
                 || isFinishing()
                 || isDestroyed()
                 || SafeKeySession.getState() != SessionState.UNLOCKED) {
@@ -293,10 +346,13 @@ public class AlertsActivity extends ProtectedActivity {
                     statusText.setText(R.string.alerts_status_breached);
 
                     if (result != null && result.getOccurrenceCount() > 0) {
+                        long count = result.getOccurrenceCount();
+
                         occurrences.setText(
-                                getString(
-                                        R.string.alerts_occurrences,
-                                        result.getOccurrenceCount()
+                                getResources().getQuantityString(
+                                        R.plurals.alerts_occurrences,
+                                        count == 1L ? 1 : 2,
+                                        count
                                 )
                         );
                         occurrences.setVisibility(View.VISIBLE);
@@ -345,29 +401,46 @@ public class AlertsActivity extends ProtectedActivity {
                 startActivity(intent);
             });
 
+            if (targetContainer.getChildCount() > 0) {
+                LinearLayout.LayoutParams params =
+                        (LinearLayout.LayoutParams) card.getLayoutParams();
+
+                params.topMargin = getResources().getDimensionPixelSize(
+                        R.dimen.alerts_card_spacing
+                );
+
+                card.setLayoutParams(params);
+            }
+
             targetContainer.addView(card);
         }
 
-        if (selectedFilter == AlertFilter.ALL) {
+        breachedSection.setVisibility(
+                (selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.BREACHED)
+                        && breachedCards.getChildCount() > 0
+                        ? View.VISIBLE : View.GONE
+        );
 
-            breachedSection.setVisibility(
-                    breachedCards.getChildCount() > 0
-                            ? View.VISIBLE : View.GONE
-            );
+        attentionSection.setVisibility(
+                (selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.ATTENTION)
+                        && attentionCards.getChildCount() > 0
+                        ? View.VISIBLE : View.GONE
+        );
 
-            attentionSection.setVisibility(
-                    attentionCards.getChildCount() > 0
-                            ? View.VISIBLE : View.GONE
-            );
-
-            passedSection.setVisibility(
-                    passedCards.getChildCount() > 0
-                            ? View.VISIBLE : View.GONE
-            );
-        }
+        passedSection.setVisibility(
+                (selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.PASSED)
+                        && passedCards.getChildCount() > 0
+                        ? View.VISIBLE : View.GONE
+        );
 
         TextView emptyState =
                 findViewById(R.id.textAlertsEmptyState);
+
+        emptyState.setOnClickListener(null);
+        emptyState.setClickable(false);
 
         boolean noVisibleCredentials;
 
@@ -477,6 +550,8 @@ public class AlertsActivity extends ProtectedActivity {
     @Override
     protected void onStop() {
         activityStarted = false;
+        credentialsLoading = false;
+        credentialsLoadFailed = false;
         credentialLoadGeneration++;
         cancelActiveBreachRequests();
         latestBreachCheckIds.clear();
@@ -484,11 +559,27 @@ public class AlertsActivity extends ProtectedActivity {
         loadedCredentials.clear();
         breachResults.clear();
 
-        LinearLayout attentionCards =
-                findViewById(R.id.layoutAlertsAttentionCards);
+        int[] cardContainerIds = {
+                R.id.layoutAlertsBreachedCards,
+                R.id.layoutAlertsAttentionCards,
+                R.id.layoutAlertsPassedCards
+        };
 
-        if (attentionCards != null) {
-            attentionCards.removeAllViews();
+        for (int containerId : cardContainerIds) {
+            LinearLayout container = findViewById(containerId);
+
+            if (container != null) {
+                container.removeAllViews();
+            }
+        }
+
+        TextView emptyState =
+                findViewById(R.id.textAlertsEmptyState);
+
+        if (emptyState != null) {
+            emptyState.setOnClickListener(null);
+            emptyState.setClickable(false);
+            emptyState.setVisibility(View.GONE);
         }
 
         super.onStop();
@@ -543,6 +634,47 @@ public class AlertsActivity extends ProtectedActivity {
 
             chip.setSelected(isSelected);
         }
+    }
+
+    private void retryAttentionCredentials() {
+
+        if (!activityStarted
+                || SafeKeySession.getState() != SessionState.UNLOCKED
+                || !SafeKeySession.recordActivity()) {
+            return;
+        }
+
+        for (Credential credential : loadedCredentials) {
+
+            long credentialId = credential.getId();
+
+            // Do not duplicate a check already in progress.
+            if (activeBreachRequests.containsKey(credentialId)) {
+                continue;
+            }
+
+            PasswordBreachResult result =
+                    breachResults.get(credentialId);
+
+            if (result == null
+                    || result.getStatus() == PasswordBreachResult.Status.NOT_CHECKED
+                    || result.getStatus() == PasswordBreachResult.Status.ERROR) {
+
+                if (credential.getPassword() == null
+                        || credential.getPassword().isEmpty()) {
+                    continue;
+                }
+
+                breachResults.put(
+                        credentialId,
+                        PasswordBreachResult.notChecked()
+                );
+
+                checkCredentialPassword(credential);
+            }
+        }
+
+        refreshAlertsDashboard();
     }
 
     private void setupAlertFilters() {
