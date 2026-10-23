@@ -45,6 +45,14 @@ public class AlertsActivity extends ProtectedActivity {
             new HashMap<>();
     private final List<Credential> loadedCredentials =
             new ArrayList<>();
+
+    private enum AlertFilter {
+        ALL,
+        BREACHED,
+        ATTENTION,
+        PASSED
+    }
+    private AlertFilter selectedFilter = AlertFilter.ALL;
     private boolean activityStarted = false;
     private int credentialLoadGeneration = 0;
     private long nextBreachCheckId = 0;
@@ -97,6 +105,7 @@ public class AlertsActivity extends ProtectedActivity {
         );
 
         setupNavigation();
+        setupAlertFilters();
     }
 
     @Override
@@ -138,7 +147,7 @@ public class AlertsActivity extends ProtectedActivity {
                             );
                         }
 
-                        showUncheckedCredentials(credentials);
+                        refreshAlertsDashboard();
 
                         for (Credential credential : credentials) {
                             checkCredentialPassword(credential);
@@ -162,57 +171,6 @@ public class AlertsActivity extends ProtectedActivity {
         );
     }
 
-
-    private void showUncheckedCredentials(List<Credential> credentials) {
-
-        LinearLayout attentionCards =
-                findViewById(R.id.layoutAlertsAttentionCards);
-
-        attentionCards.removeAllViews();
-
-        for (Credential credential : credentials) {
-
-            final long credentialId = credential.getId();
-
-            View card = LayoutInflater.from(this).inflate(
-                    R.layout.item_alert_credential,
-                    attentionCards,
-                    false
-            );
-
-            TextView name =
-                    card.findViewById(R.id.textAlertCredentialName);
-
-            TextView status =
-                    card.findViewById(R.id.textAlertCredentialStatus);
-
-            name.setText(credential.getTitle());
-            status.setText(R.string.alerts_status_not_checked);
-
-            card.setOnClickListener(view -> {
-
-                if (SafeKeySession.getState() != SessionState.UNLOCKED
-                        || !SafeKeySession.recordActivity()) {
-                    return;
-                }
-
-                Intent intent = new Intent(
-                        AlertsActivity.this,
-                        CredentialDetailsActivity.class
-                );
-
-                intent.putExtra(
-                        CredentialDetailsActivity.EXTRA_ID,
-                        credentialId
-                );
-
-                startActivity(intent);
-            });
-
-            attentionCards.addView(card);
-        }
-    }
-
     private void refreshAlertsDashboard() {
 
         if (!activityStarted
@@ -231,6 +189,34 @@ public class AlertsActivity extends ProtectedActivity {
         LinearLayout passedCards =
                 findViewById(R.id.layoutAlertsPassedCards);
 
+        View breachedSection =
+                findViewById(R.id.layoutAlertsBreachedSection);
+
+        View attentionSection =
+                findViewById(R.id.layoutAlertsAttentionSection);
+
+        View passedSection =
+                findViewById(R.id.layoutAlertsPassedSection);
+
+        breachedSection.setVisibility(
+                selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.BREACHED
+                        ? View.VISIBLE : View.GONE
+        );
+
+        attentionSection.setVisibility(
+                selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.ATTENTION
+                        ? View.VISIBLE : View.GONE
+        );
+
+        passedSection.setVisibility(
+                selectedFilter == AlertFilter.ALL
+                        || selectedFilter == AlertFilter.PASSED
+                        ? View.VISIBLE : View.GONE
+        );
+
+        updateAlertFilterStyling();
         breachedCards.removeAllViews();
         attentionCards.removeAllViews();
         passedCards.removeAllViews();
@@ -361,6 +347,56 @@ public class AlertsActivity extends ProtectedActivity {
 
             targetContainer.addView(card);
         }
+
+        if (selectedFilter == AlertFilter.ALL) {
+
+            breachedSection.setVisibility(
+                    breachedCards.getChildCount() > 0
+                            ? View.VISIBLE : View.GONE
+            );
+
+            attentionSection.setVisibility(
+                    attentionCards.getChildCount() > 0
+                            ? View.VISIBLE : View.GONE
+            );
+
+            passedSection.setVisibility(
+                    passedCards.getChildCount() > 0
+                            ? View.VISIBLE : View.GONE
+            );
+        }
+
+        TextView emptyState =
+                findViewById(R.id.textAlertsEmptyState);
+
+        boolean noVisibleCredentials;
+
+        switch (selectedFilter) {
+            case BREACHED:
+                noVisibleCredentials = breachedCards.getChildCount() == 0;
+                emptyState.setText(R.string.alerts_empty_breached);
+                break;
+
+            case ATTENTION:
+                noVisibleCredentials = attentionCards.getChildCount() == 0;
+                emptyState.setText(R.string.alerts_empty_attention);
+                break;
+
+            case PASSED:
+                noVisibleCredentials = passedCards.getChildCount() == 0;
+                emptyState.setText(R.string.alerts_empty_passed);
+                break;
+
+            case ALL:
+            default:
+                noVisibleCredentials = loadedCredentials.isEmpty();
+                emptyState.setText(R.string.alerts_empty_all);
+                break;
+        }
+
+        emptyState.setVisibility(
+                noVisibleCredentials ? View.VISIBLE : View.GONE
+        );
     }
 
     private void checkCredentialPassword(Credential credential) {
@@ -418,6 +454,7 @@ public class AlertsActivity extends ProtectedActivity {
                             activeBreachRequests.remove(credentialId);
                             latestBreachCheckIds.remove(credentialId);
 
+                            refreshAlertsDashboard();
                         }
                 );
 
@@ -471,6 +508,76 @@ public class AlertsActivity extends ProtectedActivity {
         }
 
         super.onDestroy();
+    }
+
+    private void updateAlertFilterStyling() {
+
+        int[] filterIds = {
+                R.id.filterAlertsAll,
+                R.id.filterAlertsBreached,
+                R.id.filterAlertsAttention,
+                R.id.filterAlertsPassed
+        };
+
+        AlertFilter[] filters = AlertFilter.values();
+
+        for (int i = 0; i < filterIds.length; i++) {
+
+            TextView chip = findViewById(filterIds[i]);
+
+            boolean isSelected = selectedFilter == filters[i];
+
+            chip.setBackgroundResource(
+                    isSelected
+                            ? R.drawable.vault_chip_active_bg
+                            : R.drawable.vault_chip_inactive_bg
+            );
+
+            chip.setTextColor(
+                    getColor(
+                            isSelected
+                                    ? R.color.vault_chip_text_dark
+                                    : R.color.vault_text_secondary
+                    )
+            );
+
+            chip.setSelected(isSelected);
+        }
+    }
+
+    private void setupAlertFilters() {
+
+        findViewById(R.id.filterAlertsAll).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+            selectedFilter = AlertFilter.ALL;
+            refreshAlertsDashboard();
+        });
+
+        findViewById(R.id.filterAlertsBreached).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+            selectedFilter = AlertFilter.BREACHED;
+            refreshAlertsDashboard();
+        });
+
+        findViewById(R.id.filterAlertsAttention).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+            selectedFilter = AlertFilter.ATTENTION;
+            refreshAlertsDashboard();
+        });
+
+        findViewById(R.id.filterAlertsPassed).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+            selectedFilter = AlertFilter.PASSED;
+            refreshAlertsDashboard();
+        });
     }
 
     private void setupNavigation() {

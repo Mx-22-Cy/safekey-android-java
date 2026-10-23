@@ -308,4 +308,8 @@
     <string name="alerts_no_filter_results">No credentials in this category.</string>
     <string name="alerts_load_error">Couldn’t load security alerts.</string>
 
+    <string name="alerts_empty_all">No credentials to display.</string>
+    <string name="alerts_empty_breached">No known breached passwords found among the credentials checked so far.</string>
+    <string name="alerts_empty_attention">No credentials currently need attention.</string>
+    <string name="alerts_empty_passed">No credentials currently have a completed check with no known breach match.</string>
 </resources>

@@ -130,6 +130,16 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <TextView
+                android:id="@+id/textAlertsEmptyState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:padding="@dimen/alerts_screen_horizontal_padding"
+                android:textColor="@color/vault_text_secondary"
+                android:textSize="@dimen/alerts_filter_chip_text_size"
+                android:visibility="gone" />
+
             <!-- High Priority - Breached -->
             <LinearLayout
                 android:id="@+id/layoutAlertsBreachedSection"
