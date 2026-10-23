@@ -3,6 +3,7 @@ package com.safekey.app.alerts;
 import android.os.Bundle;
 import android.content.Intent;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Toast;
 import android.view.LayoutInflater;
 import android.widget.LinearLayout;
@@ -64,6 +65,9 @@ public class AlertsActivity extends ProtectedActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Prevent screenshots and screen recording of sensitive alert information.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         secureVaultCoordinator =
                 ((SafeKeyApplication) getApplication())

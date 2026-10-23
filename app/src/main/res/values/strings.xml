@@ -311,5 +311,5 @@
     <string name="alerts_empty_all">No credentials to check yet.</string>
     <string name="alerts_empty_breached">No known breaches found.</string>
     <string name="alerts_empty_attention">Nothing needs attention.</string>
-    <string name="alerts_empty_passed">No completed checks yet.</string>
+    <string name="alerts_empty_passed">No credentials in this category.</string>
 </resources>
