@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="@dimen/alerts_section_icon_size"
+    android:height="@dimen/alerts_section_icon_size"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/vault_risk_red"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3 A9,9 0,1 1,12 21 A9,9 0,1 1,12 3 Z M12,7.5 V13 M12,16.5 V16.51" />
+
+</vector>
