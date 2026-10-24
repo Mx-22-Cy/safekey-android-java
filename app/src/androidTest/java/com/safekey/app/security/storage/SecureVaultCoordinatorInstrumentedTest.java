@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
 import com.safekey.app.security.crypto.AesGcmException;
 
 import org.junit.After;
@@ -458,13 +459,7 @@ public class SecureVaultCoordinatorInstrumentedTest {
                 }
         );
 
-        assertTrue(
-                "Timed out waiting for successful operation.",
-                latch.await(
-                        CALLBACK_TIMEOUT_SECONDS,
-                        TimeUnit.SECONDS
-                )
-        );
+        CallbackTimeoutDiagnostics.await(latch, CALLBACK_TIMEOUT_SECONDS);
 
         if (error.get() != null) {
             throw error.get();
@@ -503,13 +498,7 @@ public class SecureVaultCoordinatorInstrumentedTest {
                 }
         );
 
-        assertTrue(
-                "Timed out waiting for failed operation.",
-                latch.await(
-                        CALLBACK_TIMEOUT_SECONDS,
-                        TimeUnit.SECONDS
-                )
-        );
+        CallbackTimeoutDiagnostics.await(latch, CALLBACK_TIMEOUT_SECONDS);
 
         if (error.get() == null) {
             fail(

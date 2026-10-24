@@ -3,7 +3,6 @@ package com.safekey.app.auth;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import android.app.Activity;
 import android.app.Dialog;
@@ -26,6 +25,7 @@ import androidx.test.runner.lifecycle.Stage;
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.security.storage.VaultKeyEnvelopeStore;
@@ -48,7 +48,6 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -452,7 +451,9 @@ public class SignInTotpInstrumentedTest {
             SystemClock.sleep(50L);
         }
 
-        fail("Timed out waiting for the expected UI state.");
+        throw CallbackTimeoutDiagnostics.timeout(
+                "Timed out waiting for the expected UI state. Limit: 15 seconds."
+        );
     }
 
     private static void awaitOperation(Operation operation)
@@ -473,8 +474,7 @@ public class SignInTotpInstrumentedTest {
             }
         });
 
-        assertTrue("Timed out waiting for vault operation.",
-                done.await(30, TimeUnit.SECONDS));
+        CallbackTimeoutDiagnostics.await(done, 30L);
 
         if (error.get() != null) {
             throw error.get();
@@ -503,8 +503,7 @@ public class SignInTotpInstrumentedTest {
                                 }
                             }));
 
-            assertTrue("Timed out clearing test biometrics.",
-                    done.await(30, TimeUnit.SECONDS));
+            CallbackTimeoutDiagnostics.await(done, 30L);
 
             if (error.get() != null) {
                 throw error.get();

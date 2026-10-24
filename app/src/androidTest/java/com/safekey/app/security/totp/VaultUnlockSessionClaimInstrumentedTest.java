@@ -11,6 +11,7 @@ import android.os.Looper;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
 
 import org.junit.After;
 import org.junit.Before;
@@ -20,7 +21,6 @@ import org.junit.runner.RunWith;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -150,10 +150,7 @@ public class VaultUnlockSessionClaimInstrumentedTest {
 
     private static void await(CountDownLatch latch)
             throws InterruptedException {
-        assertTrue(
-                "Timed out waiting for callback.",
-                latch.await(10, TimeUnit.SECONDS)
-        );
+        CallbackTimeoutDiagnostics.await(latch, 10L);
     }
 
     private static void drainMain() throws InterruptedException {

@@ -20,6 +20,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
 import com.safekey.app.security.biometric.BiometricVaultKeyManager;
 import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.Argon2idMasterKeyDeriver;
@@ -44,7 +45,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -509,10 +509,7 @@ public class SecureVaultCoordinatorTotpInstrumentedTest {
 
     private static void await(CountDownLatch latch)
             throws InterruptedException {
-        assertTrue(
-                "Timed out waiting for callback.",
-                latch.await(WAIT_SECONDS, TimeUnit.SECONDS)
-        );
+        CallbackTimeoutDiagnostics.await(latch, WAIT_SECONDS);
     }
 
     private static void drainMain() throws InterruptedException {
