@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="totp_signin_title">Authenticator code</string>
+    <string name="totp_signin_message">Enter the six-digit code from your authenticator app. Switching apps cancels this sign-in.</string>
+    <string name="totp_signin_label">Verification code</string>
+    <string name="totp_signin_cancel">Cancel</string>
+    <string name="totp_signin_verify">Verify</string>
+    <string name="totp_signin_invalid_format">Enter a six-digit code.</string>
+    <string name="totp_signin_invalid_code">That code was not accepted. Use a current, unused code.</string>
+    <plurals name="totp_signin_retry_wait">
+        <item quantity="one">Too many attempts. Try again in %1$d second.</item>
+        <item quantity="other">Too many attempts. Try again in %1$d seconds.</item>
+    </plurals>
+    <string name="totp_signin_opening">Opening your vault…</string>
+    <string name="totp_signin_cancelled">Sign-in cancelled. Enter your password again.</string>
+    <string name="totp_signin_expired">Sign-in expired. Please sign in again.</string>
+    <string name="totp_signin_failed">Verification could not be completed. Please sign in again.</string>
+</resources>
