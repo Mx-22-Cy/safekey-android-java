@@ -38,6 +38,7 @@ import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.generator.GeneratorActivity;
+import com.safekey.app.alerts.AlertsActivity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -966,11 +967,13 @@ public class VaultActivity extends ProtectedActivity {
                         return;
                     }
 
-                    Toast.makeText(
-                            VaultActivity.this,
-                            R.string.home_alerts_navigation_pending,
-                            Toast.LENGTH_SHORT
-                    ).show();
+                    Intent intent =
+                            new Intent(
+                                    VaultActivity.this,
+                                    AlertsActivity.class
+                            );
+
+                    startActivity(intent);
                 }
         );
 

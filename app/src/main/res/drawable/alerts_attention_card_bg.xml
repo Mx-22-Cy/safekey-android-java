@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="@color/alerts_attention_surface" />
+
+    <stroke
+        android:width="@dimen/alerts_card_border_width"
+        android:color="@color/alerts_attention_border" />
+
+    <corners android:radius="@dimen/alerts_card_corner_radius" />
+
+</shape>
