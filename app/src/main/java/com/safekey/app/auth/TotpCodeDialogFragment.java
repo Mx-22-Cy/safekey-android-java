@@ -233,8 +233,9 @@ public final class TotpCodeDialogFragment extends DialogFragment {
         codeInput.setEnabled(false);
         verifyButton.setEnabled(false);
 
-        long seconds = (remaining + 999L) / 1_000L;
-        message.setText(getString(R.string.totp_signin_retry_wait, seconds));
+        int seconds = (int) ((remaining + 999L) / 1_000L);
+        message.setText(getResources().getQuantityString(
+                R.plurals.totp_signin_retry_wait, seconds, seconds));
         handler.postDelayed(retryTick, Math.min(1_000L, remaining));
     }
 

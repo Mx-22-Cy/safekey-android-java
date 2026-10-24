@@ -46,7 +46,6 @@
         android:digits="0123456789"
         android:fontFamily="monospace"
         android:gravity="center"
-        android:hint="@string/totp_signin_hint"
         android:imeOptions="actionDone"
         android:importantForAutofill="no"
         android:inputType="number"
