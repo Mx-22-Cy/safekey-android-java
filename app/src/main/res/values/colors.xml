@@ -58,4 +58,14 @@
     <color name="vault_error_background">#2A1A1D</color>
     <color name="vault_error_border">#45262A</color>
 
+
+    <!-- Week 9 Security Alerts -->
+    <color name="alerts_breached_surface">#1F1B30</color>
+    <color name="alerts_attention_surface">#282A2E</color>
+    <color name="alerts_passed_surface">#13262D</color>
+
+    <color name="alerts_breached_border">#4A2639</color>
+    <color name="alerts_attention_border">#51432E</color>
+    <color name="alerts_passed_border">#21473F</color>
+
 </resources>

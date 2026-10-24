@@ -24,6 +24,7 @@ import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
+import com.safekey.app.alerts.AlertsActivity;
 
 public class HomeActivity extends ProtectedActivity {
 
@@ -199,10 +200,20 @@ public class HomeActivity extends ProtectedActivity {
         );
 
         navAlerts.setOnClickListener(
-                view ->
-                        showProtectedPlaceholder(
-                                R.string.home_alerts_navigation_pending
-                        )
+                view -> {
+
+                    if (!requireUnlockedSession()) {
+                        return;
+                    }
+
+                    Intent intent =
+                            new Intent(
+                                    HomeActivity.this,
+                                    AlertsActivity.class
+                            );
+
+                    startActivity(intent);
+                }
         );
 
         navSettings.setOnClickListener(

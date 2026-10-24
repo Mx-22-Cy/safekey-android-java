@@ -275,4 +275,41 @@
     <string name="home_vault_count_unavailable" translatable="false">—</string>
     <string name="home_vault_count_value" translatable="false">%1$d</string>
     <string name="home_vault_counts_error">Could not load vault counts. Tap Home to retry.</string>
+
+    <!-- Week 9 Security Alerts -->
+    <string name="alerts_title">Security Alerts</string>
+
+    <!-- Filters -->
+    <string name="alerts_filter_all">All</string>
+    <string name="alerts_filter_breached">Breached</string>
+    <string name="alerts_filter_attention">Attention</string>
+    <string name="alerts_filter_passed">Passed</string>
+
+    <!-- Section headings -->
+    <string name="alerts_section_breached">High Priority — Breached</string>
+    <string name="alerts_section_attention">Needs Attention</string>
+    <string name="alerts_section_passed">No Known Breach</string>
+
+    <!-- Credential status messages -->
+    <string name="alerts_status_breached">Compromised password detected</string>
+    <string name="alerts_status_not_checked">Password not checked yet</string>
+    <string name="alerts_status_offline">Check unavailable — Offline</string>
+    <string name="alerts_status_error">Unable to check password</string>
+    <string name="alerts_status_passed">Not found in known breach data</string>
+    <plurals name="alerts_occurrences">
+        <item quantity="one">%d occurrence</item>
+        <item quantity="other">%d occurrences</item>
+    </plurals>
+
+    <!-- Actions -->
+    <string name="alerts_retry_all">Retry All</string>
+
+    <!-- Loading, empty and error states -->
+    <string name="alerts_loading">Checking saved credentials…</string>
+    <string name="alerts_load_error">Couldn’t load security alerts. Tap here to retry.</string>
+
+    <string name="alerts_empty_all">No credentials to check yet.</string>
+    <string name="alerts_empty_breached">No known breaches found.</string>
+    <string name="alerts_empty_attention">Nothing needs attention.</string>
+    <string name="alerts_empty_passed">No credentials in this category.</string>
 </resources>
