@@ -592,10 +592,21 @@ public final class DecoyVaultCoordinator
                     schedulingError
             );
 
-            deliverError(
-                    callback,
-                    originalError
-            );
+            // The failure callback may run on the Android main thread.
+            // Use an emergency worker rather than blocking the UI.
+            try {
+                Thread fallbackWorker = new Thread(
+                        () -> {
+                            cleanupFailedCreation(originalError);
+                            deliverError(callback, originalError);
+                        },
+                        "SafeKey-Decoy-Recovery"
+                );
+                fallbackWorker.start();
+            } catch (RuntimeException threadError) {
+                originalError.addSuppressed(threadError);
+                deliverError(callback, originalError);
+            }
         }
     }
 

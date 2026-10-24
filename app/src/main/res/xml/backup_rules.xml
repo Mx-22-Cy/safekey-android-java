@@ -10,11 +10,29 @@
     <exclude
         domain="database"
         path="safekey.db" />
+    <exclude
+        domain="database"
+        path="safekey.db-wal" />
+    <exclude
+        domain="database"
+        path="safekey.db-shm" />
+    <exclude
+        domain="database"
+        path="safekey.db-journal" />
 
     <!-- Week 10: always-present secondary / Decoy database. -->
     <exclude
         domain="database"
         path="safekey_secondary.db" />
+    <exclude
+        domain="database"
+        path="safekey_secondary.db-wal" />
+    <exclude
+        domain="database"
+        path="safekey_secondary.db-shm" />
+    <exclude
+        domain="database"
+        path="safekey_secondary.db-journal" />
 
     <!-- Primary vault key envelope. -->
     <exclude

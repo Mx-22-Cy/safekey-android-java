@@ -80,17 +80,19 @@ public final class DecoyVaultStorage {
                     true;
 
         } finally {
-            databaseManager.close();
-
-            Arrays.fill(
-                    coverDatabaseKey,
-                    (byte) 0
-            );
-
-            if (!createdSuccessfully) {
-                deleteDatabaseIfPresent(
-                        applicationContext
+            try {
+                databaseManager.close();
+            } finally {
+                Arrays.fill(
+                        coverDatabaseKey,
+                        (byte) 0
                 );
+
+                if (!createdSuccessfully) {
+                    deleteDatabaseIfPresent(
+                            applicationContext
+                    );
+                }
             }
         }
     }
