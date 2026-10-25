@@ -418,11 +418,19 @@ public final class SafeKeyApplication extends Application {
     ) {
         mainHandler.post(
                 () -> {
+                    // Read session state first. It can block behind
+                    // a concurrent unlock/lock and cleanup transition.
+                    boolean sessionLocked =
+                            SafeKeySession.getState() == SessionState.LOCKED;
+
                     boolean ready;
 
+                    // Recheck the cleanup generation only after
+                    // the potentially blocking session-state read.
                     synchronized (this) {
                         ready =
-                                cleanupGeneration == expectedCleanupGeneration
+                                sessionLocked
+                                        && cleanupGeneration == expectedCleanupGeneration
                                         && !cleanupInProgress
                                         && !cleanupFailed
                                         && pendingCloses == 0
@@ -430,9 +438,7 @@ public final class SafeKeyApplication extends Application {
                                         && !decoyVaultCoordinator.isDecoyVaultOpen();
                     }
 
-                    if (!ready
-                            || SafeKeySession.getState()
-                                    != SessionState.LOCKED) {
+                    if (!ready) {
                         callback.onError(
                                 new IllegalStateException(
                                         "Authentication readiness expired."

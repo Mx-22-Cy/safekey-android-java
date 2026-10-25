@@ -91,6 +91,244 @@ public class DecoyVaultCoordinatorInstrumentedTest {
     }
 
     @Test
+    public void pendingEnrollment_afterCloseCompletes_cannotCreateDecoy()
+            throws Exception {
+
+        java.lang.reflect.Field executorField =
+                DecoyVaultCoordinator.class
+                        .getDeclaredField("securityExecutor");
+        executorField.setAccessible(true);
+
+        java.util.concurrent.ExecutorService executor =
+                (java.util.concurrent.ExecutorService)
+                        executorField.get(decoyCoordinator);
+
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        CountDownLatch enrollmentCompleted = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean enrollmentSucceeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> enrollmentError =
+                new AtomicReference<>();
+
+        java.util.concurrent.Future<?> blockingTask =
+                executor.submit(() -> {
+                    workerStarted.countDown();
+
+                    try {
+                        releaseWorker.await(60, TimeUnit.SECONDS);
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+
+        try {
+            assertTrue(workerStarted.await(
+                    CALLBACK_TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS
+            ));
+
+            decoyCoordinator.createDecoyVault(
+                    password("decoy enrollment regression password"),
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            enrollmentSucceeded.set(true);
+                            enrollmentCompleted.countDown();
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            enrollmentError.set(exception);
+                            enrollmentCompleted.countDown();
+                        }
+                    }
+            );
+
+            // Close finishes before the queued enrollment resumes.
+            awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        } finally {
+            releaseWorker.countDown();
+        }
+
+        blockingTask.get(
+                CALLBACK_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS
+        );
+
+        assertTrue(enrollmentCompleted.await(
+                CALLBACK_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS
+        ));
+
+        assertFalse(enrollmentSucceeded.get());
+        assertNotNull(enrollmentError.get());
+
+        // The cancelled enrollment must not create a vault.
+        assertFalse(decoyCoordinator.hasDecoyVault());
+        assertFalse(decoyCoordinator.isDecoyVaultOpen());
+    }
+    @Test
+    public void enrollmentPausedAfterDerivation_closeRejectsCreation()
+            throws Exception {
+
+        CountDownLatch derivationPaused = new CountDownLatch(1);
+        CountDownLatch resumeDerivation = new CountDownLatch(1);
+        CountDownLatch enrollmentCompleted = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean enrollmentSucceeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> enrollmentError =
+                new AtomicReference<>();
+
+        decoyCoordinator.enrollmentDerivationTestHook = () -> {
+            derivationPaused.countDown();
+
+            try {
+                if (!resumeDerivation.await(
+                        CALLBACK_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS)) {
+                    throw new IllegalStateException(
+                            "Timed out waiting to resume enrollment."
+                    );
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(exception);
+            }
+        };
+
+        try {
+            decoyCoordinator.createDecoyVault(
+                    password("decoy derivation regression password"),
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            enrollmentSucceeded.set(true);
+                            enrollmentCompleted.countDown();
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            enrollmentError.set(exception);
+                            enrollmentCompleted.countDown();
+                        }
+                    }
+            );
+
+            // Enrollment has completed Argon2id derivation.
+            assertTrue(
+                    "Enrollment did not reach the derivation pause.",
+                    derivationPaused.await(
+                            CALLBACK_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            // Close the vault before allowing enrollment to continue.
+            awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+            assertFalse(decoyCoordinator.hasDecoyVault());
+            assertFalse(decoyCoordinator.isDecoyVaultOpen());
+
+        } finally {
+            resumeDerivation.countDown();
+            decoyCoordinator.enrollmentDerivationTestHook = () -> {};
+        }
+
+        assertTrue(
+                "Enrollment callback did not finish.",
+                enrollmentCompleted.await(
+                        CALLBACK_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        assertFalse(
+                "Cancelled enrollment must not succeed.",
+                enrollmentSucceeded.get()
+        );
+
+        assertNotNull(
+                "Cancelled enrollment must report an error.",
+                enrollmentError.get()
+        );
+
+        assertFalse(
+                "Cancelled enrollment must not save an envelope.",
+                decoyCoordinator.hasDecoyVault()
+        );
+
+        assertFalse(
+                "Cancelled enrollment must not reopen the database.",
+                decoyCoordinator.isDecoyVaultOpen()
+        );
+    }
+    @Test
+    public void staleCreationCleanup_cannotDeleteNewerDecoyVault()
+            throws Exception {
+
+        java.lang.reflect.Field generationField =
+                DecoyVaultCoordinator.class
+                        .getDeclaredField("unlockGeneration");
+
+        generationField.setAccessible(true);
+
+        long staleGeneration =
+                generationField.getLong(decoyCoordinator);
+
+        // Invalidate the old generation.
+        awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        // Create a legitimate vault in the newer generation.
+        awaitSuccess(callback ->
+                decoyCoordinator.createDecoyVault(
+                        password("newer decoy lifecycle password"),
+                        callback
+                )
+        );
+
+        assertTrue(decoyCoordinator.hasDecoyVault());
+        assertTrue(decoyCoordinator.isDecoyVaultOpen());
+
+        // Simulate delayed cleanup from an older enrollment.
+        java.lang.reflect.Method cleanupMethod =
+                DecoyVaultCoordinator.class.getDeclaredMethod(
+                        "cleanupFailedCreation",
+                        Exception.class,
+                        long.class
+                );
+
+        cleanupMethod.setAccessible(true);
+
+        cleanupMethod.invoke(
+                decoyCoordinator,
+                new IllegalStateException("Simulated stale failure"),
+                staleGeneration
+        );
+
+        // The newer vault and its key envelope must survive.
+        assertTrue(decoyCoordinator.hasDecoyVault());
+        assertTrue(DecoyVaultStorage.databaseFileExists(context));
+        assertTrue(decoyCoordinator.isDecoyVaultOpen());
+
+        // Verify the database can still be reopened.
+        awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        awaitSuccess(callback ->
+                decoyCoordinator.unlockDecoyVault(
+                        password("newer decoy lifecycle password"),
+                        callback
+                )
+        );
+
+        assertTrue(decoyCoordinator.isDecoyVaultOpen());
+    }
+    @Test
     public void pendingUnlock_afterCloseCompletes_cannotReopenDecoy()
             throws Exception {
 

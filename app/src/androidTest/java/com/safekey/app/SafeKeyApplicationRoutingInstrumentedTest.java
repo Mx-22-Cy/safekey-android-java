@@ -116,6 +116,147 @@ public class SafeKeyApplicationRoutingInstrumentedTest {
         awaitAuthenticationReady();
     }
     @Test
+    public void readinessBlockedOnSessionLock_rejectsConcurrentCleanup()
+            throws Exception {
+
+        CountDownLatch monitorHeld = new CountDownLatch(1);
+        CountDownLatch allowTransition = new CountDownLatch(1);
+        CountDownLatch callbackCompleted = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean succeeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> callbackError =
+                new AtomicReference<>();
+
+        AtomicReference<Throwable> workerError =
+                new AtomicReference<>();
+
+        Thread holder = new Thread(() -> {
+            synchronized (SafeKeySession.getManager()) {
+                monitorHeld.countDown();
+
+                try {
+                    if (!allowTransition.await(
+                            CALLBACK_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS)) {
+                        throw new AssertionError(
+                                "Timed out waiting for session transition."
+                        );
+                    }
+
+                    // Begin a newer cleanup while the old
+                    // readiness callback waits for this monitor.
+                    SafeKeySession.unlockAfterAuthentication();
+                    SafeKeySession.lock();
+
+                } catch (Throwable throwable) {
+                    workerError.set(throwable);
+                }
+            }
+        }, "readiness-session-lock-holder");
+
+        try {
+            InstrumentationRegistry.getInstrumentation()
+                    .runOnMainSync(() -> {
+
+                        application.prepareForVaultAuthentication(
+                                new VaultDataService.SimpleCallback() {
+                                    @Override
+                                    public void onSuccess() {
+                                        succeeded.set(true);
+                                        callbackCompleted.countDown();
+                                    }
+
+                                    @Override
+                                    public void onError(Exception exception) {
+                                        callbackError.set(exception);
+                                        callbackCompleted.countDown();
+                                    }
+                                }
+                        );
+
+                        holder.start();
+
+                        try {
+                            if (!monitorHeld.await(
+                                    CALLBACK_TIMEOUT_SECONDS,
+                                    TimeUnit.SECONDS)) {
+                                throw new AssertionError(
+                                        "Session monitor was not acquired."
+                                );
+                            }
+                        } catch (InterruptedException exception) {
+                            Thread.currentThread().interrupt();
+                            throw new AssertionError(exception);
+                        }
+                    });
+
+            // Verify the main thread reached the session-state
+            // read and is blocked by the test-controlled monitor.
+            Thread mainThread =
+                    android.os.Looper.getMainLooper().getThread();
+
+            long deadline =
+                    android.os.SystemClock.elapsedRealtime() + 10000L;
+
+            boolean observedBlockedRead = false;
+
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                if (mainThread.getState() == Thread.State.BLOCKED) {
+                    for (StackTraceElement frame : mainThread.getStackTrace()) {
+                        if (frame.getClassName().equals(
+                                "com.safekey.app.session.logic.VaultSessionManager")
+                                && frame.getMethodName().equals("getState")) {
+                            observedBlockedRead = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (observedBlockedRead) {
+                    break;
+                }
+
+                Thread.sleep(10);
+            }
+
+            assertTrue(
+                    "Readiness did not block at the session-state read.",
+                    observedBlockedRead
+            );
+
+        } finally {
+            allowTransition.countDown();
+            holder.join(
+                    TimeUnit.SECONDS.toMillis(CALLBACK_TIMEOUT_SECONDS)
+            );
+        }
+
+        assertFalse("Session worker did not finish.", holder.isAlive());
+        assertNull("Session transition failed.", workerError.get());
+
+        assertTrue(
+                "Readiness callback did not finish.",
+                callbackCompleted.await(
+                        CALLBACK_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        assertFalse(
+                "Stale readiness callback must not succeed.",
+                succeeded.get()
+        );
+
+        assertNotNull(
+                "Stale readiness must return an error.",
+                callbackError.get()
+        );
+
+        awaitAuthenticationReady();
+    }
+    @Test
     public void application_initializesBothVaultCoordinators() {
         assertNotNull(
                 application.getSecureVaultCoordinator()

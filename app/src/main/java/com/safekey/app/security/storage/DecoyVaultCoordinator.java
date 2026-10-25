@@ -50,6 +50,9 @@ public final class DecoyVaultCoordinator
     private final Handler mainHandler;
 
     private final Object lifecycleLock = new Object();
+
+    // Test-only scheduling hook; does nothing during normal execution.
+    volatile Runnable enrollmentDerivationTestHook = () -> {};
     private long unlockGeneration = 0L;
     private boolean closeInProgress = false;
 
@@ -115,12 +118,28 @@ public final class DecoyVaultCoordinator
                         decoyPassword
                 );
 
+        final long requestGeneration;
+
+        synchronized (lifecycleLock) {
+            if (closeInProgress) {
+                clear(passwordCopy);
+                deliverError(
+                        callback,
+                        new IllegalStateException("Decoy Vault is closing.")
+                );
+                return;
+            }
+
+            requestGeneration = unlockGeneration;
+        }
+
         try {
             securityExecutor.execute(
                     () ->
                             createDecoyVaultInBackground(
                                     passwordCopy,
-                                    callback
+                                    callback,
+                                    requestGeneration
                             )
             );
 
@@ -135,7 +154,8 @@ public final class DecoyVaultCoordinator
 
     private void createDecoyVaultInBackground(
             char[] decoyPassword,
-            VaultDataService.SimpleCallback callback
+            VaultDataService.SimpleCallback callback,
+            long requestGeneration
     ) {
         byte[] salt = null;
         byte[] derivedMasterKey = null;
@@ -163,6 +183,8 @@ public final class DecoyVaultCoordinator
                             salt
                     );
 
+            enrollmentDerivationTestHook.run();
+
             databaseKey =
                     new byte[
                             SafeKeyDatabase
@@ -186,7 +208,15 @@ public final class DecoyVaultCoordinator
              * forgotten random key. Replace it with the actual
              * Decoy SQLCipher vault during enrollment.
              */
-            DecoyVaultStorage.prepareDatabaseForEnrollment(
+            synchronized (lifecycleLock) {
+                if (requestGeneration != unlockGeneration
+                        || closeInProgress) {
+                    throw new IllegalStateException(
+                            "Decoy enrollment was invalidated."
+                    );
+                }
+
+                DecoyVaultStorage.prepareDatabaseForEnrollment(
                     applicationContext
             );
 
@@ -215,7 +245,19 @@ public final class DecoyVaultCoordinator
                     new VaultDataService.SimpleCallback() {
                         @Override
                         public void onSuccess() {
-                            callback.onSuccess();
+                            synchronized (lifecycleLock) {
+                                if (requestGeneration != unlockGeneration
+                                        || closeInProgress) {
+                                    callback.onError(
+                                            new IllegalStateException(
+                                                    "Decoy enrollment was invalidated."
+                                            )
+                                    );
+                                    return;
+                                }
+
+                                callback.onSuccess();
+                            }
                         }
 
                         @Override
@@ -224,18 +266,21 @@ public final class DecoyVaultCoordinator
                         ) {
                             scheduleCreationFailureCleanup(
                                     callback,
-                                    exception
+                                    exception,
+                                    requestGeneration
                             );
                         }
                     }
             );
+            }
 
         } catch (Exception exception) {
             if (enrollmentStarted
                     || envelopeSaved) {
 
                 cleanupFailedCreation(
-                        exception
+                        exception,
+                        requestGeneration
                 );
             }
 
@@ -652,13 +697,15 @@ public final class DecoyVaultCoordinator
 
     private void scheduleCreationFailureCleanup(
             VaultDataService.SimpleCallback callback,
-            Exception originalError
+            Exception originalError,
+            long requestGeneration
     ) {
         try {
             securityExecutor.execute(
                     () -> {
                         cleanupFailedCreation(
-                                originalError
+                                originalError,
+                                requestGeneration
                         );
 
                         deliverError(
@@ -678,7 +725,10 @@ public final class DecoyVaultCoordinator
             try {
                 Thread fallbackWorker = new Thread(
                         () -> {
-                            cleanupFailedCreation(originalError);
+                            cleanupFailedCreation(
+                                    originalError,
+                                    requestGeneration
+                            );
                             deliverError(callback, originalError);
                         },
                         "SafeKey-Decoy-Recovery"
@@ -692,6 +742,21 @@ public final class DecoyVaultCoordinator
     }
 
     private void cleanupFailedCreation(
+            Exception originalError,
+            long requestGeneration
+    ) {
+        synchronized (lifecycleLock) {
+            // An old enrollment must never erase a newer vault.
+            if (requestGeneration != unlockGeneration
+                    || closeInProgress) {
+                return;
+            }
+
+            cleanupFailedCreationStorageOnly(originalError);
+        }
+    }
+
+    private void cleanupFailedCreationStorageOnly(
             Exception originalError
     ) {
         try {
