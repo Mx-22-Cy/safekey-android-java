@@ -39,6 +39,10 @@
             android:name=".auth.SignInActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".auth.ChangeMasterPasswordActivity"
+            android:exported="false" />
+
         <!--
             Week 3 Home / Dashboard.
             It is not externally launchable.

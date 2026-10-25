@@ -15,6 +15,8 @@ public final class VaultSessionManager {
     private SessionState state =
             SessionState.LOCKED;
 
+    private long authenticationGeneration;
+
     private long lastActivityMillis =
             -1L;
 
@@ -57,11 +59,27 @@ public final class VaultSessionManager {
     }
 
     public synchronized void unlockAfterAuthentication() {
+        authenticationGeneration++;
         state =
                 SessionState.UNLOCKED;
 
         lastActivityMillis =
                 monotonicTimeMillis.getAsLong();
+    }
+
+    /** Returns -1 for a locked/expired session; each authentication is distinct. */
+    public synchronized long getAuthenticationGeneration() {
+        return getState() == SessionState.UNLOCKED ? authenticationGeneration : -1L;
+    }
+
+    /** Atomically guards a short commit against lock, expiry, and reauthentication. */
+    public synchronized boolean runIfCurrentAuthentication(long generation, Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (generation < 0L || getAuthenticationGeneration() != generation) {
+            return false;
+        }
+        action.run();
+        return true;
     }
 
     public synchronized SessionState getState() {

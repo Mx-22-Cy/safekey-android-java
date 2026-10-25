@@ -46,6 +46,11 @@ import java.util.Arrays;
 public class SignInActivity extends AppCompatActivity
         implements TotpCodeDialogFragment.Listener {
 
+    public static final String REQUIRE_MASTER_PASSWORD =
+            "com.safekey.app.auth.REQUIRE_MASTER_PASSWORD";
+
+    private char[] pendingMasterPasswordRecheck;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private EditText editMasterPassword;
@@ -179,6 +184,7 @@ public class SignInActivity extends AppCompatActivity
             abortSignIn(0);
         }
 
+        clearPendingMasterPasswordRecheck();
         clearPendingBiometricEnrollmentPassword();
         removePostAuthenticationTimeout();
         super.onDestroy();
@@ -210,6 +216,11 @@ public class SignInActivity extends AppCompatActivity
 
         if (shouldOfferBiometricEnrollment()) {
             pendingBiometricEnrollmentPassword = password.clone();
+        }
+        clearPendingMasterPasswordRecheck();
+        if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
+                != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
+            pendingMasterPasswordRecheck = password.clone();
         }
 
         try {
@@ -245,6 +256,7 @@ public class SignInActivity extends AppCompatActivity
     }
 
     private void unlockVaultWithBiometrics() {
+        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)) { return; }
         if (!resumed || busy) {
             return;
         }
@@ -411,6 +423,14 @@ public class SignInActivity extends AppCompatActivity
         navigatingToHome = true;
 
         SafeKeySession.unlockAfterAuthentication();
+        try {
+            ((SafeKeyApplication) getApplication()).getMasterPasswordHealth()
+                    .recheckAfterAuthentication(pendingMasterPasswordRecheck);
+        } catch (RuntimeException ignored) {
+            // Checking availability cannot turn a valid authentication into a failure.
+        } finally {
+            clearPendingMasterPasswordRecheck();
+        }
 
         try {
             Intent intent = new Intent(this, HomeActivity.class);
@@ -427,6 +447,7 @@ public class SignInActivity extends AppCompatActivity
     }
 
     private void abortSignIn(int messageId) {
+        clearPendingMasterPasswordRecheck();
         generation++;
         pendingUiAction = null;
         authenticated = false;
@@ -512,7 +533,8 @@ public class SignInActivity extends AppCompatActivity
         }
 
         biometricUnlockSection.setVisibility(
-                show ? View.VISIBLE : View.GONE);
+                show && !getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)
+                        ? View.VISIBLE : View.GONE);
     }
 
     private boolean shouldOfferBiometricEnrollment() {
@@ -681,6 +703,13 @@ public class SignInActivity extends AppCompatActivity
             continueToHome(token);
         } finally {
             Arrays.fill(password, '\0');
+        }
+    }
+
+    private void clearPendingMasterPasswordRecheck() {
+        if (pendingMasterPasswordRecheck != null) {
+            Arrays.fill(pendingMasterPasswordRecheck, '\0');
+            pendingMasterPasswordRecheck = null;
         }
     }
 

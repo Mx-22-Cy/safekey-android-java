@@ -3,6 +3,7 @@ package com.safekey.app.home;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -21,6 +22,9 @@ import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.auth.ChangeMasterPasswordActivity;
+import com.safekey.app.auth.MasterPasswordHealth;
+import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
@@ -29,6 +33,11 @@ import com.safekey.app.alerts.AlertsActivity;
 public class HomeActivity extends ProtectedActivity {
 
     private static final int PREVIEW_SECURITY_SCORE = 82;
+
+    private final Runnable masterPasswordHealthChanged = this::refreshMasterPasswordHealth;
+    private MasterPasswordHealth masterPasswordHealth;
+    private TextView textMasterPasswordHealth;
+    private Button buttonCheckMasterPassword;
 
     private SecurityScoreView securityScoreView;
 
@@ -47,6 +56,7 @@ public class HomeActivity extends ProtectedActivity {
     ) {
 
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -164,6 +174,24 @@ public class HomeActivity extends ProtectedActivity {
                         R.id.navSettings
                 );
 
+        masterPasswordHealth = ((SafeKeyApplication) getApplication()).getMasterPasswordHealth();
+        textMasterPasswordHealth = findViewById(R.id.textMasterPasswordHealth);
+        buttonCheckMasterPassword = findViewById(R.id.buttonCheckMasterPassword);
+        buttonCheckMasterPassword.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) { return; }
+            SafeKeySession.lock();
+            Intent intent = new Intent(this, SignInActivity.class);
+            intent.putExtra(SignInActivity.REQUIRE_MASTER_PASSWORD, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+        findViewById(R.id.buttonChangeMasterPassword).setOnClickListener(view -> {
+            if (requireUnlockedSession()) {
+                startActivity(new Intent(this, ChangeMasterPasswordActivity.class));
+            }
+        });
+
         showPreviewSecurityData();
         showVaultCountsUnavailable();
 
@@ -245,12 +273,16 @@ public class HomeActivity extends ProtectedActivity {
         }
 
         countsActive = true;
+        masterPasswordHealth.addListener(masterPasswordHealthChanged);
+        refreshMasterPasswordHealth();
         refreshVaultCounts();
     }
 
     @Override
     protected void onPause() {
         countsActive = false;
+        masterPasswordHealth.removeListener(masterPasswordHealthChanged);
+        textMasterPasswordHealth.setText(null);
         countRequestGeneration++;
         showVaultCountsUnavailable();
 
@@ -263,6 +295,19 @@ public class HomeActivity extends ProtectedActivity {
         countRequestGeneration++;
 
         super.onDestroy();
+    }
+
+    private void refreshMasterPasswordHealth() {
+        if (!countsActive || isFinishing() || isDestroyed()
+                || SafeKeySession.getManager().getRemainingInactivityMillis() <= 0L) { return; }
+        MasterPasswordCheckStatus status = masterPasswordHealth.getStatus();
+        boolean pending = status == MasterPasswordCheckStatus.PENDING;
+        textMasterPasswordHealth.setVisibility(status == MasterPasswordCheckStatus.CHECKED
+                ? View.GONE : View.VISIBLE);
+        textMasterPasswordHealth.setText(status == MasterPasswordCheckStatus.CHECKED ? null
+                : getString(pending ? R.string.master_password_pending_notice
+                        : R.string.master_password_breached_notice));
+        buttonCheckMasterPassword.setVisibility(pending ? View.VISIBLE : View.GONE);
     }
 
     private boolean requireUnlockedSession() {
