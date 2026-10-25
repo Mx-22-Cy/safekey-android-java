@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="@dimen/settings_edit_icon_size"
+    android:height="@dimen/settings_edit_icon_size"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Phone outline -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/auth_logo_stroke"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9.5,2.5 L14.5,2.5 A2.5,2.5 0,0 1,17 5 L17,19 A2.5,2.5 0,0 1,14.5 21.5 L9.5,21.5 A2.5,2.5 0,0 1,7 19 L7,5 A2.5,2.5 0,0 1,9.5 2.5 Z" />
+
+    <!-- Phone home indicator -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/auth_logo_stroke"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:pathData="M11,18 L13,18" />
+
+</vector>

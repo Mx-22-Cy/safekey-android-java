@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings icon backgrounds -->
+    <color name="settings_icon_background">#15302A</color>
+
+    <!-- Destructive actions -->
+    <color name="settings_danger_text">#E5848A</color>
+    <color name="settings_danger_background">#331D29</color>
+
+    <!-- Settings toggle -->
+    <color name="settings_switch_thumb_off">#5B6178</color>
+
+    <!-- Settings status badge -->
+    <color name="settings_badge_background">#12161F</color>
+</resources>

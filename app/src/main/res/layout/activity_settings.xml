@@ -1,0 +1,650 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootSettings"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/auth_background">
+
+    <!-- Scrollable Settings content -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/scrollSettingsContent"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        android:clipToPadding="false"
+        android:paddingStart="@dimen/settings_screen_padding"
+        android:paddingEnd="@dimen/settings_screen_padding"
+        android:paddingTop="@dimen/settings_header_top_margin"
+        android:paddingBottom="@dimen/settings_content_bottom_padding"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/layoutSettingsSections"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Settings title -->
+            <TextView
+                android:id="@+id/textSettingsTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/settings_header_bottom_spacing"
+                android:text="@string/settings_title"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="@dimen/settings_title_size"
+                android:fontFamily="serif"
+                android:textStyle="bold" />
+
+            <!-- Local Vault information card -->
+            <LinearLayout
+                android:id="@+id/cardSettingsLocalVault"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/auth_card_bg"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:baselineAligned="false"
+                android:paddingStart="@dimen/settings_card_horizontal_padding"
+                android:paddingEnd="@dimen/settings_card_horizontal_padding"
+                android:paddingTop="@dimen/settings_card_vertical_padding"
+                android:paddingBottom="@dimen/settings_card_vertical_padding">
+
+                <!-- Vault icon -->
+                <FrameLayout
+                    android:layout_width="@dimen/settings_vault_icon_size"
+                    android:layout_height="@dimen/settings_vault_icon_size"
+                    android:background="@drawable/settings_vault_icon_bg">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:padding="@dimen/settings_row_icon_gap"
+                        android:src="@drawable/ic_safekey_logo"
+                        android:contentDescription="@null" />
+
+                </FrameLayout>
+
+                <!-- Vault information -->
+                <LinearLayout
+                    android:id="@+id/layoutSettingsVaultInfo"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="@dimen/settings_row_icon_gap"
+                    android:orientation="vertical">
+
+                <!-- Vault name and edit button -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:id="@+id/textSettingsVaultName"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/settings_local_vault"
+                            android:textColor="@color/auth_text_primary"
+                            android:textSize="@dimen/settings_vault_title_size"
+                            android:textStyle="bold"
+                            android:maxLines="1"
+                            android:ellipsize="end" />
+
+                        <ImageButton
+                            android:id="@+id/buttonSettingsEditName"
+                            android:layout_width="@dimen/settings_vault_edit_touch_size"
+                            android:layout_height="@dimen/settings_vault_edit_touch_size"
+                            android:src="@drawable/ic_settings_edit"
+                            android:background="@android:color/transparent"
+                            android:contentDescription="@string/settings_edit_display_name"
+                            android:enabled="false" />
+
+                    </LinearLayout>
+
+                    <!-- Vault protection subtitle -->
+                    <TextView
+                        android:id="@+id/textSettingsVaultSubtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_vault_protected"
+                        android:textColor="@color/auth_text_secondary"
+                        android:textSize="@dimen/settings_vault_subtitle_size" />
+
+                    <!-- Offline-first badge -->
+                    <TextView
+                        android:id="@+id/textSettingsOfflineBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="start"
+                        android:layout_marginTop="@dimen/settings_section_title_bottom_margin"
+                        android:background="@drawable/settings_offline_badge_bg"
+                        android:paddingHorizontal="@dimen/alerts_filter_chip_horizontal_padding"
+                        android:paddingVertical="@dimen/alerts_occurrence_badge_padding_vertical"
+                        android:text="@string/settings_offline_first"
+                        android:textColor="@color/auth_logo_stroke"
+                        android:textSize="@dimen/settings_vault_badge_text_size"
+                        android:maxLines="1" />
+
+                </LinearLayout>
+                <!-- End of layoutSettingsVaultInfo -->
+
+            </LinearLayout>
+            <!-- End of cardSettingsLocalVault -->
+
+            <!-- Account section heading -->
+            <TextView
+                android:id="@+id/textSettingsAccountSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/settings_section_spacing"
+                android:layout_marginBottom="@dimen/settings_section_title_bottom_margin"
+                android:text="@string/settings_account_section"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="@dimen/settings_section_title_size"
+                android:textStyle="bold"
+                android:textAllCaps="true" />
+
+            <!-- Account settings card -->
+            <LinearLayout
+                android:id="@+id/cardSettingsAccount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/auth_card_bg"
+                android:paddingStart="@dimen/settings_card_horizontal_padding"
+                android:paddingEnd="@dimen/settings_card_horizontal_padding">
+
+                <!-- Change Master Password row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsChangePassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Change Master Password icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_settings_key"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <TextView
+                        android:id="@+id/textSettingsChangePassword"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_change_master_password"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+                <!-- Divider between Account rows -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/settings_row_divider_height"
+                    android:layout_marginStart="@dimen/settings_row_icon_size"
+                    android:background="@color/auth_input_border" />
+
+
+                <!-- Lock Vault row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsLockVault"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Lock icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_settings_lock"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Lock Vault label -->
+                    <TextView
+                        android:id="@+id/textSettingsLockVault"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_lock_vault"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+                <!-- Divider before Delete Vault -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/settings_row_divider_height"
+                    android:layout_marginStart="@dimen/settings_row_icon_size"
+                    android:background="@color/auth_input_border" />
+
+                <!-- Delete Vault row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsDeleteVault"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:enabled="false">
+
+                    <!-- Delete icon background -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_delete_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_settings_delete"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Delete Vault label -->
+                    <TextView
+                        android:id="@+id/textSettingsDeleteVault"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_delete_vault"
+                        android:textColor="@color/settings_danger_text"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+                <!-- End of Delete Vault row -->
+
+            </LinearLayout>
+            <!-- End of cardSettingsAccount -->
+
+            <!-- Security section heading -->
+            <TextView
+                android:id="@+id/textSettingsSecuritySection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/settings_section_spacing"
+                android:layout_marginBottom="@dimen/settings_section_title_bottom_margin"
+                android:text="@string/settings_security_section"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="@dimen/settings_section_title_size"
+                android:textStyle="bold"
+                android:textAllCaps="true" />
+
+            <!-- Security settings card -->
+            <LinearLayout
+                android:id="@+id/cardSettingsSecurity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/auth_card_bg"
+                android:paddingStart="@dimen/settings_card_horizontal_padding"
+                android:paddingEnd="@dimen/settings_card_horizontal_padding">
+
+                <!-- Biometric Unlock row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsBiometric"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Fingerprint icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_fingerprint"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Biometric label -->
+                    <TextView
+                        android:id="@+id/textSettingsBiometric"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_biometric_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Biometric Unlock switch -->
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchSettingsBiometric"
+                        android:layout_width="@dimen/settings_vault_edit_touch_size"
+                        android:layout_height="@dimen/settings_vault_edit_touch_size"
+                        android:showText="false"
+                        android:checked="false"
+                        android:enabled="false"
+                        android:contentDescription="@string/settings_biometric_title" />
+
+                </LinearLayout>
+
+                <!-- Divider below Biometric Unlock -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/settings_row_divider_height"
+                    android:layout_marginStart="@dimen/settings_row_icon_size"
+                    android:background="@color/auth_input_border" />
+
+                <!-- Auto-lock Timeout row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsAutoLock"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Clock icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_settings_clock"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Auto-lock label -->
+                    <TextView
+                        android:id="@+id/textSettingsAutoLock"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_auto_lock_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Current timeout will be populated from the session manager -->
+                    <TextView
+                        android:id="@+id/textSettingsAutoLockValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_status_unavailable"
+                        android:textColor="@color/auth_text_hint"
+                        android:textSize="@dimen/settings_row_status_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+                <!-- Divider before Authenticator App (TOTP) -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/settings_row_divider_height"
+                    android:layout_marginStart="@dimen/settings_row_icon_size"
+                    android:background="@color/auth_input_border" />
+
+                <!-- Authenticator App (TOTP) row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsTotp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Authenticator icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_settings_totp"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Authenticator App label -->
+                    <TextView
+                        android:id="@+id/textSettingsTotp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_totp_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Enrollment status -->
+                    <TextView
+                        android:id="@+id/textSettingsTotpStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_status_unavailable"
+                        android:textColor="@color/auth_text_hint"
+                        android:textSize="@dimen/settings_row_status_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Emergency Protection section heading -->
+            <TextView
+                android:id="@+id/textSettingsEmergencySection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/settings_section_spacing"
+                android:layout_marginBottom="@dimen/settings_section_title_bottom_margin"
+                android:text="@string/settings_emergency_section"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="@dimen/settings_section_title_size"
+                android:textStyle="bold"
+                android:textAllCaps="true" />
+
+            <!-- Emergency Protection settings card -->
+            <LinearLayout
+                android:id="@+id/cardSettingsEmergency"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/auth_card_bg"
+                android:paddingStart="@dimen/settings_card_horizontal_padding"
+                android:paddingEnd="@dimen/settings_card_horizontal_padding">
+
+
+                <!-- Decoy Vault row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsDecoy"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Hidden vault icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_visibility_off"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Decoy Vault label -->
+                    <TextView
+                        android:id="@+id/textSettingsDecoy"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_decoy_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Configuration status -->
+                    <TextView
+                        android:id="@+id/textSettingsDecoyStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_status_unavailable"
+                        android:textColor="@color/auth_text_hint"
+                        android:textSize="@dimen/settings_row_status_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+                <!-- Divider before Panic Mode -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/settings_row_divider_height"
+                    android:layout_marginStart="@dimen/settings_row_icon_size"
+                    android:background="@color/auth_input_border" />
+
+                <!-- Panic Mode row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsPanic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- Security shield icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_alerts_security"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- Panic Mode label -->
+                    <TextView
+                        android:id="@+id/textSettingsPanic"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_panic_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Configuration status -->
+                    <TextView
+                        android:id="@+id/textSettingsPanicStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_status_unavailable"
+                        android:textColor="@color/auth_text_hint"
+                        android:textSize="@dimen/settings_row_status_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+        <!-- End of layoutSettingsSections -->
+
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

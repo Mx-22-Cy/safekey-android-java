@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Header -->
+    <string name="settings_title">Settings</string>
+
+    <!-- Vault information -->
+    <string name="settings_local_vault">Local Vault</string>
+    <string name="settings_named_vault">%1$s\u2019s Vault</string>
+    <string name="settings_vault_protected">Protected on this device</string>
+    <string name="settings_offline_first">Offline-first</string>
+    <string name="settings_edit_display_name">Edit display name</string>
+
+    <!-- Account -->
+    <string name="settings_account_section">Account</string>
+    <string name="settings_change_master_password">Change Master Password</string>
+    <string name="settings_lock_vault">Lock Vault</string>
+    <string name="settings_delete_vault">Delete Vault</string>
+
+    <!-- Security -->
+    <string name="settings_security_section">Security</string>
+    <string name="settings_biometric_title">Biometric Unlock</string>
+    <string name="settings_biometric_description">Manage fingerprint or face unlock</string>
+    <string name="settings_auto_lock_title">Auto-lock Timeout</string>
+    <string name="settings_auto_lock_current">Currently: %1$s</string>
+    <string name="settings_auto_lock_unavailable">Changing the auto-lock duration is not available yet</string>
+
+    <!-- TOTP -->
+    <string name="settings_totp_section">Two-Step Verification</string>
+    <string name="settings_totp_title">Authenticator App (TOTP)</string>
+    <string name="settings_totp_description">Add an extra verification step when signing in</string>
+    <string name="settings_totp_unavailable">Authenticator setup is not available yet</string>
+
+    <!-- Emergency protection -->
+    <string name="settings_emergency_section">Emergency Protection</string>
+    <string name="settings_panic_title">Panic Mode</string>
+    <string name="settings_panic_description">Configure emergency protection</string>
+    <string name="settings_decoy_title">Decoy Vault</string>
+    <string name="settings_decoy_description">Configure an alternative vault</string>
+
+    <!-- App -->
+    <string name="settings_app_section">App</string>
+    <string name="settings_about">About SafeKey</string>
+
+    <!-- Status -->
+    <string name="settings_status_on">On</string>
+    <string name="settings_status_off">Off</string>
+    <string name="settings_status_unavailable">Unavailable</string>
+    <string name="settings_status_not_configured">Not configured</string>
+    <string name="settings_coming_soon">Available after security integration</string>
+</resources>

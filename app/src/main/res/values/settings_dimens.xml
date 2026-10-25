@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Screen and header -->
+    <dimen name="settings_screen_padding">20dp</dimen>
+    <dimen name="settings_header_top_margin">16dp</dimen>
+    <dimen name="settings_title_size">28sp</dimen>
+    <dimen name="settings_header_bottom_spacing">16dp</dimen>
+
+    <!-- Cards -->
+    <dimen name="settings_card_corner_radius">14dp</dimen>
+    <dimen name="settings_card_border_width">1dp</dimen>
+    <dimen name="settings_card_horizontal_padding">16dp</dimen>
+    <dimen name="settings_card_vertical_padding">12dp</dimen>
+
+    <!-- Local vault information -->
+    <dimen name="settings_vault_icon_size">42dp</dimen>
+    <dimen name="settings_vault_icon_corner_radius">12dp</dimen>
+    <dimen name="settings_vault_title_size">15sp</dimen>
+    <dimen name="settings_vault_subtitle_size">12sp</dimen>
+    <dimen name="settings_vault_badge_text_size">11sp</dimen>
+    <dimen name="settings_vault_edit_touch_size">48dp</dimen>
+    <dimen name="settings_edit_icon_size">24dp</dimen>
+
+    <!-- Sections -->
+    <dimen name="settings_section_spacing">14dp</dimen>
+    <dimen name="settings_section_title_size">12sp</dimen>
+    <dimen name="settings_section_title_bottom_margin">6dp</dimen>
+
+    <!-- Setting rows -->
+    <dimen name="settings_row_min_height">54dp</dimen>
+    <dimen name="settings_row_icon_size">34dp</dimen>
+    <dimen name="settings_row_icon_corner_radius">10dp</dimen>
+    <dimen name="settings_row_icon_gap">12dp</dimen>
+    <dimen name="settings_row_text_size">14sp</dimen>
+    <dimen name="settings_row_status_size">12sp</dimen>
+    <dimen name="settings_row_divider_height">1dp</dimen>
+
+    <!-- Switch -->
+    <dimen name="settings_switch_width">44dp</dimen>
+    <dimen name="settings_switch_height">26dp</dimen>
+
+    <!-- Bottom navigation: reuse existing SafeKey dimensions -->
+    <dimen name="settings_content_bottom_padding">16dp</dimen>
+</resources>
