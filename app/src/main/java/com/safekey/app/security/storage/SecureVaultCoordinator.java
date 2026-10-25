@@ -9,6 +9,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
+import com.safekey.app.breach.PasswordBreachResult;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
@@ -427,6 +428,19 @@ public final class SecureVaultCoordinator {
         vaultDataService.getVaultCounts(
                 Objects.requireNonNull(callback, "callback")
         );
+    }
+
+    public long getVaultGeneration() {
+        return vaultDataService.getVaultGeneration();
+    }
+
+    public void updateCredentialBreachStatus(
+            long generation, long id, String expectedPassword,
+            PasswordBreachResult.Status status,
+            VaultDataService.ResultCallback<PasswordBreachResult.Status> callback
+    ) {
+        vaultDataService.updateCredentialBreachStatus(
+                generation, id, expectedPassword, status, callback);
     }
 
     public void getCredentials(

@@ -6,6 +6,7 @@ import android.os.Looper;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.data.model.Credential;
+import com.safekey.app.breach.PasswordBreachResult;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.repository.CredentialRepository;
@@ -15,11 +16,15 @@ import com.safekey.app.data.repository.VaultCountsRepository;
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class VaultDataService {
+
+    private final AtomicLong vaultGeneration = new AtomicLong();
 
     private final SafeKeyDatabase databaseManager;
     private final ExecutorService executorService;
@@ -108,6 +113,7 @@ public class VaultDataService {
                         databaseKey.length
                 );
 
+        vaultGeneration.incrementAndGet();
         try {
 
             executorService.execute(() -> {
@@ -186,6 +192,7 @@ public class VaultDataService {
     public void closeVault(
             SimpleCallback callback
     ) {
+        vaultGeneration.incrementAndGet();
         executorService.execute(() -> {
             try {
                 databaseManager.close();
@@ -205,6 +212,35 @@ public class VaultDataService {
     public boolean isVaultOpen() {
 
         return databaseManager.isOpen();
+    }
+
+    /** Cache work belongs to this database opening, not a replacement session. */
+    public long getVaultGeneration() {
+        return vaultGeneration.get();
+    }
+
+    public void updateCredentialBreachStatus(
+            long expectedGeneration,
+            long credentialId,
+            String expectedPassword,
+            PasswordBreachResult.Status status,
+            ResultCallback<PasswordBreachResult.Status> callback
+    ) {
+        Objects.requireNonNull(expectedPassword, "expectedPassword");
+        Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(callback, "callback");
+        executorService.execute(() -> {
+            try {
+                if (vaultGeneration.get() != expectedGeneration) {
+                    throw new IllegalStateException("The vault opening changed during the check.");
+                }
+                PasswordBreachResult.Status saved = requireCredentialRepository()
+                        .updateBreachStatus(credentialId, expectedPassword, status);
+                deliverResultSuccess(callback, saved);
+            } catch (Exception error) {
+                deliverResultError(callback, error);
+            }
+        });
     }
 
     public void getVaultCounts(
@@ -746,6 +782,7 @@ public class VaultDataService {
      * the executor.
      */
     public synchronized void shutdown() {
+        vaultGeneration.incrementAndGet();
 
         if (executorService.isShutdown()) {
 
