@@ -57,6 +57,65 @@ public class SafeKeyApplicationRoutingInstrumentedTest {
     }
 
     @Test
+    public void staleReadinessCallback_afterNewCleanup_isRejected()
+            throws Exception {
+
+        CountDownLatch completed = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean succeeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> error =
+                new AtomicReference<>();
+
+        InstrumentationRegistry.getInstrumentation()
+                .runOnMainSync(() -> {
+
+                    // Queue a readiness success while the session is locked.
+                    application.prepareForVaultAuthentication(
+                            new VaultDataService.SimpleCallback() {
+                                @Override
+                                public void onSuccess() {
+                                    succeeded.set(true);
+                                    completed.countDown();
+                                }
+
+                                @Override
+                                public void onError(Exception exception) {
+                                    error.set(exception);
+                                    completed.countDown();
+                                }
+                            }
+                    );
+
+                    // Start a newer cleanup before the queued
+                    // readiness callback can execute.
+                    SafeKeySession.unlockAfterAuthentication();
+                    SafeKeySession.lock();
+                });
+
+        assertTrue(
+                "Readiness callback did not finish.",
+                completed.await(
+                        CALLBACK_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        assertFalse(
+                "Stale readiness must not succeed.",
+                succeeded.get()
+        );
+
+        assertNotNull(
+                "Stale readiness must report an error.",
+                error.get()
+        );
+
+        // Ensure cleanup completes before the next test.
+        awaitAuthenticationReady();
+    }
+    @Test
     public void application_initializesBothVaultCoordinators() {
         assertNotNull(
                 application.getSecureVaultCoordinator()

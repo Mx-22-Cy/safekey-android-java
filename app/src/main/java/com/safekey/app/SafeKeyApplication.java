@@ -256,7 +256,11 @@ public final class SafeKeyApplication extends Application {
             return;
         }
 
+        long readinessGeneration;
+
         synchronized (this) {
+            readinessGeneration = cleanupGeneration;
+
             if (cleanupInProgress) {
                 authenticationWaiters.add(callback);
                 return;
@@ -275,7 +279,7 @@ public final class SafeKeyApplication extends Application {
             }
         }
 
-        deliverSuccess(callback);
+        deliverSuccess(callback, readinessGeneration);
     }
 
     public void registerSessionCleanup() {
@@ -403,18 +407,32 @@ public final class SafeKeyApplication extends Application {
                         )
                 );
             } else {
-                deliverSuccess(waiter);
+                deliverSuccess(waiter, cleanupId);
             }
         }
     }
 
     private void deliverSuccess(
-            VaultDataService.SimpleCallback callback
+            VaultDataService.SimpleCallback callback,
+            long expectedCleanupGeneration
     ) {
         mainHandler.post(
                 () -> {
-                    if (SafeKeySession.getState()
-                            != SessionState.LOCKED) {
+                    boolean ready;
+
+                    synchronized (this) {
+                        ready =
+                                cleanupGeneration == expectedCleanupGeneration
+                                        && !cleanupInProgress
+                                        && !cleanupFailed
+                                        && pendingCloses == 0
+                                        && !secureVaultCoordinator.isVaultOpen()
+                                        && !decoyVaultCoordinator.isDecoyVaultOpen();
+                    }
+
+                    if (!ready
+                            || SafeKeySession.getState()
+                                    != SessionState.LOCKED) {
                         callback.onError(
                                 new IllegalStateException(
                                         "Authentication readiness expired."

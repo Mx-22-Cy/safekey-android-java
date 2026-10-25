@@ -49,6 +49,10 @@ public final class DecoyVaultCoordinator
     private final ExecutorService securityExecutor;
     private final Handler mainHandler;
 
+    private final Object lifecycleLock = new Object();
+    private long unlockGeneration = 0L;
+    private boolean closeInProgress = false;
+
     public DecoyVaultCoordinator(
             Context context
     ) {
@@ -292,12 +296,28 @@ public final class DecoyVaultCoordinator
                         decoyPassword
                 );
 
+        final long requestGeneration;
+
+        synchronized (lifecycleLock) {
+            if (closeInProgress) {
+                clear(passwordCopy);
+                deliverError(
+                        callback,
+                        new IllegalStateException("Decoy Vault is closing.")
+                );
+                return;
+            }
+
+            requestGeneration = unlockGeneration;
+        }
+
         try {
             securityExecutor.execute(
                     () ->
                             unlockDecoyVaultInBackground(
                                     passwordCopy,
-                                    callback
+                                    callback,
+                                    requestGeneration
                             )
             );
 
@@ -312,7 +332,8 @@ public final class DecoyVaultCoordinator
 
     private void unlockDecoyVaultInBackground(
             char[] decoyPassword,
-            VaultDataService.SimpleCallback callback
+            VaultDataService.SimpleCallback callback,
+            long requestGeneration
     ) {
         byte[] salt = null;
         byte[] derivedMasterKey = null;
@@ -344,10 +365,41 @@ public final class DecoyVaultCoordinator
                             databaseKeyContext()
                     );
 
-            vaultDataService.openVault(
-                    databaseKey,
-                    callback
-            );
+            synchronized (lifecycleLock) {
+                if (requestGeneration != unlockGeneration
+                        || closeInProgress) {
+                    throw new IllegalStateException(
+                            "Decoy unlock was invalidated."
+                    );
+                }
+
+                vaultDataService.openVault(
+                        databaseKey,
+                        new VaultDataService.SimpleCallback() {
+                            @Override
+                            public void onSuccess() {
+                                synchronized (lifecycleLock) {
+                                    if (requestGeneration != unlockGeneration
+                                            || closeInProgress) {
+                                        callback.onError(
+                                                new IllegalStateException(
+                                                        "Decoy unlock was invalidated."
+                                                )
+                                        );
+                                        return;
+                                    }
+
+                                    callback.onSuccess();
+                                }
+                            }
+
+                            @Override
+                            public void onError(Exception exception) {
+                                callback.onError(exception);
+                            }
+                        }
+                );
+            }
 
         } catch (Exception exception) {
             deliverError(
@@ -382,9 +434,38 @@ public final class DecoyVaultCoordinator
                 "callback"
         );
 
-        vaultDataService.closeVault(
-                callback
-        );
+        synchronized (lifecycleLock) {
+            final long closeGeneration = ++unlockGeneration;
+            closeInProgress = true;
+
+            vaultDataService.closeVault(
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            synchronized (lifecycleLock) {
+                                if (closeGeneration != unlockGeneration) {
+                                    callback.onError(
+                                            new IllegalStateException(
+                                                    "Decoy close was superseded."
+                                            )
+                                    );
+                                    return;
+                                }
+
+                                closeInProgress = false;
+                                callback.onSuccess();
+                            }
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            // Remain closed to new unlock attempts
+                            // until a later close succeeds.
+                            callback.onError(exception);
+                        }
+                    }
+            );
+        }
     }
 
     @Override

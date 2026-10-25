@@ -91,6 +91,201 @@ public class DecoyVaultCoordinatorInstrumentedTest {
     }
 
     @Test
+    public void pendingUnlock_afterCloseCompletes_cannotReopenDecoy()
+            throws Exception {
+
+        awaitSuccess(callback ->
+                decoyCoordinator.createDecoyVault(
+                        password("decoy lifecycle regression password"),
+                        callback
+                )
+        );
+
+        awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        java.lang.reflect.Field executorField =
+                DecoyVaultCoordinator.class
+                        .getDeclaredField("securityExecutor");
+        executorField.setAccessible(true);
+
+        java.util.concurrent.ExecutorService executor =
+                (java.util.concurrent.ExecutorService)
+                        executorField.get(decoyCoordinator);
+
+        CountDownLatch workerStarted = new CountDownLatch(1);
+        CountDownLatch releaseWorker = new CountDownLatch(1);
+        CountDownLatch unlockCompleted = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean unlockSucceeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> unlockError =
+                new AtomicReference<>();
+
+        java.util.concurrent.Future<?> blockingTask =
+                executor.submit(() -> {
+                    workerStarted.countDown();
+                    try {
+                        releaseWorker.await(60, TimeUnit.SECONDS);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+
+        try {
+            assertTrue(
+                    workerStarted.await(
+                            CALLBACK_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
+            );
+
+            decoyCoordinator.unlockDecoyVault(
+                    password("decoy lifecycle regression password"),
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            unlockSucceeded.set(true);
+                            unlockCompleted.countDown();
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            unlockError.set(exception);
+                            unlockCompleted.countDown();
+                        }
+                    }
+            );
+
+            // Closing must invalidate the queued unlock.
+            awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        } finally {
+            releaseWorker.countDown();
+        }
+
+        blockingTask.get(
+                CALLBACK_TIMEOUT_SECONDS,
+                TimeUnit.SECONDS
+        );
+
+        assertTrue(
+                unlockCompleted.await(
+                        CALLBACK_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
+                )
+        );
+
+        assertFalse(unlockSucceeded.get());
+        assertNotNull(unlockError.get());
+        assertFalse(decoyCoordinator.isDecoyVaultOpen());
+    }
+    @Test
+    public void pendingDatabaseOpen_afterClose_cannotReopenDecoy()
+            throws Exception {
+
+        awaitSuccess(callback -> decoyCoordinator.createDecoyVault(
+                password("decoy database handoff regression"),
+                callback
+        ));
+
+        awaitSuccess(decoyCoordinator::closeDecoyVault);
+
+        java.lang.reflect.Field serviceField =
+                DecoyVaultCoordinator.class.getDeclaredField("vaultDataService");
+        serviceField.setAccessible(true);
+        VaultDataService service =
+                (VaultDataService) serviceField.get(decoyCoordinator);
+
+        java.lang.reflect.Field databaseExecutorField =
+                VaultDataService.class.getDeclaredField("executorService");
+        databaseExecutorField.setAccessible(true);
+        java.util.concurrent.ExecutorService databaseExecutor =
+                (java.util.concurrent.ExecutorService)
+                        databaseExecutorField.get(service);
+
+        java.lang.reflect.Field securityExecutorField =
+                DecoyVaultCoordinator.class.getDeclaredField("securityExecutor");
+        securityExecutorField.setAccessible(true);
+        java.util.concurrent.ExecutorService securityExecutor =
+                (java.util.concurrent.ExecutorService)
+                        securityExecutorField.get(decoyCoordinator);
+
+        CountDownLatch databaseBlocked = new CountDownLatch(1);
+        CountDownLatch releaseDatabase = new CountDownLatch(1);
+        CountDownLatch unlockFinished = new CountDownLatch(1);
+        CountDownLatch closeFinished = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean unlockSucceeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        AtomicReference<Exception> unlockError = new AtomicReference<>();
+        AtomicReference<Exception> closeError = new AtomicReference<>();
+
+        java.util.concurrent.Future<?> blocker = databaseExecutor.submit(() -> {
+            databaseBlocked.countDown();
+            try {
+                releaseDatabase.await(60, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        try {
+            assertTrue(databaseBlocked.await(
+                    CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+
+            decoyCoordinator.unlockDecoyVault(
+                    password("decoy database handoff regression"),
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            unlockSucceeded.set(true);
+                            unlockFinished.countDown();
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            unlockError.set(exception);
+                            unlockFinished.countDown();
+                        }
+                    }
+            );
+
+            // Wait until the unlock worker has queued the database open.
+            securityExecutor.submit(() -> {}).get(
+                    CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            // Invalidate unlock before the database worker resumes.
+            decoyCoordinator.closeDecoyVault(
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            closeFinished.countDown();
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            closeError.set(exception);
+                            closeFinished.countDown();
+                        }
+                    }
+            );
+        } finally {
+            releaseDatabase.countDown();
+        }
+
+        blocker.get(CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        assertTrue(closeFinished.await(
+                CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+        assertTrue(unlockFinished.await(
+                CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+
+        assertTrue("Close should succeed.", closeError.get() == null);
+        assertFalse("Stale unlock must fail.", unlockSucceeded.get());
+        assertNotNull(unlockError.get());
+        assertFalse(decoyCoordinator.isDecoyVaultOpen());
+    }
+    @Test
     public void createCloseAndReopenDecoy_withCorrectPassword_succeeds()
             throws Exception {
 
