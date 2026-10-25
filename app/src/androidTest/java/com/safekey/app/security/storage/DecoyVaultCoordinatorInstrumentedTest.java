@@ -1149,6 +1149,123 @@ public class DecoyVaultCoordinatorInstrumentedTest {
         );
     }
 
+
+    @Test
+    public void lifecycleCallbacks_doNotHoldCoordinatorLock()
+            throws Exception {
+
+        java.lang.reflect.Field lockField =
+                DecoyVaultCoordinator.class.getDeclaredField("lifecycleLock");
+        lockField.setAccessible(true);
+
+        Object lifecycleMonitor = lockField.get(decoyCoordinator);
+        String correctPassword = "decoy deadlock regression password";
+
+        // Enrollment success must not hold lifecycleLock.
+        assertCallbackOutsideLifecycleLock(
+                lifecycleMonitor,
+                callback -> decoyCoordinator.createDecoyVault(
+                        password(correctPassword), callback),
+                true
+        );
+
+        // Close success must not hold lifecycleLock.
+        assertCallbackOutsideLifecycleLock(
+                lifecycleMonitor,
+                decoyCoordinator::closeDecoyVault,
+                true
+        );
+
+        // Unlock success must not hold lifecycleLock.
+        assertCallbackOutsideLifecycleLock(
+                lifecycleMonitor,
+                callback -> decoyCoordinator.unlockDecoyVault(
+                        password(correctPassword), callback),
+                true
+        );
+
+        assertCallbackOutsideLifecycleLock(
+                lifecycleMonitor,
+                decoyCoordinator::closeDecoyVault,
+                true
+        );
+
+        // Unlock failure must also release lifecycleLock.
+        assertCallbackOutsideLifecycleLock(
+                lifecycleMonitor,
+                callback -> decoyCoordinator.unlockDecoyVault(
+                        password("incorrect decoy password"), callback),
+                false
+        );
+    }
+
+    private void assertCallbackOutsideLifecycleLock(
+            Object lifecycleMonitor,
+            SimpleOperation operation,
+            boolean expectedSuccess
+    ) throws Exception {
+
+        CountDownLatch completed = new CountDownLatch(1);
+
+        java.util.concurrent.atomic.AtomicBoolean lockHeld =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        java.util.concurrent.atomic.AtomicBoolean succeeded =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+
+        AtomicReference<Exception> error = new AtomicReference<>();
+
+        operation.run(new VaultDataService.SimpleCallback() {
+            @Override
+            public void onSuccess() {
+                try {
+                    lockHeld.set(Thread.holdsLock(lifecycleMonitor));
+
+                    // Exercise the session-monitor access from the P1 report.
+                    com.safekey.app.session.SafeKeySession.getState();
+
+                    succeeded.set(true);
+                } finally {
+                    completed.countDown();
+                }
+            }
+
+            @Override
+            public void onError(Exception exception) {
+                try {
+                    lockHeld.set(Thread.holdsLock(lifecycleMonitor));
+
+                    com.safekey.app.session.SafeKeySession.getState();
+
+                    error.set(exception);
+                } finally {
+                    completed.countDown();
+                }
+            }
+        });
+
+        assertTrue(
+                "Timed out waiting for Decoy Vault callback.",
+                completed.await(
+                        CALLBACK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        );
+
+        assertFalse(
+                "External callback executed while holding lifecycleLock.",
+                lockHeld.get()
+        );
+
+        assertEquals(
+                "Unexpected Decoy Vault callback result.",
+                expectedSuccess,
+                succeeded.get()
+        );
+
+        if (!expectedSuccess) {
+            assertNotNull(error.get());
+        }
+    }
+
     private void createBothVaults()
             throws Exception {
 
