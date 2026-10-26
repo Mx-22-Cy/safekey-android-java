@@ -48,19 +48,6 @@
                     android:textColor="@color/auth_text_primary"
                     android:textSize="24sp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/dashboard_preview_badge"
-                    android:paddingStart="10dp"
-                    android:paddingTop="5dp"
-                    android:paddingEnd="10dp"
-                    android:paddingBottom="5dp"
-                    android:text="@string/home_preview_data"
-                    android:textColor="@color/auth_accent"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.08" />
-
             </LinearLayout>
 
             <LinearLayout
@@ -134,10 +121,11 @@
                         android:orientation="vertical">
 
                         <TextView
+                            android:id="@+id/textHomeSecurityStatus"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="@font/fraunces_semibold"
-                            android:text="@string/home_security_good"
+                            android:text="@string/security_not_checked"
                             android:textColor="@color/auth_accent"
                             android:textSize="21sp" />
 
@@ -160,7 +148,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:text="@string/home_preview_at_risk_count"
+                                android:text="@string/security_not_checked"
                                 android:textColor="@color/auth_text_secondary"
                                 android:textSize="14sp" />
 
@@ -168,7 +156,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="4dp"
-                                android:text="@string/home_credentials_at_risk"
+                                android:text="@string/security_known_risk_label"
                                 android:textColor="@color/auth_text_secondary"
                                 android:textSize="14sp" />
 
@@ -193,7 +181,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:text="@string/home_preview_breach_count"
+                                android:text="@string/security_not_checked"
                                 android:textColor="@color/auth_text_secondary"
                                 android:textSize="14sp" />
 
@@ -201,7 +189,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="4dp"
-                                android:text="@string/home_breach_alert_label"
+                                android:text="@string/security_breached_label"
                                 android:textColor="@color/auth_text_secondary"
                                 android:textSize="14sp" />
 
@@ -210,6 +198,16 @@
                     </LinearLayout>
 
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/textHomeSecurityCoverage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:text="@string/security_score_method"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="12sp" />
 
             </LinearLayout>
 
@@ -262,10 +260,11 @@
 
             <!-- Security alert -->
             <LinearLayout
+                android:id="@+id/layoutHomeSecurityBanner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                android:background="@drawable/dashboard_alert_banner_bg"
+                android:background="@drawable/dashboard_card_bg"
                 android:baselineAligned="false"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -280,16 +279,17 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/home_security_alert"
+                        android:text="@string/security_check_heading"
                         android:textColor="@color/auth_text_primary"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
                     <TextView
+                        android:id="@+id/textHomeSecurityReview"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="7dp"
-                        android:text="@string/home_security_alert_preview"
+                        android:text="@string/security_not_checked"
                         android:textColor="@color/dashboard_alert_text"
                         android:textSize="13sp" />
 
@@ -297,6 +297,9 @@
 
                 <TextView
                     android:id="@+id/textReview"
+                    android:minWidth="48dp"
+                    android:minHeight="48dp"
+                    android:gravity="center"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="8dp"
@@ -349,7 +352,7 @@
                         android:id="@+id/textCredentialCount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/home_preview_credential_count"
+                        android:text="@string/home_vault_count_unavailable"
                         android:textColor="@color/auth_text_secondary"
                         android:textSize="16sp" />
 
@@ -381,7 +384,7 @@
                         android:id="@+id/textFavoriteCount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/home_preview_favorite_count"
+                        android:text="@string/home_vault_count_unavailable"
                         android:textColor="@color/auth_text_secondary"
                         android:textSize="16sp" />
 
@@ -413,7 +416,7 @@
                         android:id="@+id/textSecureNoteCount"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/home_preview_secure_note_count"
+                        android:text="@string/home_vault_count_unavailable"
                         android:textColor="@color/auth_text_secondary"
                         android:textSize="16sp" />
 

@@ -29,7 +29,6 @@
     <dimen name="alerts_section_heading_text_size">15sp</dimen>
     <dimen name="alerts_section_icon_gap">8dp</dimen>
     <dimen name="alerts_section_cards_top_margin">10dp</dimen>
-    <dimen name="alerts_retry_text_size">12sp</dimen>
 
     <!-- Security Alerts credential cards -->
     <dimen name="alerts_card_min_height">76dp</dimen>
