@@ -45,7 +45,7 @@ import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
 
-public class SignInActivity extends AppCompatActivity
+public class SignInActivity extends com.safekey.app.StartupGuardActivity
         implements TotpCodeDialogFragment.Listener {
     private PanicRuntimeScope.Registration panicCancellation;
 
@@ -81,8 +81,8 @@ public class SignInActivity extends AppCompatActivity
     private boolean navigatingToHome;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.enableEdgeToEdge(getWindow());
@@ -147,8 +147,8 @@ public class SignInActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
         resumed = true;
 
         if (authenticated
@@ -169,24 +169,24 @@ public class SignInActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         resumed = false;
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onStop() {
+    protected void onRuntimeStop() {
         resumed = false;
 
         if (!navigatingToHome) {
             abortSignIn(0);
         }
 
-        super.onStop();
+        super.onRuntimeStop();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
         if (panicCancellation != null) { panicCancellation.close(); }
 
         if (!navigatingToHome) {
@@ -196,7 +196,7 @@ public class SignInActivity extends AppCompatActivity
         clearPendingMasterPasswordRecheck();
         clearPendingBiometricEnrollmentPassword();
         removePostAuthenticationTimeout();
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void validateSignInForm() {

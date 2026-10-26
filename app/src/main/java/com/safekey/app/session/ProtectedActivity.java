@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.safekey.app.auth.SignInActivity;
 
 public abstract class ProtectedActivity
-        extends AppCompatActivity {
+        extends com.safekey.app.StartupGuardActivity {
 
     private final Handler inactivityHandler =
             new Handler(
@@ -22,33 +22,33 @@ public abstract class ProtectedActivity
     private boolean redirectingToSignIn;
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
 
         checkInactivityTimeout();
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         inactivityHandler.removeCallbacks(
                 inactivityTimeoutCheck
         );
 
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
         inactivityHandler.removeCallbacks(
                 inactivityTimeoutCheck
         );
 
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     @Override
-    public void onUserInteraction() {
-        super.onUserInteraction();
+    public void onRuntimeUserInteraction() {
+        super.onRuntimeUserInteraction();
 
         if (!SafeKeySession.recordActivity()) {
             redirectToSignIn();

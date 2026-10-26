@@ -137,11 +137,11 @@ public class GeneratorActivity extends ProtectedActivity {
     private View navSettings;
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(
+        super.onRuntimeCreate(
                 savedInstanceState
         );
 
@@ -998,7 +998,7 @@ public class GeneratorActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
 
         strengthRequestId++;
 
@@ -1024,6 +1024,6 @@ public class GeneratorActivity extends ProtectedActivity {
 
         textGeneratedPassword.setText("");
 
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 }

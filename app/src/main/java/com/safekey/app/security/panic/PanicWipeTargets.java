@@ -16,8 +16,8 @@ public final class PanicWipeTargets {
     private PanicWipeTargets() { }
 
     /**
-     * Resource manifest for the known real/Decoy backend. Not wired to the
-     * Application or Sign In yet; integrating callers must stop every writer.
+     * Resource manifest used by cold-start recovery. Fresh Sign In triggers
+     * remain a separate integration step; callers must stop every writer.
      */
     public static List<PanicWipeCoordinator.Target> forSafeKey(Context context) {
         return create(context, Names.production());

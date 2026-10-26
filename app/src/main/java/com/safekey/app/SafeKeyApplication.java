@@ -1,4 +1,3 @@
-
 package com.safekey.app;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
@@ -25,7 +24,10 @@ import java.util.Objects;
 
 public final class SafeKeyApplication extends Application implements PanicRuntimeScope.Owner {
 
-    private final PanicRuntimeScope panicRuntimeScope = new PanicRuntimeScope();
+    private volatile PanicRuntimeScope panicRuntimeScope = new PanicRuntimeScope();
+    private com.safekey.app.security.panic.PanicStartupGate startupGate;
+    private boolean startupNavigationRequired;
+    private boolean runtimeInitializationAttempted;
 
     private static final String TAG = "SafeKeyApplication";
 
@@ -59,44 +61,119 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     @Override
     public void onCreate() {
         super.onCreate();
-
-        // The secondary encrypted database must always exist.
-        DecoyVaultStorage.ensureDatabaseFile(this);
-
-        secureVaultCoordinator =
-                new SecureVaultCoordinator(this);
-
-        decoyVaultCoordinator =
-                new DecoyVaultCoordinator(this);
-
-        realVaultOperations =
-                new RealVaultOperations(
-                        secureVaultCoordinator
-                );
-
-        // T45: Master-password security health.
-        masterPasswordHealth =
-                new MasterPasswordHealth(this);
-
         registerSessionCleanup();
-
         registerPanicScreenCancellation();
+        beginStartup();
+    }
+
+    private void beginStartup() {
+        startupGate = new com.safekey.app.security.panic.PanicStartupGate(
+                new com.safekey.app.security.panic.PanicStartupGate.Recovery() {
+                    @Override public boolean isPending() throws Exception {
+                        return new com.safekey.app.security.panic.PanicWipeJournal(
+                                SafeKeyApplication.this).isPending();
+                    }
+                    @Override public void recover() throws Exception {
+                        com.safekey.app.security.panic.PanicWipeJournal journal =
+                                new com.safekey.app.security.panic.PanicWipeJournal(SafeKeyApplication.this);
+                        com.safekey.app.security.panic.PanicWipeCoordinator wipe =
+                                new com.safekey.app.security.panic.PanicWipeCoordinator(
+                                        panicRuntimeScope.getWorkGate(), journal,
+                                        getPanicShutdownRuntime(),
+                                        com.safekey.app.security.panic.PanicWipeTargets.forSafeKey(
+                                                SafeKeyApplication.this));
+                        if (!wipe.resumeIfPending()) {
+                            throw new java.io.IOException("Pending cleanup authorization is missing.");
+                        }
+                    }
+                }, new com.safekey.app.security.panic.PanicStartupGate.Runtime() {
+                    @Override public void block() { panicRuntimeScope.getWorkGate().blockNewWork(); }
+                    @Override public void initialize(boolean recovered) { initializeVaultRuntime(recovered); }
+                }, action -> new Thread(action, "safekey-panic-startup").start(), action -> {
+                    if (!mainHandler.post(action)) {
+                        throw new IllegalStateException("Startup UI dispatcher is unavailable.");
+                    }
+                });
+        startupGate.start();
+    }
+
+    private void initializeVaultRuntime(boolean recovered) {
+        runtimeInitializationAttempted = true;
+        if (recovered || panicRuntimeScope.isStopped()) {
+            // Every object from the stopped scope remains permanently stopped.
+            panicRuntimeScope = new PanicRuntimeScope();
+            startupNavigationRequired = true;
+        }
+        DecoyVaultStorage.ensureDatabaseFile(this);
+        secureVaultCoordinator = new SecureVaultCoordinator(this);
+        decoyVaultCoordinator = new DecoyVaultCoordinator(this);
+        realVaultOperations = new RealVaultOperations(secureVaultCoordinator);
+        masterPasswordHealth = new MasterPasswordHealth(this);
+        synchronized (this) {
+            activeVault = ActiveVault.NONE;
+            activeVaultOperations = null;
+            sessionGeneration++;
+            cleanupGeneration++;
+            cleanupInProgress = false;
+            cleanupFailed = false;
+            pendingCloses = 0;
+            authenticationWaiters.clear();
+        }
+    }
+
+    public com.safekey.app.security.panic.PanicStartupGate getStartupGate() { return startupGate; }
+
+    public boolean isStartupRuntimeAvailable() {
+        return startupGate != null
+                && startupGate.getState() == com.safekey.app.security.panic.PanicStartupGate.State.READY
+                && !panicRuntimeScope.isStopped();
+    }
+
+    public boolean canCreateRuntimeScreen() {
+        return isStartupRuntimeAvailable() && !startupNavigationRequired;
+    }
+
+    public boolean canRetryStartupRecovery() {
+        return startupGate != null
+                && startupGate.getState() == com.safekey.app.security.panic.PanicStartupGate.State.FAILED
+                && !runtimeInitializationAttempted;
+    }
+
+    public void retryStartupRecovery() {
+        if (Looper.myLooper() != Looper.getMainLooper() || !canRetryStartupRecovery()) {
+            throw new IllegalStateException("Startup recovery cannot be retried here.");
+        }
+        beginStartup();
+    }
+
+    public void completeStartupNavigation() {
+        requireRuntimeReady();
+        startupNavigationRequired = false;
+    }
+
+    private void requireRuntimeReady() {
+        if (!isStartupRuntimeAvailable()) {
+            throw new IllegalStateException("SafeKey startup has not completed.");
+        }
     }
 
     public MasterPasswordHealth getMasterPasswordHealth() {
+        requireRuntimeReady();
         return masterPasswordHealth;
     }
 
     public SecureVaultCoordinator getSecureVaultCoordinator() {
+        requireRuntimeReady();
         return secureVaultCoordinator;
     }
 
     public DecoyVaultCoordinator getDecoyVaultCoordinator() {
+        requireRuntimeReady();
         return decoyVaultCoordinator;
     }
 
     public ActiveVault getActiveVault() {
-        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (!isStartupRuntimeAvailable() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             return ActiveVault.NONE;
         }
 
@@ -114,7 +191,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     private void activateVault(ActiveVault selection) {
-        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (!isStartupRuntimeAvailable() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             throw new IllegalStateException(
                     "Authentication is required before vault activation."
             );
@@ -191,7 +268,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
             ActiveVault selection,
             long generation
     ) {
-        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (!isStartupRuntimeAvailable() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             return false;
         }
 
@@ -207,7 +284,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
             ActiveVault selection,
             long generation
     ) {
-        return !panicRuntimeScope.isStopped()
+        return isStartupRuntimeAvailable()
                 && !cleanupInProgress
                 && !cleanupFailed
                 && activeVault == selection
@@ -232,7 +309,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     public VaultOperations getActiveVaultOperations() {
-        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (!isStartupRuntimeAvailable() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             throw new IllegalStateException(
                     "The vault session is locked."
             );
@@ -261,7 +338,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     public void prepareForVaultAuthentication(
             VaultDataService.SimpleCallback callback
     ) {
-        if (panicRuntimeScope.isStopped()) {
+        if (!isStartupRuntimeAvailable()) {
             deliverError(callback, new IllegalStateException("Vault runtime is unavailable."));
             return;
         }
@@ -314,7 +391,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     private void clearSessionAndCloseVaults() {
-        if (panicRuntimeScope.isStopped()) {
+        if (!isStartupRuntimeAvailable()) {
             synchronized (this) {
                 activeVault = ActiveVault.NONE;
                 activeVaultOperations = null;
@@ -325,7 +402,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
                 pendingCloses = 0;
                 authenticationWaiters.clear();
             }
-            masterPasswordHealth.cancelRecheck();
+            if (masterPasswordHealth != null) { masterPasswordHealth.cancelRecheck(); }
             return;
         }
 
@@ -486,7 +563,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
                     synchronized (this) {
                         ready =
                                 sessionLocked
-                                        && !panicRuntimeScope.isStopped()
+                                        && isStartupRuntimeAvailable()
                                         && cleanupGeneration == expectedCleanupGeneration
                                         && !cleanupInProgress
                                         && !cleanupFailed
@@ -520,7 +597,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
 
     @Override public PanicRuntimeScope getPanicRuntimeScope() { return panicRuntimeScope; }
 
-    /** Terminal shutdown adapter. Panic enrollment/routing/startup recovery are separate integration steps. */
+    /** Terminal shutdown adapter, also valid before cold-start vault initialization. */
     public com.safekey.app.security.panic.PanicWipeCoordinator.Runtime getPanicShutdownRuntime() {
         return new com.safekey.app.security.panic.PanicAndroidRuntime(
                 panicRuntimeScope, mainHandler, () -> {
@@ -535,6 +612,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
                 new java.util.IdentityHashMap<>();
         registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
             @Override public void onActivityCreated(android.app.Activity activity, android.os.Bundle state) {
+                if (activity instanceof PanicStartupActivity || !canCreateRuntimeScreen()) { return; }
                 screens.put(activity, com.safekey.app.security.panic.PanicSensitiveUi.bind(activity, () -> {}));
             }
             @Override public void onActivityDestroyed(android.app.Activity activity) {

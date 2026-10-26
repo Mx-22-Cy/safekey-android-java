@@ -38,7 +38,7 @@ import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
 
-public class SignUpActivity extends AppCompatActivity {
+public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
     private PanicRuntimeScope.Registration panicCancellation;
 
 
@@ -66,8 +66,8 @@ public class SignUpActivity extends AppCompatActivity {
     private View strengthBar5;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         SafeKeySession.lock();
 
@@ -580,8 +580,8 @@ public class SignUpActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
         resumed = true;
         if (!navigating && !isFinishing() && new VaultKeyEnvelopeStore(this).hasEnvelope()) {
             startActivity(new Intent(this, SignInActivity.class));
@@ -590,18 +590,18 @@ public class SignUpActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         resumed = false;
         if (!navigating) { cancelEnrollment(); }
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
         if (panicCancellation != null) { panicCancellation.close(); }
 
         cancelEnrollment();
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void validateSignUpForm() {

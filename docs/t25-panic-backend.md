@@ -1,10 +1,12 @@
-# T25 Panic backend: runtime shutdown integration
+# T25 Panic backend: runtime shutdown and startup recovery
 
 The isolated backend is now joined to the application's real and Decoy runtime
 through one captured `PanicRuntimeScope` and work gate. The application exposes
 a terminal shutdown adapter; normal authentication remains available until a
-verified trigger explicitly stops that runtime. Panic enrollment, startup
-recovery routing and the shared Sign In classifier are not enabled by this stage.
+verified trigger explicitly stops that runtime. Startup now checks the durable
+marker before constructing vaults. Pending cleanup runs on a separate worker;
+failed cleanup prevents authentication and fresh setup. Panic enrollment and
+the shared Sign In classifier are not enabled by this stage.
 T25 remains in progress until those integration steps are completed and verified.
 
 ## Implemented behavior
@@ -35,8 +37,8 @@ T25 remains in progress until those integration steps are completed and verified
 ## Exact resource manifest
 
 `PanicWipeTargets.forSafeKey()` lists the known owned resources below. It is a
-factory only: production code does not call it yet. All existing producers must
-be stopped before its targets may be used.
+factory called by cold-start recovery only after its empty runtime is stopped.
+All existing producers must be stopped before its targets may be used.
 
 | Resource | Cleanup |
 | --- | --- |
@@ -70,10 +72,13 @@ promise physical overwriting of flash storage or removal of off-device copies.
    destructive primitive on the main thread or on a counted vault worker; the
    Panic control worker must not wait for its own operation. A cancellation or closure failure
    keeps the stopped runtime unusable and must retain pending recovery state.
-3. Before constructing/opening vaults at application startup, recover any
-   pending marker. Recovery errors keep authentication and fresh vault creation
-   unavailable. After successful cleanup, construct a new runtime for fresh
-   setup; never reopen the stopped one or restore a saved unlocked Activity.
+3. Startup probes the marker before database initialization. Pending cleanup
+   runs on an independent worker using the exact manifest and shutdown adapter.
+   Screen lifecycle bodies are guarded before their initialization, including
+   restored protected screens. Failure leaves authentication and setup unavailable.
+   Success replaces the stopped scope and clears the old task before fresh setup.
+   Normal startup with no marker performs no wipe. Device/process-relaunch
+   verification of this integrated path is still required.
 4. Implement the enrollment authority using a fully authenticated REAL session,
    completed TOTP where configured, verified actual master/Decoy credentials and
    current session plus credential-configuration generations. Commit while that
@@ -106,6 +111,8 @@ The original isolated session/authority adapter is a test double. New runtime
 shutdown tests exercise production queues and SQLCipher with uniquely named test
 storage and a test UI-clear callback. They cover both database closures, a queued
 open before deletion, stopped-store writes and clearing abandoned TOTP setup.
+Startup gate tests additionally cover initialization ordering, retained-marker
+failures, rejected dispatch and cold cleanup with isolated owned resources.
 They are not end-to-end production Sign In, Settings, process-restart or Decoy
 switching tests. Android verification of each integration patch is still required.
 

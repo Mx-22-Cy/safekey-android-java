@@ -50,8 +50,8 @@ public final class ChangeMasterPasswordActivity extends ProtectedActivity {
     private long authentication;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.enableEdgeToEdge(getWindow());
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
@@ -86,28 +86,28 @@ public final class ChangeMasterPasswordActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
         authentication = SafeKeySession.getManager().getAuthenticationGeneration();
         active = !isFinishing() && authentication >= 0L;
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         active = false;
         cancelPending();
         currentInput.setText("");
         newInput.setText("");
         confirmationInput.setText("");
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
         if (panicCancellation != null) { panicCancellation.close(); }
 
         cancelPending();
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void submit() {

@@ -58,11 +58,11 @@ public class HomeActivity extends ProtectedActivity {
     private long countRequestGeneration;
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(savedInstanceState);
+        super.onRuntimeCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         WindowCompat.enableEdgeToEdge(
@@ -281,8 +281,8 @@ public class HomeActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
 
         if (isFinishing() || isDestroyed()) {
             return;
@@ -296,7 +296,7 @@ public class HomeActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         securityController.stop();
         showSecurityUnavailable(R.string.security_not_checked);
         countsActive = false;
@@ -305,16 +305,16 @@ public class HomeActivity extends ProtectedActivity {
         countRequestGeneration++;
         showVaultCountsUnavailable();
 
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
         if (securityController != null) { securityController.close(); }
         countsActive = false;
         countRequestGeneration++;
 
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void refreshMasterPasswordHealth() {
