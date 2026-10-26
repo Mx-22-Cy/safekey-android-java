@@ -3,6 +3,7 @@ package com.safekey.app.home;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -16,11 +17,17 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.safekey.app.R;
+import com.safekey.app.security.results.AndroidCredentialSecurity;
+import com.safekey.app.security.results.CredentialSecurityController;
+import com.safekey.app.security.results.CredentialSecuritySummary;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.auth.ChangeMasterPasswordActivity;
+import com.safekey.app.auth.MasterPasswordHealth;
+import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
@@ -28,7 +35,16 @@ import com.safekey.app.alerts.AlertsActivity;
 
 public class HomeActivity extends ProtectedActivity {
 
-    private static final int PREVIEW_SECURITY_SCORE = 82;
+    private CredentialSecurityController securityController;
+    private TextView textSecurityStatus;
+    private TextView textSecurityCoverage;
+    private TextView textSecurityReview;
+    private View securityBanner;
+
+    private final Runnable masterPasswordHealthChanged = this::refreshMasterPasswordHealth;
+    private MasterPasswordHealth masterPasswordHealth;
+    private TextView textMasterPasswordHealth;
+    private Button buttonCheckMasterPassword;
 
     private SecurityScoreView securityScoreView;
 
@@ -47,6 +63,7 @@ public class HomeActivity extends ProtectedActivity {
     ) {
 
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -164,13 +181,40 @@ public class HomeActivity extends ProtectedActivity {
                         R.id.navSettings
                 );
 
-        showPreviewSecurityData();
+        masterPasswordHealth = ((SafeKeyApplication) getApplication()).getMasterPasswordHealth();
+        textMasterPasswordHealth = findViewById(R.id.textMasterPasswordHealth);
+        buttonCheckMasterPassword = findViewById(R.id.buttonCheckMasterPassword);
+        buttonCheckMasterPassword.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) { return; }
+            SafeKeySession.lock();
+            Intent intent = new Intent(this, SignInActivity.class);
+            intent.putExtra(SignInActivity.REQUIRE_MASTER_PASSWORD, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+        findViewById(R.id.buttonChangeMasterPassword).setOnClickListener(view -> {
+            if (requireUnlockedSession()) {
+                startActivity(new Intent(this, ChangeMasterPasswordActivity.class));
+            }
+        });
+
+        securityController = AndroidCredentialSecurity.create(
+                ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator(), false);
+        textSecurityStatus = findViewById(R.id.textHomeSecurityStatus);
+        textSecurityCoverage = findViewById(R.id.textHomeSecurityCoverage);
+        textSecurityReview = findViewById(R.id.textHomeSecurityReview);
+        securityBanner = findViewById(R.id.layoutHomeSecurityBanner);
+        findViewById(R.id.textReview).setOnClickListener(
+                view -> findViewById(R.id.navAlerts).performClick());
+        showSecurityUnavailable(R.string.security_loading);
         showVaultCountsUnavailable();
 
         navHome.setOnClickListener(
                 view -> {
                     if (requireUnlockedSession()) {
                         refreshVaultCounts();
+                        refreshSecurityResults();
                     }
                 }
         );
@@ -245,12 +289,19 @@ public class HomeActivity extends ProtectedActivity {
         }
 
         countsActive = true;
+        masterPasswordHealth.addListener(masterPasswordHealthChanged);
+        refreshMasterPasswordHealth();
         refreshVaultCounts();
+        refreshSecurityResults();
     }
 
     @Override
     protected void onPause() {
+        securityController.stop();
+        showSecurityUnavailable(R.string.security_not_checked);
         countsActive = false;
+        masterPasswordHealth.removeListener(masterPasswordHealthChanged);
+        textMasterPasswordHealth.setText(null);
         countRequestGeneration++;
         showVaultCountsUnavailable();
 
@@ -259,10 +310,24 @@ public class HomeActivity extends ProtectedActivity {
 
     @Override
     protected void onDestroy() {
+        if (securityController != null) { securityController.close(); }
         countsActive = false;
         countRequestGeneration++;
 
         super.onDestroy();
+    }
+
+    private void refreshMasterPasswordHealth() {
+        if (!countsActive || isFinishing() || isDestroyed()
+                || SafeKeySession.getManager().getRemainingInactivityMillis() <= 0L) { return; }
+        MasterPasswordCheckStatus status = masterPasswordHealth.getStatus();
+        boolean pending = status == MasterPasswordCheckStatus.PENDING;
+        textMasterPasswordHealth.setVisibility(status == MasterPasswordCheckStatus.CHECKED
+                ? View.GONE : View.VISIBLE);
+        textMasterPasswordHealth.setText(status == MasterPasswordCheckStatus.CHECKED ? null
+                : getString(pending ? R.string.master_password_pending_notice
+                            : R.string.master_password_breached_notice));
+        buttonCheckMasterPassword.setVisibility(pending ? View.VISIBLE : View.GONE);
     }
 
     private boolean requireUnlockedSession() {
@@ -344,40 +409,69 @@ public class HomeActivity extends ProtectedActivity {
         finish();
     }
 
-    private void showPreviewSecurityData() {
+    private void refreshSecurityResults() {
+        showSecurityUnavailable(R.string.security_loading);
+        try {
+            securityController.load(new CredentialSecurityController.Listener() {
+                @Override public void onResults(CredentialSecuritySummary summary) {
+                    if (!countsActive || isFinishing() || isDestroyed()) { return; }
+                    textAtRiskCount.setText(getString(R.string.home_vault_count_value, summary.getAtRiskCount()));
+                    textBreachCount.setText(getString(R.string.home_vault_count_value, summary.getBreachCount()));
+                    if (summary.hasScore()) {
+                        securityScoreView.setScore(summary.getScore());
+                        textSecurityStatus.setText(summary.getAtRiskCount() == 0
+                                ? R.string.security_no_known_issues : R.string.security_needs_attention);
+                    } else {
+                        int label = summary.getAvailability() == CredentialSecuritySummary.Availability.EMPTY
+                                ? R.string.security_no_credentials
+                                : summary.getAvailability() == CredentialSecuritySummary.Availability.UNAVAILABLE
+                                  ? R.string.security_unavailable : R.string.security_not_checked;
+                        securityScoreView.setUnavailable(getString(label));
+                        textSecurityStatus.setText(label);
+                    }
+                    textSecurityStatus.setTextColor(getColor(summary.hasScore()
+                            && summary.getAtRiskCount() == 0 ? R.color.auth_accent
+                            : R.color.auth_text_primary));
+                    String coverage = getString(R.string.security_saved_basis);
+                    if (summary.getIncompleteCount() > 0) {
+                        coverage += "\n" + getResources().getQuantityString(R.plurals.security_incomplete_count,
+                                summary.getIncompleteCount(), summary.getIncompleteCount());
+                    }
+                    textSecurityCoverage.setText(coverage);
+                    if (summary.getTotalCount() == 0) {
+                        textSecurityReview.setText(R.string.security_review_empty);
+                    } else if (summary.getAtRiskCount() > 0) {
+                        textSecurityReview.setText(getResources().getQuantityString(R.plurals.security_risk_count,
+                                summary.getAtRiskCount(), summary.getAtRiskCount()));
+                    } else if (summary.getIncompleteCount() > 0) {
+                        textSecurityReview.setText(getResources().getQuantityString(R.plurals.security_incomplete_count,
+                                summary.getIncompleteCount(), summary.getIncompleteCount()));
+                    } else {
+                        textSecurityReview.setText(R.string.security_review_clean);
+                    }
+                    securityBanner.setBackgroundResource(summary.getAtRiskCount() > 0
+                            ? R.drawable.dashboard_alert_banner_bg : R.drawable.dashboard_card_bg);
+                }
+                @Override public void onError(Exception error) {
+                    if (countsActive && !isFinishing() && !isDestroyed()) {
+                        showSecurityUnavailable(R.string.security_unavailable);
+                    }
+                }
+            }, false);
+        } catch (RuntimeException error) {
+            showSecurityUnavailable(R.string.security_unavailable);
+        }
+    }
 
-        /*
-         * Security-panel preview values remain until the
-         * security dashboard integration is complete.
-         * Credential, favorite, and note totals are loaded separately.
-         */
-
-        securityScoreView.setScore(
-                PREVIEW_SECURITY_SCORE
-        );
-
-        textAtRiskCount.setText(
-                R.string.home_preview_at_risk_count
-        );
-
-        textBreachCount.setText(
-                R.string.home_preview_breach_count
-        );
-
-        /*
-         * TODO(Security integration):
-         *
-         * Replace the preview Security Score,
-         * at-risk count and breach-alert count
-         * with values produced by the approved
-         * security layer.
-         *
-         * Breach checking must use the project's
-         * privacy-preserving HIBP k-anonymity design.
-         *
-         * Never send plaintext passwords
-         * to an external breach service.
-         */
+    private void showSecurityUnavailable(int label) {
+        securityScoreView.setUnavailable(getString(label));
+        textAtRiskCount.setText("\u2014");
+        textBreachCount.setText("\u2014");
+        textSecurityStatus.setText(label);
+        textSecurityStatus.setTextColor(getColor(R.color.auth_text_primary));
+        textSecurityCoverage.setText(R.string.security_score_method);
+        textSecurityReview.setText(label);
+        securityBanner.setBackgroundResource(R.drawable.dashboard_card_bg);
     }
 
     private void refreshVaultCounts() {

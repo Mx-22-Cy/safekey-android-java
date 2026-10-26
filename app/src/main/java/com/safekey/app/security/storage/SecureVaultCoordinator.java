@@ -8,7 +8,12 @@ import android.os.SystemClock;
 import androidx.fragment.app.FragmentActivity;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
+import com.safekey.app.auth.logic.MasterPasswordPolicy;
+import com.safekey.app.auth.logic.MasterPasswordValidationResult;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.VaultSessionManager;
 import com.safekey.app.data.model.Credential;
+import com.safekey.app.breach.PasswordBreachResult;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
@@ -429,6 +434,19 @@ public final class SecureVaultCoordinator {
         );
     }
 
+    public long getVaultGeneration() {
+        return vaultDataService.getVaultGeneration();
+    }
+
+    public void updateCredentialBreachStatus(
+            long generation, long id, String expectedPassword,
+            PasswordBreachResult.Status status,
+            VaultDataService.ResultCallback<PasswordBreachResult.Status> callback
+    ) {
+        vaultDataService.updateCredentialBreachStatus(
+                generation, id, expectedPassword, status, callback);
+    }
+
     public void getCredentials(
             VaultDataService.ResultCallback<List<Credential>> callback
     ) {
@@ -490,6 +508,191 @@ public final class SecureVaultCoordinator {
             VaultDataService.ResultCallback<List<SecureNote>> callback
     ) {
         vaultDataService.getSecureNotes(callback);
+    }
+
+    /** Enrollment UI uses the same cancellable handoff/session claim as sign-in. */
+    public VaultUnlockFlow.Request createVaultForEnrollment(
+            char[] masterPassword,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+        requireNewPassword(masterPassword);
+        requireEnrollmentStatus(checkStatus);
+        char[] copy = masterPassword.clone();
+        VaultUnlockFlow.Request request = null;
+        try {
+            request = unlockFlow.begin(new VaultUnlockFlow.Listener() {
+                @Override public void onSuccess() { callback.onSuccess(); }
+                @Override public void onError(Exception error) { callback.onError(error); }
+                @Override public boolean requiresSessionClaim() { return true; }
+                @Override public void onTotpRequired(VaultUnlockFlow.Request pending) {
+                    unlockFlow.fail(pending, new IllegalStateException(
+                            "Existing authenticator state requires sign-in."));
+                }
+            });
+            VaultUnlockFlow.Request scheduled = request;
+            securityExecutor.execute(() -> createEnrollmentInBackground(
+                    copy, checkStatus, scheduled));
+            return request;
+        } catch (RuntimeException error) {
+            clear(copy);
+            if (request != null) { request.close(); }
+            throw error;
+        }
+    }
+
+    private void createEnrollmentInBackground(
+            char[] password,
+            MasterPasswordCheckStatus checkStatus,
+            VaultUnlockFlow.Request request
+    ) {
+        byte[] salt = null;
+        byte[] masterKey = null;
+        byte[] databaseKey = null;
+        try {
+            if (!request.isActive()) { return; }
+            if (envelopeStore.hasEnvelope()) {
+                throw new IllegalStateException("A vault has already been created.");
+            }
+            salt = keyDeriver.generateSalt();
+            masterKey = keyDeriver.deriveKey(password, salt);
+            databaseKey = new byte[SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES];
+            secureRandom.nextBytes(databaseKey);
+            VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt,
+                    cipher.encrypt(databaseKey, masterKey, databaseKeyContext()));
+            if (!request.isActive()) { return; }
+            envelopeStore.save(envelope, checkStatus);
+            // A saved envelope is retained if the UI leaves: future sign-in can
+            // open this vault. Cancellation still prevents a session claim.
+            unlockFlow.acceptPrimary(request, databaseKey);
+        } catch (Exception error) {
+            unlockFlow.fail(request, error);
+        } finally {
+            clear(password);
+            clear(salt);
+            clear(masterKey);
+            clear(databaseKey);
+        }
+    }
+
+    /**
+     * Low-level envelope replacement. UI callers screen the proposed complete
+     * password first and obtain explicit consent before passing PENDING.
+     * The database key stays the same, preserving credentials, TOTP and biometrics.
+     */
+    public MasterPasswordChangeRequest changeMasterPassword(
+            char[] currentPassword,
+            char[] newPassword,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+        requireNewPassword(newPassword);
+        requireEnrollmentStatus(checkStatus);
+        if (currentPassword == null || currentPassword.length == 0) {
+            throw new IllegalArgumentException("Current password is required.");
+        }
+        if (Arrays.equals(currentPassword, newPassword)) {
+            throw new IllegalArgumentException("Choose a different master password.");
+        }
+        VaultSessionManager session = SafeKeySession.getManager();
+        long authentication = session.getAuthenticationGeneration();
+        if (authentication < 0L || !isVaultOpen()) {
+            throw new IllegalStateException("An authenticated vault session is required.");
+        }
+        MasterPasswordChangeRequest request =
+                new MasterPasswordChangeRequest(currentPassword, newPassword);
+        try {
+            securityExecutor.execute(() -> changeMasterPasswordInBackground(
+                    request, authentication, checkStatus, callback));
+            return request;
+        } catch (RuntimeException error) {
+            request.close();
+            throw error;
+        }
+    }
+
+    private void changeMasterPasswordInBackground(
+            MasterPasswordChangeRequest request,
+            long authentication,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        char[][] passwords = request.takePasswords();
+        if (passwords == null) { return; }
+        byte[] oldSalt = null;
+        byte[] oldMasterKey = null;
+        byte[] databaseKey = null;
+        byte[] newSalt = null;
+        byte[] newMasterKey = null;
+        try {
+            if (request.isCancelled()) { return; }
+            VaultKeyEnvelope original = envelopeStore.load();
+            if (original == null) {
+                throw new IllegalStateException("No vault has been created.");
+            }
+            oldSalt = original.getSalt();
+            oldMasterKey = keyDeriver.deriveKey(passwords[0], oldSalt);
+            databaseKey = cipher.decrypt(original.getWrappedDatabaseKey(),
+                    oldMasterKey, databaseKeyContext());
+            if (request.isCancelled()) { return; }
+            newSalt = keyDeriver.generateSalt();
+            newMasterKey = keyDeriver.deriveKey(passwords[1], newSalt);
+            VaultKeyEnvelope replacement = new VaultKeyEnvelope(newSalt,
+                    cipher.encrypt(databaseKey, newMasterKey, databaseKeyContext()));
+            // Commit on the UI thread: unlock-flow callbacks can hold their
+            // own lock while consulting the session manager. A security worker
+            // must not hold the session lock and call back into that flow.
+            // Only salt/ciphertext cross this boundary, never a raw key/password.
+            if (!mainHandler.post(() -> {
+                if (request.isCancelled()) { return; }
+                try {
+                    boolean[] committed = {false};
+                    SafeKeySession.getManager().runIfCurrentAuthentication(authentication, () ->
+                            committed[0] = request.commit(() -> {
+                                if (!isVaultOpen() || !envelopeStore.replaceIfMatches(
+                                        original, replacement, checkStatus)) {
+                                    throw new IllegalStateException("Vault state changed; sign in again.");
+                                }
+                            }));
+                    if (committed[0] && !request.isCancelled()) { callback.onSuccess(); }
+                } catch (RuntimeException error) {
+                    if (!request.isCancelled()
+                            && SafeKeySession.getManager().getAuthenticationGeneration()
+                            == authentication) { callback.onError(error); }
+                }
+            })) { request.close(); }
+        } catch (Exception error) {
+            mainHandler.post(() -> {
+                if (!request.isCancelled()
+                        && SafeKeySession.getManager().getAuthenticationGeneration()
+                        == authentication) {
+                    callback.onError(error);
+                }
+            });
+        } finally {
+            clear(passwords[0]);
+            clear(passwords[1]);
+            clear(oldSalt);
+            clear(oldMasterKey);
+            clear(databaseKey);
+            clear(newSalt);
+            clear(newMasterKey);
+        }
+    }
+
+    private static void requireNewPassword(char[] password) {
+        if (MasterPasswordPolicy.validate(password) != MasterPasswordValidationResult.VALID) {
+            throw new IllegalArgumentException("The proposed master password was rejected.");
+        }
+    }
+
+    private static void requireEnrollmentStatus(MasterPasswordCheckStatus status) {
+        if (status != MasterPasswordCheckStatus.CHECKED
+                && status != MasterPasswordCheckStatus.PENDING) {
+            throw new IllegalArgumentException("The proposed password cannot be accepted.");
+        }
     }
 
     public void createVault(
