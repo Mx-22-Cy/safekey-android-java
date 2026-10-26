@@ -165,6 +165,17 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         return panicBackend;
     }
 
+    /** Hind's Sign In controller calls this on main after PANIC_WIPED, before fresh-setup navigation. */
+    public void continueAfterPanicWipe(com.safekey.app.security.panic.PanicBackend completedBackend) {
+        if (Looper.myLooper() != Looper.getMainLooper()
+                || completedBackend == null || completedBackend != panicBackend
+                || !completedBackend.wasWipeCompleted()
+                || !panicRuntimeScope.isStopped() || !panicRuntimeScope.areResourcesClosed()) {
+            throw new IllegalStateException("A completed Panic wipe is required before restarting setup.");
+        }
+        beginStartup();
+    }
+
     public MasterPasswordHealth getMasterPasswordHealth() {
         requireRuntimeReady();
         return masterPasswordHealth;

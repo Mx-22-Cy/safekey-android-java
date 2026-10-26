@@ -1,4 +1,4 @@
-# T25 Panic backend: production enrollment, shutdown and startup recovery
+# T25 Panic backend: role checks, verified trigger, enrollment and recovery
 
 The isolated backend is now joined to the application's real and Decoy runtime
 through one captured `PanicRuntimeScope` and work gate. The application exposes
@@ -6,9 +6,11 @@ a terminal shutdown adapter; normal authentication remains available until a
 verified trigger explicitly stops that runtime. Startup now checks the durable
 marker before constructing vaults. Pending cleanup runs on a separate worker;
 failed cleanup prevents authentication and fresh setup. The concrete enrollment
-backend is now wired through `SafeKeyApplication.getPanicBackend()`; its Android
-verification is required for this checkpoint. The shared password classifier,
-verified-trigger API and setup/change collision guards are subsequent T25 steps.
+backend is wired through `SafeKeyApplication.getPanicBackend()`. Its enrollment
+checkpoint passed Android verification (484 unit and 225 instrumented tests).
+The shared password-role checks and verified-trigger API are now implemented; their
+Android verification is required for this checkpoint. Setup/change collision guards
+are the subsequent T25 step.
 Hind owns the confirmation/Settings screens and shared Sign In UI integration
 (T27/T38), followed by full UI-flow testing. Those screens are not part of this
 backend patch. T25 is still in progress and the PR remains Draft.
@@ -97,12 +99,19 @@ promise physical overwriting of flash storage or removal of off-device copies.
    password changes. Use `isReservedPassword()` and the other role verifiers
    inside the same configuration authorization; checking before an unguarded
    asynchronous save is insufficient.
-6. Complete the single shared Sign In router, including uniform role checking
-   and timing for configured/unconfigured master, Decoy and Panic roles. This
-   backend does not implement that timing policy. Avoid early-return routing
-   from `checkAndWipe()` before the uniform role checks have finished. A Panic
-   trigger must never claim an unlocked session or bypass TOTP for a normal
-   vault. Clear old screens and route to fresh setup only after wipe success.
+6. `PanicBackend.prepareSignIn()` supplies one single-use, cancellable role-check
+   request for Hind's shared Sign In UI. It checks master, Decoy and Panic in a
+   fixed order without returning early on a match or an ordinary role-check error.
+   Absent roles use a dummy KDF/AEAD check whose result is ignored. Any role error,
+   ambiguous match, abandoned request or changed credential snapshot aborts routing.
+   This equalizes the number of expensive role checks; it does not promise exact
+   constant elapsed time across devices, providers, I/O failures or later UI flows.
+   A Panic match stops new work only at the final guarded commit. Inputs and the
+   request's verification lease clear before the shutdown drain, and PANIC_WIPED
+   is returned only after all cleanup verifications succeed. Do not call the legacy
+   `PanicPasswordService.checkAndWipe()` ahead of these role checks. MASTER/DECOY
+   results never claim an unlocked session, open a database or bypass required TOTP.
+   Hind owns the subsequent coordinator calls and navigation.
 7. Verify the exact integrated commit on-device: real/Decoy/TOTP sessions,
    pending real and Decoy enrollment, backgrounding, stale callbacks, switching,
    recovery after process death, all password-change collisions and the full
@@ -131,8 +140,8 @@ First verification on the working branch:
 .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:connectedDebugAndroidTest --console=plain
 ```
 
-The development host has no Android SDK/emulator. Local Java compilation uses
-Android/SQLCipher API stubs; deterministic local lifecycle tests substitute the
+The development host has no Android SDK/emulator. Local checks use Java syntax
+parsing and selected Android/work-gate API stubs; deterministic local lifecycle tests substitute the
 crypto port. The Argon2id implementation and all Android persistence/Keystore/
 SQLCipher behavior must pass the project's Gradle and device tests before any
 verified-backend claim is made.
@@ -178,10 +187,54 @@ and a dedicated TOTP Keystore alias; they never run production wipe targets.
 
 1. Panic proof/wipe/shutdown backend — Done.
 2. Startup recovery backend — Done; full UI process-relaunch tests remain T27.
-3. Production enrollment authorization — implemented; Android checks pending.
-4. Password identification and verified-trigger API — pending.
+3. Production enrollment authorization — Done; 709 tests passed on API 37.
+4. Password identification and verified-trigger API — implemented; Android checks pending.
 5. Password separation across setup/change operations — pending.
 6. Final backend safety verification, integration documentation and PR review — pending.
 
-Remaining at preparation of this checkpoint: **4 / 6**. Mark part 3 Done only
+Remaining at preparation of this checkpoint: **3 / 6**. Mark part 4 Done only
 once the exact checkpoint passes the project's Android verification.
+
+
+## Shared Sign In backend call for Hind (T27)
+
+1. On the UI thread, complete `prepareForVaultAuthentication()` before accepting a
+   new attempt. Close an earlier request on replacement, backgrounding or screen
+   abandonment. Call `backend.prepareSignIn(candidate)` while the application
+   runtime is available; it copies the supplied `char[]` immediately. Keep the
+   original input private; clear it after the chosen coordinator has copied it, or
+   in `finally` for NO_MATCH, PANIC_WIPED and errors. Clear caller-owned input and
+   screen fields on cancellation/backgrounding as well. The backend clears only
+   its own copies.
+2. Run `request.run()` on an **independent control worker**, never the main thread
+   or an executor registered with the vault runtime. A Panic wipe drains those
+   vault executors and must not wait for the worker that is currently calling it.
+   Always close the request in `finally`. A canceled unstarted request clears its
+   pending input. Canceling during verification rejects the final commit and keeps
+   active input tracked until the service clears it. After a verified Panic trigger
+   is committed, cleanup is terminal and continues even if its screen disappears.
+3. Handle the result:
+   - `NO_MATCH`: show the common authentication error; do not open either vault.
+   - `MASTER`: use the existing Real coordinator unlock flow, including TOTP and
+     its one-time session claim. Role identification alone is not authentication.
+   - `DECOY`: use the Decoy coordinator and existing session-bound vault activation.
+   - `PANIC_WIPED`: only after successful full cleanup, dispatch
+     `application.continueAfterPanicWipe(backend)` on main. It rejects any backend
+     other than the stopped application's current, successfully completed backend.
+     Startup constructs a fresh scope and requires fresh-setup navigation. Open
+     `PanicStartupActivity` with the old task cleared; its existing startup gate
+     completes the transition to Sign Up. The old backend/runtime stays stopped.
+4. Deliver normal results only to the current attempt. Deliver the terminal wipe
+   result through the application-level Sign In controller: shutdown deliberately
+   clears/finishes sensitive screens, so a callback that depends on the old Activity
+   remaining alive cannot own fresh-setup navigation. On any cleanup error, keep
+   authentication blocked and recover the durable marker at startup. Never turn an
+   exception into NO_MATCH, an unlocked vault, or a successful reset.
+
+The new 20 unit tests verify role ordering, ambiguous/error rejection, cancellation,
+configuration changes, copy lifetime and fail-closed wipe behavior. The 14 new
+instrumented tests exercise actual Argon2id/AES-GCM proofs, mapped envelope stores,
+missing-role dummy checks, the production shutdown adapter and an isolated resource
+manifest. Their database paths contain manifest sentinels; existing runtime tests
+cover live SQLCipher closure. These tests do not implement Hind's UI or kill and
+relaunch the Android application process. Both remain T27 integration checks.

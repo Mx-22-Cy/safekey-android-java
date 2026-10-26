@@ -14,6 +14,8 @@ public final class PanicBackend {
     private final PanicRuntimeScope scope;
     private final PanicPasswordService passwords;
     private final AndroidPanicEnrollmentAuthority enrollment;
+    private final PanicSignInService signIn;
+    private volatile boolean wipeCompleted;
 
     public PanicBackend(Context context, SecureVaultCoordinator real, DecoyVaultCoordinator decoy,
                          PanicWipeCoordinator.Runtime runtime) {
@@ -23,12 +25,19 @@ public final class PanicBackend {
         passwords = new PanicPasswordService(scope.getWorkGate(), new PanicPasswordStore(context),
                 new PanicPasswordCrypto(), wipe);
         enrollment = new AndroidPanicEnrollmentAuthority(context, real, decoy);
+        signIn = new PanicSignInService(scope.getWorkGate(),
+                new AndroidPanicPasswordCredentials(context), wipe);
     }
 
-    // The device tests retain real authorization/crypto/storage and supply a non-destructive wipe plan.
+    // Device tests retain real crypto/storage and supply an isolated wipe plan.
     PanicBackend(PanicRuntimeScope scope, PanicPasswordService passwords,
                  AndroidPanicEnrollmentAuthority enrollment) {
-        this.scope = scope; this.passwords = passwords; this.enrollment = enrollment;
+        this(scope, passwords, enrollment, null);
+    }
+
+    PanicBackend(PanicRuntimeScope scope, PanicPasswordService passwords,
+                 AndroidPanicEnrollmentAuthority enrollment, PanicSignInService signIn) {
+        this.scope = scope; this.passwords = passwords; this.enrollment = enrollment; this.signIn = signIn;
     }
 
     /** Copies input at submission. Close on screen abandonment; run once on a worker. */
@@ -46,6 +55,79 @@ public final class PanicBackend {
         }
         try (EnrollmentRequest request = prepareEnrollment(master, decoy, panic, confirmation, warningConfirmed)) {
             request.run();
+        }
+    }
+
+
+    /** True only after this backend has returned from complete, verified cleanup. */
+    public boolean wasWipeCompleted() { return wipeCompleted; }
+
+    /** Prepare on the screen; run on an independent control worker, never a vault worker. */
+    public SignInRequest prepareSignIn(char[] candidate) {
+        if (signIn == null) { throw new IllegalStateException("Sign In backend is unavailable."); }
+        if (candidate == null || candidate.length == 0
+                || candidate.length > com.safekey.app.auth.logic.MasterPasswordPolicy.MAX_LENGTH * 2) {
+            throw new IllegalArgumentException("Invalid sign-in input length.");
+        }
+        return new SignInRequest(candidate);
+    }
+
+    /** A single-use role check and verified Panic trigger. Close when its screen is abandoned. */
+    public final class SignInRequest implements AutoCloseable {
+        private char[] pending;
+        private PanicRuntimeScope.Registration registration;
+        private boolean started;
+        private boolean closed;
+
+        private SignInRequest(char[] candidate) {
+            // Count construction until its private input is either registered for clearing or erased.
+            try (PanicWorkGate.Operation ignored = scope.begin()) {
+                try {
+                    pending = candidate.clone();
+                    registration = scope.onStop(this::close);
+                    synchronized (this) { if (closed) { registration.close(); } }
+                } catch (RuntimeException | Error error) { close(); throw error; }
+            }
+        }
+
+        /** MASTER/DECOY still require their existing coordinator unlock, including required TOTP. */
+        public PanicSignInService.Result run() throws Exception {
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                throw new IllegalStateException("Run Sign In on an independent background control worker.");
+            }
+            PanicSignInService.Result result = signIn.run(new PanicSignInService.Submission() {
+                @Override public char[] takePassword() { return SignInRequest.this.takePassword(); }
+                @Override public void commitIfCurrent(PanicPasswordService.Commit action) throws Exception {
+                    SignInRequest.this.commitIfCurrent(action);
+                }
+                @Override public void close() { SignInRequest.this.close(); }
+            });
+            if (result == PanicSignInService.Result.PANIC_WIPED) { wipeCompleted = true; }
+            return result;
+        }
+
+        private synchronized char[] takePassword() {
+            requireCurrent();
+            if (started) { throw new CancellationException("Sign In was already submitted."); }
+            started = true;
+            char[] result = pending;
+            pending = null;
+            return result;
+        }
+
+        private synchronized void commitIfCurrent(PanicPasswordService.Commit action) throws Exception {
+            requireCurrent();
+            action.run();
+        }
+
+        private void requireCurrent() {
+            if (closed || scope.isStopped()) { throw new CancellationException("Sign In was cancelled."); }
+        }
+
+        @Override public synchronized void close() {
+            closed = true;
+            if (pending != null) { Arrays.fill(pending, '\0'); pending = null; }
+            if (registration != null) { registration.close(); }
         }
     }
 

@@ -148,7 +148,7 @@ public final class AndroidPanicEnrollmentAuthority implements PanicPasswordServi
         }
     }
 
-    private static boolean matches(char[] password, VaultKeyEnvelope envelope, String context) throws Exception {
+    static boolean matches(char[] password, VaultKeyEnvelope envelope, String context) throws Exception {
         byte[] salt = envelope.getSalt();
         byte[] key = null;
         byte[] databaseKey = null;
