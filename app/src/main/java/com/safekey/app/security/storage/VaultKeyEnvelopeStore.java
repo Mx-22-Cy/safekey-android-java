@@ -1,6 +1,9 @@
 
 package com.safekey.app.security.storage;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
@@ -51,6 +54,7 @@ public final class VaultKeyEnvelopeStore
     private static final String KEY_PASSWORD_CHECK =
             "master_password_check";
 
+    private final PanicRuntimeScope runtimeScope;
     private final SharedPreferences preferences;
 
     /**
@@ -91,6 +95,8 @@ public final class VaultKeyEnvelopeStore
                 "preferencesName"
         );
 
+        runtimeScope = PanicRuntimeScope.capture(context);
+
         preferences =
                 context
                         .getApplicationContext()
@@ -100,8 +106,7 @@ public final class VaultKeyEnvelopeStore
                         );
     }
 
-    @Override
-    public boolean hasEnvelope() {
+    private boolean hasEnvelopeWhileRunning() {
         synchronized (STORE_LOCK) {
             return hasEnvelopeLocked();
         }
@@ -129,7 +134,7 @@ public final class VaultKeyEnvelopeStore
         );
     }
 
-    void save(
+    private void saveWhileRunning(
             VaultKeyEnvelope envelope,
             MasterPasswordCheckStatus status
     ) {
@@ -191,8 +196,7 @@ public final class VaultKeyEnvelopeStore
         }
     }
 
-    @Override
-    public VaultKeyEnvelope load() {
+    private VaultKeyEnvelope loadWhileRunning() {
         synchronized (STORE_LOCK) {
             return loadLocked();
         }
@@ -287,7 +291,7 @@ public final class VaultKeyEnvelopeStore
      * T45: Returns the current master-password check status.
      * Missing or invalid status defaults to PENDING.
      */
-    public MasterPasswordCheckStatus getMasterPasswordCheckStatus() {
+    private MasterPasswordCheckStatus getMasterPasswordCheckStatusWhileRunning() {
         synchronized (STORE_LOCK) {
             try {
                 String stored =
@@ -313,7 +317,7 @@ public final class VaultKeyEnvelopeStore
      * T45: Update the password-check status only when
      * the stored envelope matches the expected envelope.
      */
-    public boolean updateMasterPasswordCheckStatus(
+    private boolean updateMasterPasswordCheckStatusWhileRunning(
             VaultKeyEnvelope expected,
             MasterPasswordCheckStatus status
     ) {
@@ -358,7 +362,7 @@ public final class VaultKeyEnvelopeStore
      * This protects against replacing an envelope
      * that has changed since authentication began.
      */
-    boolean replaceIfMatches(
+    private boolean replaceIfMatchesWhileRunning(
             VaultKeyEnvelope expected,
             VaultKeyEnvelope replacement,
             MasterPasswordCheckStatus status
@@ -393,8 +397,7 @@ public final class VaultKeyEnvelopeStore
         );
     }
 
-    @Override
-    public void clear() {
+    private void clearWhileRunning() {
         synchronized (STORE_LOCK) {
             clearLocked();
         }
@@ -413,4 +416,66 @@ public final class VaultKeyEnvelopeStore
             );
         }
     }
+
+    @Override
+    public boolean hasEnvelope() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return hasEnvelopeWhileRunning();
+        }
+    }
+
+
+    void save(
+            VaultKeyEnvelope envelope,
+            MasterPasswordCheckStatus status
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            saveWhileRunning(envelope, status);
+        }
+    }
+
+
+    @Override
+    public VaultKeyEnvelope load() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return loadWhileRunning();
+        }
+    }
+
+
+    public MasterPasswordCheckStatus getMasterPasswordCheckStatus() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return getMasterPasswordCheckStatusWhileRunning();
+        }
+    }
+
+
+    public boolean updateMasterPasswordCheckStatus(
+            VaultKeyEnvelope expected,
+            MasterPasswordCheckStatus status
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return updateMasterPasswordCheckStatusWhileRunning(expected, status);
+        }
+    }
+
+
+    boolean replaceIfMatches(
+            VaultKeyEnvelope expected,
+            VaultKeyEnvelope replacement,
+            MasterPasswordCheckStatus status
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return replaceIfMatchesWhileRunning(expected, replacement, status);
+        }
+    }
+
+
+    @Override
+    public void clear() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            clearWhileRunning();
+        }
+    }
+
 }

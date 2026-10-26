@@ -38,6 +38,8 @@ public final class PanicWorkGate {
         return blocked;
     }
 
+    synchronized boolean isIdle() { return activeOperations == 0; }
+
     /** Background-thread barrier. Never delete storage if this fails. */
     public synchronized void awaitIdle(long timeout, TimeUnit unit)
             throws InterruptedException, TimeoutException {

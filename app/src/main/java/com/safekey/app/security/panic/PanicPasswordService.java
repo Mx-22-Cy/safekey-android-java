@@ -19,19 +19,15 @@ public final class PanicPasswordService {
      * across this check and the update, so concurrent role changes cannot race.
      */
     public boolean isReservedPassword(char[] candidate) throws Exception {
-        char[] password = copy(candidate);
-        try {
-            if (wipe.isRecoveryRequired()) {
-                throw new CancellationException("Panic recovery is required.");
-            }
+        if (wipe.isRecoveryRequired()) {
+            throw new CancellationException("Panic recovery is required.");
+        }
+        try (PanicWorkGate.Operation ignored = gate.begin();
+             PasswordCopies passwords = new PasswordCopies(candidate)) {
             synchronized (store.transactionLock()) {
-                try (PanicWorkGate.Operation ignored = gate.begin()) {
-                    PanicPasswordCrypto.Record record = store.load();
-                    return record != null && crypto.matches(password, record);
-                }
+                PanicPasswordCrypto.Record record = store.load();
+                return record != null && crypto.matches(passwords.values[0], record);
             }
-        } finally {
-            clear(password);
         }
     }
 
@@ -84,19 +80,22 @@ public final class PanicPasswordService {
                        char[] confirmation, EnrollmentAuthority authority)
             throws Exception {
         Objects.requireNonNull(authority, "authority");
-        char[][] copies = {copy(master), copy(decoy), copy(panic), copy(confirmation)};
-        try {
+        if (wipe.isRecoveryRequired()) {
+            throw new CancellationException("Panic recovery is required.");
+        }
+        try (PanicWorkGate.Operation operation = gate.begin();
+             PasswordCopies passwords = new PasswordCopies(master, decoy, panic, confirmation)) {
+            char[][] copies = passwords.values;
             PanicPasswordPolicy.Result result = PanicPasswordPolicy.validate(
                     copies[0], copies[1], copies[2], copies[3]);
             if (result != PanicPasswordPolicy.Result.VALID) {
                 throw new IllegalArgumentException(result.name());
             }
-            if (wipe.isRecoveryRequired()) {
-                throw new CancellationException("Panic recovery is required.");
-            }
             synchronized (store.transactionLock()) {
-                try (PanicWorkGate.Operation operation = gate.begin();
-                     Grant grant = Objects.requireNonNull(
+                if (!operation.ticket().isCurrent()) {
+                    throw new CancellationException("Vault runtime is stopped.");
+                }
+                try (Grant grant = Objects.requireNonNull(
                              authority.authenticate(copies[0], copies[1]), "grant")) {
                     PanicPasswordCrypto.Record record = crypto.create(copies[2]);
                     grant.commitIfCurrent(() -> {
@@ -110,8 +109,6 @@ public final class PanicPasswordService {
                     }
                 }
             }
-        } finally {
-            for (char[] value : copies) { clear(value); }
         }
     }
 
@@ -121,25 +118,20 @@ public final class PanicPasswordService {
      * Shared Sign In must still perform its uniform role checks and routing.
      */
     public boolean checkAndWipe(char[] candidate) throws Exception {
-        char[] password = copy(candidate);
-        try {
-            if (wipe.resumeIfPending()) {
-                return true;
-            }
+        if (wipe.resumeIfPending()) { return true; }
+        try (PanicWorkGate.Operation ignored = gate.begin();
+             PasswordCopies passwords = new PasswordCopies(candidate)) {
             synchronized (store.transactionLock()) {
-                try (PanicWorkGate.Operation ignored = gate.begin()) {
-                    PanicPasswordCrypto.Record record = store.load();
-                    if (record == null || !crypto.matches(password, record)) {
-                        return false;
-                    }
-                    gate.blockNewWork();
+                PanicPasswordCrypto.Record record = store.load();
+                if (record == null || !crypto.matches(passwords.values[0], record)) {
+                    return false;
                 }
+                gate.blockNewWork();
             }
-            wipe.wipe();
-            return true;
-        } finally {
-            clear(password);
         }
+        // PasswordCopies closes before the operation, and both finish before cleanup.
+        wipe.wipe();
+        return true;
     }
 
     private static char[] copy(char[] value) {
@@ -148,5 +140,20 @@ public final class PanicPasswordService {
 
     private static void clear(char[] value) {
         if (value != null) { Arrays.fill(value, '\0'); }
+    }
+
+    /** Declare after the operation so inputs clear before its lease is released. */
+    private static final class PasswordCopies implements AutoCloseable {
+        final char[][] values;
+        PasswordCopies(char[]... supplied) {
+            values = new char[supplied.length][];
+            try {
+                for (int i = 0; i < supplied.length; i++) { values[i] = copy(supplied[i]); }
+            } catch (RuntimeException | Error failure) {
+                close();
+                throw failure;
+            }
+        }
+        @Override public void close() { for (char[] value : values) { clear(value); } }
     }
 }

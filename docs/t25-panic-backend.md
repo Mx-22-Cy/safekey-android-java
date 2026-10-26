@@ -1,9 +1,11 @@
-# T25 Panic backend: standalone verification stage
+# T25 Panic backend: runtime shutdown integration
 
-This implements the Week 10 test-vault fallback while T26 Decoy lifecycle fixes
-and T35 application integration are pending. It does not enable Panic mode in
-the running application. No Application, Settings or Sign In code is changed.
-T25 remains in progress until the integration below is completed and verified.
+The isolated backend is now joined to the application's real and Decoy runtime
+through one captured `PanicRuntimeScope` and work gate. The application exposes
+a terminal shutdown adapter; normal authentication remains available until a
+verified trigger explicitly stops that runtime. Panic enrollment, startup
+recovery routing and the shared Sign In classifier are not enabled by this stage.
+T25 remains in progress until those integration steps are completed and verified.
 
 ## Implemented behavior
 
@@ -52,19 +54,22 @@ promise physical overwriting of flash storage or removal of off-device copies.
 
 ## Required integration before marking T25 complete
 
-1. Finish and merge the reviewed T26 lifecycle fixes. Use one `PanicWorkGate`
-   for the entire application vault runtime, including always-present Decoy
-   initialization, both enrollment/unlock paths, biometric/TOTP work, recovery,
-   password changes, queued opens and every background data write. An operation
-   remains owned until its actual background work and key use finish, even if
-   its UI request was cancelled. Do not release it merely because a callback was
-   posted. Invalidate or reject all old callbacks and session claims.
-2. Implement `PanicWipeCoordinator.Runtime` against the real session manager
-   and both coordinators. Lock and clear displayed data immediately, invalidate
-   pending authorization, drain/cancel workers and synchronously confirm closure
-   and in-memory key cleanup. The existing asynchronous `closeVault()` and
-   `shutdown()` methods are not a complete adapter by themselves. Do not wait on
-   Android's main thread or while holding a lock needed by a finishing worker.
+1. The merged T26 backend and real coordinator now share the application-owned
+   runtime scope. Security and database queues count accepted work until its
+   `finally` completes. Retained envelope/TOTP adapters reject old-runtime writes.
+   TOTP setup, biometric prompt keys, key handoffs and queued result callbacks are
+   cancelled and cleared on the UI thread; sensitive screens clear their pending
+   input and finish. Extend this ownership to future recovery/UI producers.
+2. `SafeKeyApplication.getPanicShutdownRuntime()` supplies the real shutdown
+   adapter. Use its scope's gate for the password service and wipe coordinator;
+   an unrelated gate is rejected. UI cancellation and session invalidation run
+   before the background drain. Terminal database closure is queued on each
+   database worker, then all registered workers must terminate and all database
+   connections must report closed. Existing asynchronous `closeVault()` and
+   `shutdown()` alone are not used as evidence of completion. Never call the
+   destructive primitive on the main thread or on a counted vault worker; the
+   Panic control worker must not wait for its own operation. A cancellation or closure failure
+   keeps the stopped runtime unusable and must retain pending recovery state.
 3. Before constructing/opening vaults at application startup, recover any
    pending marker. Recovery errors keep authentication and fresh vault creation
    unavailable. After successful cleanup, construct a new runtime for fresh
@@ -97,8 +102,12 @@ Argon2id/AES-GCM proof behavior, queue draining, callback invalidation and failu
 recovery. Instrumented tests use uniquely named SQLCipher databases, preferences,
 no-backup files and Android Keystore aliases. They also check retained preference
 objects, sidecars, partial atomic writes and preservation of unrelated resources.
-The isolated session/authority adapter is a test double; these are not end-to-end
-production Sign In, TOTP, Settings or Decoy switching tests.
+The original isolated session/authority adapter is a test double. New runtime
+shutdown tests exercise production queues and SQLCipher with uniquely named test
+storage and a test UI-clear callback. They cover both database closures, a queued
+open before deletion, stopped-store writes and clearing abandoned TOTP setup.
+They are not end-to-end production Sign In, Settings, process-restart or Decoy
+switching tests. Android verification of each integration patch is still required.
 
 First verification on the working branch:
 

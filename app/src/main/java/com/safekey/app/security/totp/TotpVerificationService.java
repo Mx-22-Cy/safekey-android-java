@@ -1,5 +1,8 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
@@ -44,6 +47,9 @@ public final class TotpVerificationService {
 
     public interface StateStore {
 
+        /** Production adapters must return their captured application runtime. */
+        default PanicRuntimeScope getPanicRuntimeScope() { return new PanicRuntimeScope(); }
+
         // All adapters for the same persisted state must share this lock.
         Object getTransactionLock();
 
@@ -55,6 +61,7 @@ public final class TotpVerificationService {
                 throws GeneralSecurityException, IOException;
     }
 
+    private final PanicRuntimeScope runtimeScope;
     private final StateStore store;
     private final Object transactionLock;
     private final LongSupplier clockMillis;
@@ -69,6 +76,7 @@ public final class TotpVerificationService {
             LongSupplier clockMillis
     ) {
         this.store = Objects.requireNonNull(store, "store");
+        runtimeScope = Objects.requireNonNull(store.getPanicRuntimeScope(), "runtimeScope");
 
         this.transactionLock = Objects.requireNonNull(
                 store.getTransactionLock(),
@@ -87,7 +95,7 @@ public final class TotpVerificationService {
      * Storage errors propagate; callers must keep authentication locked.
      * NOT_CONFIGURED is not a successful authentication result.
      */
-    public Result verify(char[] submittedCode)
+    private Result verifyWhileRunning(char[] submittedCode)
             throws GeneralSecurityException, IOException {
 
         char[] codeCopy = submittedCode != null
@@ -196,4 +204,12 @@ public final class TotpVerificationService {
             }
         }
     }
+
+    public Result verify(char[] submittedCode)
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return verifyWhileRunning(submittedCode);
+        }
+    }
+
 }

@@ -1,6 +1,8 @@
 
 package com.safekey.app;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.app.Application;
 import android.os.Handler;
 import android.os.Looper;
@@ -21,7 +23,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public final class SafeKeyApplication extends Application {
+public final class SafeKeyApplication extends Application implements PanicRuntimeScope.Owner {
+
+    private final PanicRuntimeScope panicRuntimeScope = new PanicRuntimeScope();
 
     private static final String TAG = "SafeKeyApplication";
 
@@ -75,6 +79,8 @@ public final class SafeKeyApplication extends Application {
                 new MasterPasswordHealth(this);
 
         registerSessionCleanup();
+
+        registerPanicScreenCancellation();
     }
 
     public MasterPasswordHealth getMasterPasswordHealth() {
@@ -90,7 +96,7 @@ public final class SafeKeyApplication extends Application {
     }
 
     public ActiveVault getActiveVault() {
-        if (SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             return ActiveVault.NONE;
         }
 
@@ -108,7 +114,7 @@ public final class SafeKeyApplication extends Application {
     }
 
     private void activateVault(ActiveVault selection) {
-        if (SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             throw new IllegalStateException(
                     "Authentication is required before vault activation."
             );
@@ -185,7 +191,7 @@ public final class SafeKeyApplication extends Application {
             ActiveVault selection,
             long generation
     ) {
-        if (SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             return false;
         }
 
@@ -201,7 +207,8 @@ public final class SafeKeyApplication extends Application {
             ActiveVault selection,
             long generation
     ) {
-        return !cleanupInProgress
+        return !panicRuntimeScope.isStopped()
+                && !cleanupInProgress
                 && !cleanupFailed
                 && activeVault == selection
                 && sessionGeneration == generation
@@ -225,7 +232,7 @@ public final class SafeKeyApplication extends Application {
     }
 
     public VaultOperations getActiveVaultOperations() {
-        if (SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (panicRuntimeScope.isStopped() || SafeKeySession.getState() != SessionState.UNLOCKED) {
             throw new IllegalStateException(
                     "The vault session is locked."
             );
@@ -254,6 +261,11 @@ public final class SafeKeyApplication extends Application {
     public void prepareForVaultAuthentication(
             VaultDataService.SimpleCallback callback
     ) {
+        if (panicRuntimeScope.isStopped()) {
+            deliverError(callback, new IllegalStateException("Vault runtime is unavailable."));
+            return;
+        }
+
         Objects.requireNonNull(callback, "callback");
 
         if (SafeKeySession.getState() != SessionState.LOCKED) {
@@ -302,6 +314,21 @@ public final class SafeKeyApplication extends Application {
     }
 
     private void clearSessionAndCloseVaults() {
+        if (panicRuntimeScope.isStopped()) {
+            synchronized (this) {
+                activeVault = ActiveVault.NONE;
+                activeVaultOperations = null;
+                sessionGeneration++;
+                cleanupGeneration++;
+                cleanupInProgress = false;
+                cleanupFailed = true;
+                pendingCloses = 0;
+                authenticationWaiters.clear();
+            }
+            masterPasswordHealth.cancelRecheck();
+            return;
+        }
+
 
         // T45: Stop pending master-password health checks.
         masterPasswordHealth.cancelRecheck();
@@ -459,6 +486,7 @@ public final class SafeKeyApplication extends Application {
                     synchronized (this) {
                         ready =
                                 sessionLocked
+                                        && !panicRuntimeScope.isStopped()
                                         && cleanupGeneration == expectedCleanupGeneration
                                         && !cleanupInProgress
                                         && !cleanupFailed
@@ -489,4 +517,36 @@ public final class SafeKeyApplication extends Application {
                 () -> callback.onError(exception)
         );
     }
+
+    @Override public PanicRuntimeScope getPanicRuntimeScope() { return panicRuntimeScope; }
+
+    /** Terminal shutdown adapter. Panic enrollment/routing/startup recovery are separate integration steps. */
+    public com.safekey.app.security.panic.PanicWipeCoordinator.Runtime getPanicShutdownRuntime() {
+        return new com.safekey.app.security.panic.PanicAndroidRuntime(
+                panicRuntimeScope, mainHandler, () -> {
+                    SafeKeySession.lock();
+                    // Also invalidate readiness when the session was already locked.
+                    clearSessionAndCloseVaults();
+                });
+    }
+
+    private void registerPanicScreenCancellation() {
+        java.util.Map<android.app.Activity, PanicRuntimeScope.Registration> screens =
+                new java.util.IdentityHashMap<>();
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(android.app.Activity activity, android.os.Bundle state) {
+                screens.put(activity, com.safekey.app.security.panic.PanicSensitiveUi.bind(activity, () -> {}));
+            }
+            @Override public void onActivityDestroyed(android.app.Activity activity) {
+                PanicRuntimeScope.Registration registration = screens.remove(activity);
+                if (registration != null) { registration.close(); }
+            }
+            @Override public void onActivityStarted(android.app.Activity activity) { }
+            @Override public void onActivityResumed(android.app.Activity activity) { }
+            @Override public void onActivityPaused(android.app.Activity activity) { }
+            @Override public void onActivityStopped(android.app.Activity activity) { }
+            @Override public void onActivitySaveInstanceState(android.app.Activity activity, android.os.Bundle state) { }
+        });
+    }
+
 }

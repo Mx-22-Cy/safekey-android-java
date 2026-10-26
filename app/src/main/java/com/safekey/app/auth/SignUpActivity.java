@@ -1,5 +1,7 @@
 package com.safekey.app.auth;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
@@ -37,6 +39,8 @@ import com.safekey.app.session.SafeKeySession;
 import java.util.Arrays;
 
 public class SignUpActivity extends AppCompatActivity {
+    private PanicRuntimeScope.Registration panicCancellation;
+
 
     private Button buttonCreateVault;
     private Button buttonGoToSignIn;
@@ -227,6 +231,9 @@ public class SignUpActivity extends AppCompatActivity {
                     finish();
                 }
         );
+
+        panicCancellation = com.safekey.app.security.panic.PanicSensitiveUi.bind(
+                this, () -> { resumed = false; cancelEnrollment(); });
     }
 
     private void setPasswordVisibility(
@@ -591,6 +598,8 @@ public class SignUpActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        if (panicCancellation != null) { panicCancellation.close(); }
+
         cancelEnrollment();
         super.onDestroy();
     }

@@ -20,6 +20,9 @@ public final class PanicWipeCoordinator {
     }
 
     public interface Runtime {
+        /** Production adapters that own workers declare the gate they drain. */
+        default PanicWorkGate getWorkGate() { return null; }
+
         /** Invalidate authentication/session claims and clear displayed data. */
         void lockAndClearSession() throws Exception;
 
@@ -54,6 +57,9 @@ public final class PanicWipeCoordinator {
         this.gate = Objects.requireNonNull(gate, "gate");
         this.journal = Objects.requireNonNull(journal, "journal");
         this.runtime = Objects.requireNonNull(runtime, "runtime");
+        if (runtime.getWorkGate() != null && runtime.getWorkGate() != gate) {
+            throw new IllegalArgumentException("Panic runtime must share the work gate.");
+        }
         if (targets == null || targets.isEmpty() || drainTimeoutMillis <= 0) {
             throw new IllegalArgumentException("A complete wipe plan is required.");
         }

@@ -1,5 +1,8 @@
 package com.safekey.app.data.service;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -24,6 +27,9 @@ import java.util.concurrent.Executors;
 
 public class VaultDataService {
 
+    private final PanicRuntimeScope runtimeScope;
+    private java.util.concurrent.FutureTask<Void> panicCloseTask;
+
     private final AtomicLong vaultGeneration = new AtomicLong();
 
     private final SafeKeyDatabase databaseManager;
@@ -41,7 +47,8 @@ public class VaultDataService {
         this(
                 new SafeKeyDatabase(
                         context.getApplicationContext()
-                )
+                ),
+                PanicRuntimeScope.capture(context)
         );
     }
 
@@ -53,6 +60,12 @@ public class VaultDataService {
     VaultDataService(
             SafeKeyDatabase databaseManager
     ) {
+        this(databaseManager, new PanicRuntimeScope());
+    }
+
+    VaultDataService(SafeKeyDatabase databaseManager, PanicRuntimeScope runtimeScope) {
+        this.runtimeScope = java.util.Objects.requireNonNull(runtimeScope, "runtimeScope");
+
 
         if (databaseManager == null) {
 
@@ -76,9 +89,18 @@ public class VaultDataService {
                 new Handler(
                         Looper.getMainLooper()
                 );
+
+        runtimeScope.registerResource(new PanicRuntimeScope.Resource() {
+            @Override public void closeAndAwait(long deadline) throws Exception {
+                closeForPanic(deadline);
+            }
+            @Override public boolean isClosed() {
+                return executorService.isTerminated() && !databaseManager.isOpen();
+            }
+        });
     }
 
-    public void openVault(
+    private void openVaultWhileRunning(
             byte[] databaseKey,
             SimpleCallback callback
     ) {
@@ -116,7 +138,7 @@ public class VaultDataService {
         vaultGeneration.incrementAndGet();
         try {
 
-            executorService.execute(() -> {
+            executeWork(() -> {
 
                 Exception openingError =
                         null;
@@ -193,7 +215,7 @@ public class VaultDataService {
             SimpleCallback callback
     ) {
         vaultGeneration.incrementAndGet();
-        executorService.execute(() -> {
+        executeWork(() -> {
             try {
                 databaseManager.close();
             } catch (Exception exception) {
@@ -229,7 +251,7 @@ public class VaultDataService {
         Objects.requireNonNull(expectedPassword, "expectedPassword");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(callback, "callback");
-        executorService.execute(() -> {
+        executeWork(() -> {
             try {
                 if (vaultGeneration.get() != expectedGeneration) {
                     throw new IllegalStateException("The vault opening changed during the check.");
@@ -246,7 +268,7 @@ public class VaultDataService {
     public void getVaultCounts(
             ResultCallback<VaultCounts> callback
     ) {
-        executorService.execute(() -> {
+        executeWork(() -> {
             final VaultCounts counts;
 
             try {
@@ -265,7 +287,7 @@ public class VaultDataService {
             ResultCallback<Long> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final long id;
 
@@ -299,7 +321,7 @@ public class VaultDataService {
             ResultCallback<Credential> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final Credential credential;
 
@@ -332,7 +354,7 @@ public class VaultDataService {
             ResultCallback<List<Credential>> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final List<Credential> credentials;
 
@@ -364,7 +386,7 @@ public class VaultDataService {
             ResultCallback<Integer> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final int rows;
 
@@ -398,7 +420,7 @@ public class VaultDataService {
             ResultCallback<Integer> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final int rows;
 
@@ -432,7 +454,7 @@ public class VaultDataService {
             ResultCallback<List<Credential>> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final List<Credential> results;
 
@@ -467,7 +489,7 @@ public class VaultDataService {
             ResultCallback<Integer> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final int rows;
 
@@ -502,7 +524,7 @@ public class VaultDataService {
             ResultCallback<Long> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final long id;
 
@@ -535,7 +557,7 @@ public class VaultDataService {
             ResultCallback<List<SecureNote>> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final List<SecureNote> notes;
 
@@ -567,7 +589,7 @@ public class VaultDataService {
             ResultCallback<SecureNote> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final SecureNote note;
 
@@ -601,7 +623,7 @@ public class VaultDataService {
             ResultCallback<Integer> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final int rows;
 
@@ -635,7 +657,7 @@ public class VaultDataService {
             ResultCallback<Integer> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final int rows;
 
@@ -669,7 +691,7 @@ public class VaultDataService {
             ResultCallback<List<SecureNote>> callback
     ) {
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             final List<SecureNote> results;
 
@@ -736,8 +758,8 @@ public class VaultDataService {
             SimpleCallback callback
     ) {
 
-        mainHandler.post(
-                callback::onSuccess
+        runtimeScope.deliver(mainHandler,
+                () -> { if (!runtimeScope.isStopped()) { callback.onSuccess(); } }
         );
     }
 
@@ -746,10 +768,8 @@ public class VaultDataService {
             Exception exception
     ) {
 
-        mainHandler.post(
-                () -> callback.onError(
-                        exception
-                )
+        runtimeScope.deliver(mainHandler,
+                () -> { if (!runtimeScope.isStopped()) { callback.onError(exception); } }
         );
     }
 
@@ -758,10 +778,8 @@ public class VaultDataService {
             T result
     ) {
 
-        mainHandler.post(
-                () -> callback.onSuccess(
-                        result
-                )
+        runtimeScope.deliver(mainHandler,
+                () -> { if (!runtimeScope.isStopped()) { callback.onSuccess(result); } }
         );
     }
 
@@ -770,10 +788,8 @@ public class VaultDataService {
             Exception exception
     ) {
 
-        mainHandler.post(
-                () -> callback.onError(
-                        exception
-                )
+        runtimeScope.deliver(mainHandler,
+                () -> { if (!runtimeScope.isStopped()) { callback.onError(exception); } }
         );
     }
 
@@ -789,7 +805,7 @@ public class VaultDataService {
             return;
         }
 
-        executorService.execute(() -> {
+        executeWork(() -> {
 
             try {
 
@@ -825,4 +841,51 @@ public class VaultDataService {
                 Exception exception
         );
     }
+
+    public void openVault(
+            byte[] databaseKey,
+            SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            openVaultWhileRunning(databaseKey, callback);
+        }
+    }
+
+
+    private void executeWork(Runnable work) {
+        runtimeScope.execute(executorService, work);
+    }
+
+    private void closeForPanic(long deadline) throws Exception {
+        java.util.concurrent.FutureTask<Void> closing;
+        synchronized (this) {
+            if (panicCloseTask == null && !executorService.isShutdown()) {
+                panicCloseTask = new java.util.concurrent.FutureTask<>(() -> {
+                    try { databaseManager.close(); }
+                    finally {
+                        vaultGeneration.incrementAndGet();
+                        credentialRepository = null;
+                        secureNoteRepository = null;
+                        vaultCountsRepository = null;
+                    }
+                    if (databaseManager.isOpen()) {
+                        throw new java.io.IOException("Vault database is still open.");
+                    }
+                    return null;
+                });
+                try { executorService.execute(panicCloseTask); }
+                finally { executorService.shutdown(); }
+            }
+            closing = panicCloseTask;
+        }
+        if (closing != null) {
+            closing.get(PanicRuntimeScope.remainingMillis(deadline),
+                    java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+        if (!executorService.awaitTermination(PanicRuntimeScope.remainingMillis(deadline),
+                java.util.concurrent.TimeUnit.MILLISECONDS) || databaseManager.isOpen()) {
+            throw new java.io.IOException("Vault database worker did not close.");
+        }
+    }
+
 }

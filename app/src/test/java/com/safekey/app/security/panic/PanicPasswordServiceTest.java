@@ -15,6 +15,22 @@ import static com.safekey.app.security.panic.PanicTestSupport.*;
 import static org.junit.Assert.*;
 
 public class PanicPasswordServiceTest {
+    @Test public void verificationCopyIsClearedBeforeCleanupStarts() throws Exception {
+        enroll();
+        PanicWipeCoordinator.Runtime observed = new PanicWipeCoordinator.Runtime() {
+            @Override public void lockAndClearSession() throws Exception {
+                assertCleared(crypto.capturedPassword);
+                f.runtime.lockAndClearSession();
+            }
+            @Override public void closeResources() throws Exception { f.runtime.closeResources(); }
+            @Override public boolean areResourcesClosed() { return f.runtime.areResourcesClosed(); }
+        };
+        PanicWipeCoordinator wipe = new PanicWipeCoordinator(f.gate, f.journal, observed,
+                Arrays.asList(f.real, f.decoy));
+        PanicPasswordService checked = new PanicPasswordService(f.gate, store, crypto, wipe);
+        assertTrue(checked.checkAndWipe(chars(PANIC)));
+    }
+
     private final Fixture f = new Fixture();
     private final MemoryStore store = new MemoryStore();
     private final MemoryCrypto crypto = new MemoryCrypto();

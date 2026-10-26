@@ -1,5 +1,7 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.os.Handler;
 import android.os.SystemClock;
 
@@ -87,6 +89,7 @@ public final class VaultUnlockFlow {
         }
     }
 
+    private final PanicRuntimeScope runtimeScope;
     private final Object lock = new Object();
     private final VaultUnlockGate gate;
     private final Executor worker;
@@ -103,7 +106,12 @@ public final class VaultUnlockFlow {
             Handler main,
             VaultAccess vault
     ) {
-        this(gate, worker, main, vault, SystemClock::elapsedRealtime);
+        this(gate, worker, main, vault, SystemClock::elapsedRealtime, new PanicRuntimeScope());
+    }
+
+    public VaultUnlockFlow(VaultUnlockGate gate, Executor worker, Handler main,
+                           VaultAccess vault, PanicRuntimeScope runtimeScope) {
+        this(gate, worker, main, vault, SystemClock::elapsedRealtime, runtimeScope);
     }
 
     // Tests can check claim expiry without waiting for real time.
@@ -114,13 +122,23 @@ public final class VaultUnlockFlow {
             VaultAccess vault,
             LongSupplier elapsedMillis
     ) {
+        this(gate, worker, main, vault, elapsedMillis, new PanicRuntimeScope());
+    }
+
+    private VaultUnlockFlow(VaultUnlockGate gate, Executor worker, Handler main,
+                            VaultAccess vault, LongSupplier elapsedMillis,
+                            PanicRuntimeScope runtimeScope) {
+        this.runtimeScope = Objects.requireNonNull(runtimeScope, "runtimeScope");
         this.gate = Objects.requireNonNull(gate, "gate");
-        this.worker = Objects.requireNonNull(worker, "worker");
+        Objects.requireNonNull(worker, "worker");
+        this.worker = work -> runtimeScope.execute(worker, work);
         this.main = Objects.requireNonNull(main, "main");
         this.vault = Objects.requireNonNull(vault, "vault");
         this.elapsedMillis = Objects.requireNonNull(
                 elapsedMillis, "elapsedMillis"
         );
+
+        runtimeScope.onStop(this::shutdown);
     }
 
     /** Begin before starting password derivation or the biometric prompt. */
@@ -128,7 +146,7 @@ public final class VaultUnlockFlow {
         Objects.requireNonNull(listener, "listener");
 
         synchronized (lock) {
-            if (closed) {
+            if (closed || runtimeScope.isStopped()) {
                 throw new IllegalStateException("Unlock flow is shut down.");
             }
 
@@ -317,6 +335,7 @@ public final class VaultUnlockFlow {
 
             if (current != request
                     || closed
+                    || runtimeScope.isStopped()
                     || request.cancelled
                     || !request.completed
                     || !request.requiresClaim) {
@@ -502,6 +521,7 @@ public final class VaultUnlockFlow {
         if (!main.post(() -> {
             synchronized (lock) {
                 if (current == request
+                        && !runtimeScope.isStopped()
                         && !request.cancelled
                         && !request.terminal) {
                     action.run();
@@ -515,6 +535,7 @@ public final class VaultUnlockFlow {
     private boolean active(Request request) {
         return current == request
                 && !closed
+                && !runtimeScope.isStopped()
                 && !request.cancelled
                 && !request.terminal
                 && gate.isActive(request.attempt);

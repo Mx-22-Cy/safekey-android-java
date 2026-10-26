@@ -1,5 +1,7 @@
 package com.safekey.app.auth;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
@@ -29,6 +31,8 @@ import java.util.Arrays;
 
 /** Accessible from Home until the team's Settings integration is ready. */
 public final class ChangeMasterPasswordActivity extends ProtectedActivity {
+    private PanicRuntimeScope.Registration panicCancellation;
+
     private EditText currentInput;
     private EditText newInput;
     private EditText confirmationInput;
@@ -73,6 +77,12 @@ public final class ChangeMasterPasswordActivity extends ProtectedActivity {
         confirmationInput.setSaveEnabled(false);
         save.setOnClickListener(view -> submit());
         back.setOnClickListener(view -> finish());
+
+        panicCancellation = com.safekey.app.security.panic.PanicSensitiveUi.bind(
+                this, () -> { active = false; cancelPending();
+                    if (currentInput != null) { currentInput.setText(""); }
+                    if (newInput != null) { newInput.setText(""); }
+                    if (confirmationInput != null) { confirmationInput.setText(""); } });
     }
 
     @Override
@@ -94,6 +104,8 @@ public final class ChangeMasterPasswordActivity extends ProtectedActivity {
 
     @Override
     protected void onDestroy() {
+        if (panicCancellation != null) { panicCancellation.close(); }
+
         cancelPending();
         super.onDestroy();
     }

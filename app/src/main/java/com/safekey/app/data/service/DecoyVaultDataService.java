@@ -1,5 +1,7 @@
 package com.safekey.app.data.service;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.content.Context;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
@@ -26,7 +28,8 @@ public final class DecoyVaultDataService
                                 context
                         ).getApplicationContext(),
                         databaseName
-                )
+                ),
+                PanicRuntimeScope.capture(context)
         );
     }
 

@@ -1,5 +1,7 @@
 package com.safekey.app.auth;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -45,6 +47,8 @@ import java.util.Arrays;
 
 public class SignInActivity extends AppCompatActivity
         implements TotpCodeDialogFragment.Listener {
+    private PanicRuntimeScope.Registration panicCancellation;
+
 
     public static final String REQUIRE_MASTER_PASSWORD =
             "com.safekey.app.auth.REQUIRE_MASTER_PASSWORD";
@@ -137,6 +141,9 @@ public class SignInActivity extends AppCompatActivity
 
         // A restored dialog cannot restore its former authentication request.
         dismissTotpDialog();
+
+        panicCancellation = com.safekey.app.security.panic.PanicSensitiveUi.bind(
+                this, () -> { abortSignIn(0); });
     }
 
     @Override
@@ -180,6 +187,8 @@ public class SignInActivity extends AppCompatActivity
 
     @Override
     protected void onDestroy() {
+        if (panicCancellation != null) { panicCancellation.close(); }
+
         if (!navigatingToHome) {
             abortSignIn(0);
         }
@@ -218,12 +227,11 @@ public class SignInActivity extends AppCompatActivity
             pendingBiometricEnrollmentPassword = password.clone();
         }
         clearPendingMasterPasswordRecheck();
-        if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
-                != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
-            pendingMasterPasswordRecheck = password.clone();
-        }
-
         try {
+            if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
+                    != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
+                pendingMasterPasswordRecheck = password.clone();
+            }
             pendingUnlock = secureVaultCoordinator.unlockVault(
                     password,
                     new SecureVaultCoordinator.TotpUnlockCallback() {
