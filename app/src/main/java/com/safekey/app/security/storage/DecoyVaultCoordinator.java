@@ -2,6 +2,8 @@ package com.safekey.app.security.storage;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
 import com.safekey.app.security.panic.PanicWorkGate;
+import com.safekey.app.security.panic.PanicPasswordSeparation;
+import com.safekey.app.security.panic.AndroidPanicPasswordSeparation;
 
 import android.content.Context;
 import android.os.Handler;
@@ -38,6 +40,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     private final Context applicationContext;
     private final DecoyVaultDataService vaultDataService;
     private final VaultKeyEnvelopeStore envelopeStore;
+    private final PanicPasswordSeparation passwordSeparation;
     private final Argon2idMasterKeyDeriver keyDeriver;
     private final AesGcmCipher cipher;
     private final SecureRandom secureRandom;
@@ -57,6 +60,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         vaultDataService = new DecoyVaultDataService(
                 applicationContext, DecoyVaultStorage.DATABASE_NAME);
         envelopeStore = VaultKeyEnvelopeStore.forDecoy(applicationContext);
+        passwordSeparation = AndroidPanicPasswordSeparation.create(applicationContext, runtimeScope);
         keyDeriver = new Argon2idMasterKeyDeriver();
         cipher = new AesGcmCipher();
         secureRandom = new SecureRandom();
@@ -103,8 +107,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         byte[] salt = null;
         byte[] derivedMasterKey = null;
         byte[] databaseKey = null;
-        boolean enrollmentStarted = false;
-        boolean envelopeSaved = false;
+        boolean[] created = {false, false};
 
         try {
             if (envelopeStore.hasEnvelope()) {
@@ -119,34 +122,44 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             String wrappedDatabaseKey = cipher.encrypt(
                     databaseKey, derivedMasterKey, databaseKeyContext());
 
-            // Replace the unconfigured cover DB with the enrolled Decoy SQLCipher DB.
-            synchronized (lifecycleLock) {
-                if (runtimeScope.isStopped() || requestGeneration != unlockGeneration || closeInProgress) {
-                    throw new IllegalStateException("Decoy enrollment was invalidated.");
+            VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt, wrappedDatabaseKey);
+            byte[] enrolledKey = databaseKey;
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.DECOY, decoyPassword)) {
+                // Replace the unconfigured cover DB with the enrolled Decoy SQLCipher DB.
+                synchronized (lifecycleLock) {
+                    if (runtimeScope.isStopped() || requestGeneration != unlockGeneration || closeInProgress) {
+                        throw new IllegalStateException("Decoy enrollment was invalidated.");
+                    }
+
+                    // Storage helpers also inspect envelopes: acquire their monitor before the configuration lock.
+                    synchronized (DecoyVaultStorage.class) {
+                        separation.commit(() -> {
+                            if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A Decoy Vault has already been created."); }
+                            DecoyVaultStorage.prepareDatabaseForEnrollment(applicationContext);
+                            created[0] = true;
+                            initializeDecoyDatabase(enrolledKey);
+                            envelopeStore.save(envelope);
+                            created[1] = true;
+                        });
+                    }
+
+                    vaultDataService.openVault(databaseKey, new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            deliverOpenedVaultResult(callback, requestGeneration,
+                                    "Decoy enrollment was invalidated.");
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            scheduleCreationFailureCleanup(callback, exception, requestGeneration);
+                        }
+                    });
                 }
-
-                DecoyVaultStorage.prepareDatabaseForEnrollment(applicationContext);
-                enrollmentStarted = true;
-                initializeDecoyDatabase(databaseKey);
-                VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt, wrappedDatabaseKey);
-                envelopeStore.save(envelope);
-                envelopeSaved = true;
-
-                vaultDataService.openVault(databaseKey, new VaultDataService.SimpleCallback() {
-                    @Override
-                    public void onSuccess() {
-                        deliverOpenedVaultResult(callback, requestGeneration,
-                                "Decoy enrollment was invalidated.");
-                    }
-
-                    @Override
-                    public void onError(Exception exception) {
-                        scheduleCreationFailureCleanup(callback, exception, requestGeneration);
-                    }
-                });
             }
         } catch (Exception exception) {
-            if (enrollmentStarted || envelopeSaved) {
+            if (created[0] || created[1]) {
                 cleanupFailedCreation(exception, requestGeneration);
             }
             deliverError(callback, exception);

@@ -2,6 +2,8 @@ package com.safekey.app.security.storage;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
 import com.safekey.app.security.panic.PanicWorkGate;
+import com.safekey.app.security.panic.PanicPasswordSeparation;
+import com.safekey.app.security.panic.AndroidPanicPasswordSeparation;
 
 import android.content.Context;
 import android.os.Handler;
@@ -44,6 +46,7 @@ public final class SecureVaultCoordinator {
     private final PanicRuntimeScope runtimeScope;
     private final VaultDataService vaultDataService;
     private final VaultKeyEnvelopeStore envelopeStore;
+    private final PanicPasswordSeparation passwordSeparation;
     private final Argon2idMasterKeyDeriver keyDeriver;
     private final AesGcmCipher cipher;
     private final SecureRandom secureRandom;
@@ -70,6 +73,7 @@ public final class SecureVaultCoordinator {
 
         vaultDataService = new VaultDataService(applicationContext);
         envelopeStore = new VaultKeyEnvelopeStore(applicationContext);
+        passwordSeparation = AndroidPanicPasswordSeparation.create(applicationContext, runtimeScope);
         keyDeriver = new Argon2idMasterKeyDeriver();
         cipher = new AesGcmCipher();
         secureRandom = new SecureRandom();
@@ -585,8 +589,14 @@ public final class SecureVaultCoordinator {
             secureRandom.nextBytes(databaseKey);
             VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt,
                     cipher.encrypt(databaseKey, masterKey, databaseKeyContext()));
-            if (!request.isActive()) { return; }
-            envelopeStore.save(envelope, checkStatus);
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, password)) {
+                if (!request.isActive()) { return; }
+                separation.commit(() -> {
+                    if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A vault has already been created."); }
+                    envelopeStore.save(envelope, checkStatus);
+                });
+            }
             // A saved envelope is retained if the UI leaves: future sign-in can
             // open this vault. Cancellation still prevents a session claim.
             unlockFlow.acceptPrimary(request, databaseKey);
@@ -665,28 +675,30 @@ public final class SecureVaultCoordinator {
             newMasterKey = keyDeriver.deriveKey(passwords[1], newSalt);
             VaultKeyEnvelope replacement = new VaultKeyEnvelope(newSalt,
                     cipher.encrypt(databaseKey, newMasterKey, databaseKeyContext()));
+            PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, passwords[1]);
             // Commit on the UI thread: unlock-flow callbacks can hold their
             // own lock while consulting the session manager. A security worker
             // must not hold the session lock and call back into that flow.
             // Only salt/ciphertext cross this boundary, never a raw key/password.
             if (!runtimeScope.deliver(mainHandler, () -> {
-                if (request.isCancelled() || runtimeScope.isStopped()) { request.close(); return; }
+                if (request.isCancelled() || runtimeScope.isStopped()) { separation.close(); request.close(); return; }
                 try {
                     boolean[] committed = {false};
                     SafeKeySession.getManager().runIfCurrentAuthentication(authentication, () ->
-                            committed[0] = request.commit(() -> {
+                            committed[0] = request.commit(() -> separation.commit(() -> {
                                 if (!isVaultOpen() || !envelopeStore.replaceIfMatches(
                                         original, replacement, checkStatus)) {
                                     throw new IllegalStateException("Vault state changed; sign in again.");
                                 }
-                            }));
+                            })));
                     if (committed[0] && !request.isCancelled()) { callback.onSuccess(); }
                 } catch (RuntimeException error) {
                     if (!request.isCancelled()
                             && SafeKeySession.getManager().getAuthenticationGeneration()
                             == authentication) { callback.onError(error); }
-                }
-            })) { request.close(); }
+                } finally { separation.close(); }
+            })) { separation.close(); request.close(); }
         } catch (Exception error) {
             runtimeScope.deliver(mainHandler, () -> {
                 if (!request.isCancelled() && !runtimeScope.isStopped()
@@ -769,7 +781,13 @@ public final class SecureVaultCoordinator {
             VaultKeyEnvelope envelope =
                     new VaultKeyEnvelope(salt, wrappedDatabaseKey);
 
-            envelopeStore.save(envelope);
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, masterPassword)) {
+                separation.commit(() -> {
+                    if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A vault has already been created."); }
+                    envelopeStore.save(envelope);
+                });
+            }
             envelopeSaved = true;
 
             vaultDataService.openVault(

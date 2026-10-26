@@ -1,4 +1,4 @@
-# T25 Panic backend: role checks, verified trigger, enrollment and recovery
+# T25 Panic backend: password separation, verified trigger and recovery
 
 The isolated backend is now joined to the application's real and Decoy runtime
 through one captured `PanicRuntimeScope` and work gate. The application exposes
@@ -8,9 +8,9 @@ marker before constructing vaults. Pending cleanup runs on a separate worker;
 failed cleanup prevents authentication and fresh setup. The concrete enrollment
 backend is wired through `SafeKeyApplication.getPanicBackend()`. Its enrollment
 checkpoint passed Android verification (484 unit and 225 instrumented tests).
-The shared password-role checks and verified-trigger API are now implemented; their
-Android verification is required for this checkpoint. Setup/change collision guards
-are the subsequent T25 step.
+The shared password-role checks and verified-trigger API passed Android verification
+at 4094f1c (504 unit and 239 instrumented tests). Setup/change collision guards are
+now implemented; Android verification is required for this checkpoint.
 Hind owns the confirmation/Settings screens and shared Sign In UI integration
 (T27/T38), followed by full UI-flow testing. Those screens are not part of this
 backend patch. T25 is still in progress and the PR remains Draft.
@@ -95,10 +95,17 @@ promise physical overwriting of flash storage or removal of off-device copies.
    no persistence monitor is held while awaiting the UI commit dispatcher.
    Hind's T27 confirmation and T38 Settings UI must provide warning/confirmation
    and hide controls in the Decoy vault.
-5. Preserve three-way separation during all later master/Decoy/Panic setup and
-   password changes. Use `isReservedPassword()` and the other role verifiers
-   inside the same configuration authorization; checking before an unguarded
-   asynchronous save is insufficient.
+5. `PanicPasswordSeparation` now guards both Real setup paths, Decoy setup and
+   Master-password replacement. Its background check uses actual stored role
+   proofs. The short final commit revalidates the exact shared configuration,
+   runtime generation and permit lifetime under the configuration lock, then
+   performs the synchronous write under that same lock. A raw preflight boolean
+   or a collision check before an unguarded asynchronous save is insufficient.
+   Existing Panic enrollment/replacement retains its actual master/Decoy
+   reauthentication, three-way policy check and generation-bound atomic save.
+   Either side of a racing role update invalidates the other side's old permit.
+   Decoy setup checks before altering its cover database. Decoy storage's class
+   monitor is acquired before the shared credential lock to preserve lock order.
 6. `PanicBackend.prepareSignIn()` supplies one single-use, cancellable role-check
    request for Hind's shared Sign In UI. It checks master, Decoy and Panic in a
    fixed order without returning early on a match or an ordinary role-check error.
@@ -188,11 +195,11 @@ and a dedicated TOTP Keystore alias; they never run production wipe targets.
 1. Panic proof/wipe/shutdown backend — Done.
 2. Startup recovery backend — Done; full UI process-relaunch tests remain T27.
 3. Production enrollment authorization — Done; 709 tests passed on API 37.
-4. Password identification and verified-trigger API — implemented; Android checks pending.
-5. Password separation across setup/change operations — pending.
+4. Password identification and verified-trigger API — Done; 743 tests passed on API 37.
+5. Password separation across setup/change operations — implemented; Android checks pending.
 6. Final backend safety verification, integration documentation and PR review — pending.
 
-Remaining at preparation of this checkpoint: **3 / 6**. Mark part 4 Done only
+Remaining at preparation of this checkpoint: **2 / 6**. Mark part 5 Done only
 once the exact checkpoint passes the project's Android verification.
 
 
@@ -238,3 +245,39 @@ missing-role dummy checks, the production shutdown adapter and an isolated resou
 manifest. Their database paths contain manifest sentinels; existing runtime tests
 cover live SQLCipher closure. These tests do not implement Hind's UI or kill and
 relaunch the Android application process. Both remain T27 integration checks.
+
+
+## Password separation in supported setup/change operations
+
+Hind continues calling the existing coordinator and enrollment APIs; the guard is
+inside the backend rather than a UI-only comparison:
+
+| Operation | Backend protection |
+| --- | --- |
+| `createVaultForEnrollment()` | Check against stored Decoy/Panic roles, then revalidate and save the Real envelope |
+| Legacy `createVault()` | Same protected setup operation; an existing Real envelope cannot be overwritten |
+| `createDecoyVault()` | Check against stored Master/Panic roles before replacing the cover database; protect initialization and envelope save |
+| `changeMasterPassword()` | Keep current-password/session/cancellation checks; wrap the conditional replacement in the separation permit |
+| `enrollPanicPassword()` / enrollment request | Reauthenticate actual Master/Decoy credentials; policy and atomic authorization keep all three roles different |
+
+`PanicPasswordSeparation` does not grant session/enrollment authorization and does
+not replace password-strength or breach-check consent rules. A permit contains
+only a generation ticket and ciphertext/salt snapshot, expires after 60 seconds,
+and cannot be reused. Any unreadable or malformed role aborts the operation;
+errors never mean that a password is available. A failed or canceled operation
+must not be reported as a successful password change.
+
+No Decoy-password-change operation currently exists. If a Decoy rewrap feature is
+added later, it must use a DECOY separation permit together with its own actual
+reauthentication and cancellation authorization. Public low-level envelope/proof
+store methods are persistence primitives for backend adapters and test fixtures;
+UI code must use the protected coordinator/enrollment APIs.
+
+The new 20 unit tests use simulated credential snapshots/work gates to cover
+cross-role collisions, racing commits, storage errors, runtime stop, expiry,
+single-use permits and input cleanup. The 12 new instrumented tests use actual
+SQLCipher coordinator setup/change paths, real password crypto and isolated
+storage. They cover both Real setup paths, Decoy cover preservation, Master
+replacement rejection/success, existing Panic enrollment collision checks and
+real stored-configuration invalidation. Full Gradle/device verification of this
+checkpoint is required before Part 5 is marked Done.
