@@ -4,6 +4,8 @@ import android.content.ContentValues;
 import android.database.Cursor;
 
 import com.safekey.app.data.model.Credential;
+import com.safekey.app.breach.PasswordBreachResult;
+import java.util.Objects;
 
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
@@ -147,59 +149,108 @@ public class CredentialRepository {
             Credential credential
     ) {
 
-        ContentValues values =
-                new ContentValues();
+        database.beginTransaction();
+        try {
+            Credential existing = getById(credential.getId());
+            if (existing == null) { return 0; }
 
-        values.put(
-                "title",
-                credential.getTitle()
-        );
+            ContentValues values =
+                    new ContentValues();
 
-        values.put(
-                "username",
-                credential.getUsername()
-        );
+            values.put(
+                    "title",
+                    credential.getTitle()
+            );
 
-        values.put(
-                "password_ciphertext",
-                credential.getPassword()
-        );
+            values.put(
+                    "username",
+                    credential.getUsername()
+            );
 
-        values.put(
-                "website",
-                credential.getWebsite()
-        );
+            values.put(
+                    "password_ciphertext",
+                    credential.getPassword()
+            );
 
-        values.put(
-                "category",
-                credential.getCategory()
-        );
+            values.put(
+                    "website",
+                    credential.getWebsite()
+            );
 
-        values.put(
-                "notes_ciphertext",
-                credential.getNotes()
-        );
+            values.put(
+                    "category",
+                    credential.getCategory()
+            );
 
-        values.put(
-                "favorite",
-                credential.isFavorite() ? 1 : 0
-        );
+            values.put(
+                    "notes_ciphertext",
+                    credential.getNotes()
+            );
 
-        values.put(
-                "updated_at",
-                System.currentTimeMillis()
-        );
+            values.put(
+                    "favorite",
+                    credential.isFavorite() ? 1 : 0
+            );
 
-        return database.update(
-                "credentials",
-                values,
-                "id = ?",
-                new String[]{
-                        String.valueOf(
-                                credential.getId()
-                        )
-                }
-        );
+            values.put(
+                    "updated_at",
+                    System.currentTimeMillis()
+            );
+
+            if (!Objects.equals(existing.getPassword(), credential.getPassword())) {
+                values.put("breach_status", PasswordBreachResult.Status.NOT_CHECKED.name());
+            }
+
+            int updated = database.update(
+                    "credentials",
+                    values,
+                    "id = ?",
+                    new String[]{
+                            String.valueOf(
+                                    credential.getId()
+                            )
+                    }
+            );
+            database.setTransactionSuccessful();
+            return updated;
+        } finally {
+            database.endTransaction();
+        }
+    }
+
+    /**
+     * Saves a result only if it still describes the stored password. No lookup
+     * hash or password copy is added to storage. A positive breach remains a
+     * finding until the password changes. Failed refreshes keep completed checks.
+     * Returns null when the credential was deleted or its password changed.
+     */
+    public PasswordBreachResult.Status updateBreachStatus(
+            long id, String expectedPassword, PasswordBreachResult.Status incoming
+    ) {
+        Objects.requireNonNull(expectedPassword, "expectedPassword");
+        Objects.requireNonNull(incoming, "incoming");
+        database.beginTransaction();
+        try {
+            Credential current = getById(id);
+            if (current == null || !expectedPassword.equals(current.getPassword())) { return null; }
+            PasswordBreachResult.Status stored = current.getBreachStatus();
+            PasswordBreachResult.Status effective = incoming;
+            if (stored == PasswordBreachResult.Status.BREACHED
+                    || ((incoming == PasswordBreachResult.Status.ERROR
+                    || incoming == PasswordBreachResult.Status.NOT_CHECKED)
+                    && stored == PasswordBreachResult.Status.NOT_FOUND)) {
+                effective = stored;
+            }
+            ContentValues values = new ContentValues();
+            values.put("breach_status", effective.name());
+            int changed = database.update("credentials", values,
+                    "id = ? AND password_ciphertext = ?",
+                    new String[]{String.valueOf(id), expectedPassword});
+            database.setTransactionSuccessful();
+            return changed == 1 ? effective : null;
+        } finally {
+            database.endTransaction();
+        }
     }
 
     public int delete(
@@ -293,7 +344,7 @@ public class CredentialRepository {
             Cursor cursor
     ) {
 
-        return new Credential(
+        Credential credential = new Credential(
                 cursor.getLong(
                         cursor.getColumnIndexOrThrow(
                                 "id"
@@ -354,5 +405,12 @@ public class CredentialRepository {
                         )
                 )
         );
+        try {
+            credential.setBreachStatus(PasswordBreachResult.Status.valueOf(
+                    cursor.getString(cursor.getColumnIndexOrThrow("breach_status"))));
+        } catch (IllegalArgumentException | NullPointerException invalid) {
+            credential.setBreachStatus(PasswordBreachResult.Status.ERROR);
+        }
+        return credential;
     }
 }

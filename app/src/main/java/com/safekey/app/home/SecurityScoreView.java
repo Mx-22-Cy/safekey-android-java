@@ -26,8 +26,10 @@ public class SecurityScoreView extends View {
     // Reused instead of creating a new RectF inside onDraw().
     private final RectF arcBounds = new RectF();
 
+    private boolean scoreAvailable;
+    private String unavailableText;
     private int score = 0;
-    private String scoreText = "0";
+    private String scoreText = "\u2014";
     private String maxScoreText;
 
     public SecurityScoreView(Context context) {
@@ -83,7 +85,7 @@ public class SecurityScoreView extends View {
         );
         labelPaint.setTextSize(spToPx(11));
 
-        scoreText = Integer.toString(score);
+        unavailableText = getResources().getString(R.string.security_not_checked);
 
         maxScoreText =
                 getResources().getString(
@@ -98,6 +100,7 @@ public class SecurityScoreView extends View {
     }
 
     public void setScore(int score) {
+        scoreAvailable = true;
 
         this.score =
                 Math.max(
@@ -108,13 +111,27 @@ public class SecurityScoreView extends View {
         scoreText =
                 Integer.toString(this.score);
 
+        progressPaint.setColor(getContext().getColor(this.score == 100
+                ? R.color.auth_accent : R.color.dashboard_warning));
         updateAccessibilityDescription();
+        invalidate();
+    }
 
+    public void setUnavailable(String description) {
+        scoreAvailable = false;
+        score = 0;
+        scoreText = "\u2014";
+        unavailableText = description;
+        updateAccessibilityDescription();
         invalidate();
     }
 
     private void updateAccessibilityDescription() {
 
+        if (!scoreAvailable) {
+            setContentDescription(unavailableText);
+            return;
+        }
         setContentDescription(
                 getResources().getString(
                         R.string.home_security_score_accessibility,
@@ -157,13 +174,9 @@ public class SecurityScoreView extends View {
                 backgroundPaint
         );
 
-        canvas.drawArc(
-                arcBounds,
-                -90,
-                360f * score / 100f,
-                false,
-                progressPaint
-        );
+        if (scoreAvailable) {
+            canvas.drawArc(arcBounds, -90, 360f * score / 100f, false, progressPaint);
+        }
 
         float centerX =
                 getWidth() / 2f;
@@ -187,7 +200,7 @@ public class SecurityScoreView extends View {
         );
 
         canvas.drawText(
-                maxScoreText,
+                scoreAvailable ? maxScoreText : unavailableText,
                 centerX,
                 centerY + dpToPx(23),
                 labelPaint

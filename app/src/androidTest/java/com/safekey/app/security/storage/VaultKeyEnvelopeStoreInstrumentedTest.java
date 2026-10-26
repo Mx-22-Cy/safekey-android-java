@@ -26,9 +26,13 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
     private static final String WRAPPED_DATABASE_KEY =
             "SK1.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB";
 
+    private static final String DECOY_WRAPPED_DATABASE_KEY =
+            "SK1.CCCCCCCCCCCCCCCC.DDDDDDDDDDDDDDDD";
+
     private Context context;
 
     private VaultKeyEnvelopeStore store;
+    private VaultKeyEnvelopeStore decoyStore;
 
     @Before
     public void setUp() {
@@ -43,6 +47,11 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
                 new VaultKeyEnvelopeStore(
                         context
                 );
+
+        decoyStore =
+                VaultKeyEnvelopeStore.forDecoy(
+                        context
+                );
     }
 
     @After
@@ -50,6 +59,7 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
         clearPreferences();
 
         store = null;
+        decoyStore = null;
         context = null;
     }
 
@@ -310,6 +320,175 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
         );
     }
 
+    /*
+     * Week 10 Decoy Vault isolation.
+     *
+     * Saving the primary envelope must not cause the
+     * decoy store to appear configured.
+     */
+    @Test
+    public void primaryEnvelope_doesNotAppearInDecoyStore() {
+        store.save(
+                new VaultKeyEnvelope(
+                        createSalt(),
+                        WRAPPED_DATABASE_KEY
+                )
+        );
+
+        assertTrue(
+                store.hasEnvelope()
+        );
+
+        assertFalse(
+                decoyStore.hasEnvelope()
+        );
+
+        assertNull(
+                decoyStore.load()
+        );
+    }
+
+    /*
+     * Week 10 Decoy Vault isolation.
+     *
+     * Both stores may exist at the same time, but they
+     * must return only their own envelope.
+     */
+    @Test
+    public void primaryAndDecoyStores_keepIndependentEnvelopes() {
+        byte[] primarySalt =
+                createSalt();
+
+        byte[] decoySalt =
+                createDecoySalt();
+
+        store.save(
+                new VaultKeyEnvelope(
+                        primarySalt,
+                        WRAPPED_DATABASE_KEY
+                )
+        );
+
+        decoyStore.save(
+                new VaultKeyEnvelope(
+                        decoySalt,
+                        DECOY_WRAPPED_DATABASE_KEY
+                )
+        );
+
+        VaultKeyEnvelope primaryEnvelope =
+                store.load();
+
+        VaultKeyEnvelope decoyEnvelope =
+                decoyStore.load();
+
+        assertArrayEquals(
+                primarySalt,
+                primaryEnvelope.getSalt()
+        );
+
+        assertEquals(
+                WRAPPED_DATABASE_KEY,
+                primaryEnvelope.getWrappedDatabaseKey()
+        );
+
+        assertArrayEquals(
+                decoySalt,
+                decoyEnvelope.getSalt()
+        );
+
+        assertEquals(
+                DECOY_WRAPPED_DATABASE_KEY,
+                decoyEnvelope.getWrappedDatabaseKey()
+        );
+    }
+
+    /*
+     * Clearing Decoy configuration must never modify
+     * the primary vault envelope.
+     */
+    @Test
+    public void clearingDecoyEnvelope_doesNotClearPrimaryEnvelope() {
+        byte[] primarySalt =
+                createSalt();
+
+        store.save(
+                new VaultKeyEnvelope(
+                        primarySalt,
+                        WRAPPED_DATABASE_KEY
+                )
+        );
+
+        decoyStore.save(
+                new VaultKeyEnvelope(
+                        createDecoySalt(),
+                        DECOY_WRAPPED_DATABASE_KEY
+                )
+        );
+
+        decoyStore.clear();
+
+        assertFalse(
+                decoyStore.hasEnvelope()
+        );
+
+        assertNull(
+                decoyStore.load()
+        );
+
+        assertTrue(
+                store.hasEnvelope()
+        );
+
+        VaultKeyEnvelope primaryEnvelope =
+                store.load();
+
+        assertArrayEquals(
+                primarySalt,
+                primaryEnvelope.getSalt()
+        );
+
+        assertEquals(
+                WRAPPED_DATABASE_KEY,
+                primaryEnvelope.getWrappedDatabaseKey()
+        );
+    }
+
+    /*
+     * Decoy storage must survive creation of another
+     * store instance just like the primary store.
+     */
+    @Test
+    public void decoyEnvelope_persistsAcrossStoreInstances() {
+        byte[] decoySalt =
+                createDecoySalt();
+
+        decoyStore.save(
+                new VaultKeyEnvelope(
+                        decoySalt,
+                        DECOY_WRAPPED_DATABASE_KEY
+                )
+        );
+
+        VaultKeyEnvelopeStore reopenedDecoyStore =
+                VaultKeyEnvelopeStore.forDecoy(
+                        context
+                );
+
+        VaultKeyEnvelope loadedEnvelope =
+                reopenedDecoyStore.load();
+
+        assertArrayEquals(
+                decoySalt,
+                loadedEnvelope.getSalt()
+        );
+
+        assertEquals(
+                DECOY_WRAPPED_DATABASE_KEY,
+                loadedEnvelope.getWrappedDatabaseKey()
+        );
+    }
+
     private SharedPreferences preferences() {
         return context.getSharedPreferences(
                 VaultKeyEnvelopeStore.PREFERENCES_NAME,
@@ -325,6 +504,15 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
         context
                 .getSharedPreferences(
                         VaultKeyEnvelopeStore.PREFERENCES_NAME,
+                        Context.MODE_PRIVATE
+                )
+                .edit()
+                .clear()
+                .commit();
+
+        context
+                .getSharedPreferences(
+                        VaultKeyEnvelopeStore.DECOY_PREFERENCES_NAME,
                         Context.MODE_PRIVATE
                 )
                 .edit()
@@ -347,6 +535,27 @@ public class VaultKeyEnvelopeStoreInstrumentedTest {
             salt[index] =
                     (byte) (
                             index + 1
+                    );
+        }
+
+        return salt;
+    }
+
+    private static byte[] createDecoySalt() {
+        byte[] salt =
+                new byte[
+                        Argon2idMasterKeyDeriver
+                                .SALT_LENGTH_BYTES
+                        ];
+
+        for (
+                int index = 0;
+                index < salt.length;
+                index++
+        ) {
+            salt[index] =
+                    (byte) (
+                            100 + index
                     );
         }
 

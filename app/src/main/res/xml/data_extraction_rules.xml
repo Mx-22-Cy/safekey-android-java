@@ -3,14 +3,45 @@
 
     <cloud-backup>
 
+        <!-- Primary encrypted vault database. -->
         <exclude
             domain="database"
             path="safekey.db" />
+        <exclude
+            domain="database"
+            path="safekey.db-wal" />
+        <exclude
+            domain="database"
+            path="safekey.db-shm" />
+        <exclude
+            domain="database"
+            path="safekey.db-journal" />
 
+        <!-- Week 10: secondary / Decoy encrypted database. -->
+        <exclude
+            domain="database"
+            path="safekey_secondary.db" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-wal" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-shm" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-journal" />
+
+        <!-- Primary vault key envelope. -->
         <exclude
             domain="sharedpref"
             path="safekey_vault_key_envelope.xml" />
 
+        <!-- Week 10: independent Decoy key envelope. -->
+        <exclude
+            domain="sharedpref"
+            path="safekey_decoy_vault_key_envelope.xml" />
+
+        <!-- Biometric vault key envelope. -->
         <exclude
             domain="sharedpref"
             path="safekey_biometric_key_envelope.xml" />
@@ -19,14 +50,45 @@
 
     <device-transfer>
 
+        <!-- Primary encrypted vault database. -->
         <exclude
             domain="database"
             path="safekey.db" />
+        <exclude
+            domain="database"
+            path="safekey.db-wal" />
+        <exclude
+            domain="database"
+            path="safekey.db-shm" />
+        <exclude
+            domain="database"
+            path="safekey.db-journal" />
 
+        <!-- Week 10: secondary / Decoy encrypted database. -->
+        <exclude
+            domain="database"
+            path="safekey_secondary.db" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-wal" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-shm" />
+        <exclude
+            domain="database"
+            path="safekey_secondary.db-journal" />
+
+        <!-- Primary vault key envelope. -->
         <exclude
             domain="sharedpref"
             path="safekey_vault_key_envelope.xml" />
 
+        <!-- Week 10: independent Decoy key envelope. -->
+        <exclude
+            domain="sharedpref"
+            path="safekey_decoy_vault_key_envelope.xml" />
+
+        <!-- Biometric vault key envelope. -->
         <exclude
             domain="sharedpref"
             path="safekey_biometric_key_envelope.xml" />
