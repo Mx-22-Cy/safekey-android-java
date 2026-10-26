@@ -25,6 +25,9 @@ import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.auth.ChangeMasterPasswordActivity;
+import com.safekey.app.auth.MasterPasswordHealth;
+import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
@@ -37,6 +40,11 @@ public class HomeActivity extends ProtectedActivity {
     private TextView textSecurityCoverage;
     private TextView textSecurityReview;
     private View securityBanner;
+
+    private final Runnable masterPasswordHealthChanged = this::refreshMasterPasswordHealth;
+    private MasterPasswordHealth masterPasswordHealth;
+    private TextView textMasterPasswordHealth;
+    private Button buttonCheckMasterPassword;
 
     private SecurityScoreView securityScoreView;
 
@@ -173,6 +181,24 @@ public class HomeActivity extends ProtectedActivity {
                         R.id.navSettings
                 );
 
+        masterPasswordHealth = ((SafeKeyApplication) getApplication()).getMasterPasswordHealth();
+        textMasterPasswordHealth = findViewById(R.id.textMasterPasswordHealth);
+        buttonCheckMasterPassword = findViewById(R.id.buttonCheckMasterPassword);
+        buttonCheckMasterPassword.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) { return; }
+            SafeKeySession.lock();
+            Intent intent = new Intent(this, SignInActivity.class);
+            intent.putExtra(SignInActivity.REQUIRE_MASTER_PASSWORD, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+        findViewById(R.id.buttonChangeMasterPassword).setOnClickListener(view -> {
+            if (requireUnlockedSession()) {
+                startActivity(new Intent(this, ChangeMasterPasswordActivity.class));
+            }
+        });
+
         securityController = AndroidCredentialSecurity.create(
                 ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator(), false);
         textSecurityStatus = findViewById(R.id.textHomeSecurityStatus);
@@ -263,6 +289,8 @@ public class HomeActivity extends ProtectedActivity {
         }
 
         countsActive = true;
+        masterPasswordHealth.addListener(masterPasswordHealthChanged);
+        refreshMasterPasswordHealth();
         refreshVaultCounts();
         refreshSecurityResults();
     }
@@ -272,6 +300,8 @@ public class HomeActivity extends ProtectedActivity {
         securityController.stop();
         showSecurityUnavailable(R.string.security_not_checked);
         countsActive = false;
+        masterPasswordHealth.removeListener(masterPasswordHealthChanged);
+        textMasterPasswordHealth.setText(null);
         countRequestGeneration++;
         showVaultCountsUnavailable();
 
@@ -285,6 +315,19 @@ public class HomeActivity extends ProtectedActivity {
         countRequestGeneration++;
 
         super.onDestroy();
+    }
+
+    private void refreshMasterPasswordHealth() {
+        if (!countsActive || isFinishing() || isDestroyed()
+                || SafeKeySession.getManager().getRemainingInactivityMillis() <= 0L) { return; }
+        MasterPasswordCheckStatus status = masterPasswordHealth.getStatus();
+        boolean pending = status == MasterPasswordCheckStatus.PENDING;
+        textMasterPasswordHealth.setVisibility(status == MasterPasswordCheckStatus.CHECKED
+                ? View.GONE : View.VISIBLE);
+        textMasterPasswordHealth.setText(status == MasterPasswordCheckStatus.CHECKED ? null
+                : getString(pending ? R.string.master_password_pending_notice
+                            : R.string.master_password_breached_notice));
+        buttonCheckMasterPassword.setVisibility(pending ? View.VISIBLE : View.GONE);
     }
 
     private boolean requireUnlockedSession() {
@@ -382,7 +425,7 @@ public class HomeActivity extends ProtectedActivity {
                         int label = summary.getAvailability() == CredentialSecuritySummary.Availability.EMPTY
                                 ? R.string.security_no_credentials
                                 : summary.getAvailability() == CredentialSecuritySummary.Availability.UNAVAILABLE
-                                ? R.string.security_unavailable : R.string.security_not_checked;
+                                  ? R.string.security_unavailable : R.string.security_not_checked;
                         securityScoreView.setUnavailable(getString(label));
                         textSecurityStatus.setText(label);
                     }
