@@ -642,6 +642,77 @@
 
             </LinearLayout>
 
+            <!-- App section heading -->
+            <TextView
+                android:id="@+id/textSettingsAppSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/settings_section_spacing"
+                android:layout_marginBottom="@dimen/settings_section_title_bottom_margin"
+                android:text="@string/settings_app_section"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="@dimen/settings_section_title_size"
+                android:textStyle="bold"
+                android:textAllCaps="true" />
+
+            <!-- App settings card -->
+            <LinearLayout
+                android:id="@+id/cardSettingsApp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/auth_card_bg"
+                android:paddingStart="@dimen/settings_card_horizontal_padding"
+                android:paddingEnd="@dimen/settings_card_horizontal_padding">
+
+                <!-- About SafeKey row -->
+                <LinearLayout
+                    android:id="@+id/rowSettingsAbout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="@dimen/settings_row_min_height"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <!-- App icon -->
+                    <FrameLayout
+                        android:layout_width="@dimen/settings_row_icon_size"
+                        android:layout_height="@dimen/settings_row_icon_size"
+                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                        android:background="@drawable/settings_vault_icon_bg">
+
+                        <ImageView
+                            android:layout_width="@dimen/settings_edit_icon_size"
+                            android:layout_height="@dimen/settings_edit_icon_size"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_safekey_logo"
+                            android:contentDescription="@null" />
+
+                    </FrameLayout>
+
+                    <!-- About label -->
+                    <TextView
+                        android:id="@+id/textSettingsAbout"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_about"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="@dimen/settings_row_text_size" />
+
+                    <!-- Chevron -->
+                    <ImageView
+                        android:layout_width="@dimen/settings_edit_icon_size"
+                        android:layout_height="@dimen/settings_edit_icon_size"
+                        android:src="@drawable/ic_alerts_chevron"
+                        android:contentDescription="@null" />
+
+                </LinearLayout>
+                <!-- End of About SafeKey row -->
+
+            </LinearLayout>
+            <!-- End of cardSettingsApp -->
+
         </LinearLayout>
         <!-- End of layoutSettingsSections -->
 
