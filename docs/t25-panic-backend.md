@@ -1,283 +1,134 @@
-# T25 Panic backend: password separation, verified trigger and recovery
+# T25 Panic-password backend
 
-The isolated backend is now joined to the application's real and Decoy runtime
-through one captured `PanicRuntimeScope` and work gate. The application exposes
-a terminal shutdown adapter; normal authentication remains available until a
-verified trigger explicitly stops that runtime. Startup now checks the durable
-marker before constructing vaults. Pending cleanup runs on a separate worker;
-failed cleanup prevents authentication and fresh setup. The concrete enrollment
-backend is wired through `SafeKeyApplication.getPanicBackend()`. Its enrollment
-checkpoint passed Android verification (484 unit and 225 instrumented tests).
-The shared password-role checks and verified-trigger API passed Android verification
-at 4094f1c (504 unit and 239 instrumented tests). Setup/change collision guards are
-now implemented; Android verification is required for this checkpoint.
-Hind owns the confirmation/Settings screens and shared Sign In UI integration
-(T27/T38), followed by full UI-flow testing. Those screens are not part of this
-backend patch. T25 is still in progress and the PR remains Draft.
+This backend verifies Panic enrollment, checks sign-in password roles, stops the
+shared vault runtime before deletion, and recovers interrupted cleanup before
+vault initialization. Hind's confirmation, Settings and shared Sign In screens
+are integrated separately under T27/T38. The APIs are available through
+`SafeKeyApplication.getPanicBackend()` while the application runtime is ready.
 
-## Implemented behavior
+## Enrollment and password separation
 
-- Panic enrollment requires a valid confirmed password and three different
-  master, Decoy and Panic passwords. It uses the existing master-password
-  length/common-pattern policy. Enrollment delegates actual master/Decoy
-  reauthentication and completed real-session/TOTP authorization to an authority
-  port, with an atomic generation-bound commit.
-- The Panic proof uses the existing Argon2id parameters, an independent random
-  salt and AES-GCM nonce, and a Panic-specific authenticated context. Passwords
-  and derived keys are not persisted. Temporary service copies are cleared;
-  callers remain responsible for clearing their own input arrays and UI fields.
-- A non-destructive reserved-password check is available for future master and
-  Decoy enrollment/change flows. A classifier exception must abort routing;
-  it must not be converted into a normal non-match or disabled Panic state.
-- A verified Panic trigger permanently stops its runtime's work gate, locks the
-  session, arms a durable recovery marker, drains accepted work and closes the
-  runtime before deleting anything. A close queued for later is insufficient.
-- Cleanup attempts every owned resource, verifies absence, and reports any
-  failure. A failed or interrupted wipe retains recovery state. Recovery does
-  not require the Panic password again, because the original trigger already
-  authorized the wipe. The old runtime never becomes usable again.
-- Partial/corrupted marker artifacts require recovery. Missing proof means
-  unconfigured; malformed/unreadable proof raises an error. A corrupt proof or
-  an incorrect candidate never authorizes a fresh wipe.
+Enrollment requires explicit warning confirmation, a claimed Real-vault session
+with all required authentication factors completed, and reauthentication of the
+actual current Master and configured Decoy passwords. An open database or an
+UNLOCKED flag alone is insufficient. The Decoy database must be closed.
 
-## Exact resource manifest
+`AndroidPanicEnrollmentAuthority` binds authorization to the session, completed
+unlock claim, vault generation, TOTP configuration and credential configuration.
+Its grant is single-use, expires after 60 seconds and rejects lock, closure,
+reauthentication, configuration changes, cancellation and runtime shutdown.
+Panic enrollment/replacement validates confirmation, the existing Master-password
+policy, and three-way password separation before its guarded save.
 
-`PanicWipeTargets.forSafeKey()` lists the known owned resources below. It is a
-factory called by cold-start recovery only after its empty runtime is stopped.
-All existing producers must be stopped before its targets may be used.
+Other supported writes use a `PanicPasswordSeparation` permit:
 
-| Resource | Cleanup |
+| Operation | Protection |
 | --- | --- |
-| `safekey.db`, `safekey_secondary.db` | Database file plus `-wal`, `-shm`, `-journal` |
-| Real, Decoy and biometric key-envelope preferences | Clear cached values, remove XML and `.bak`, verify both |
-| `safekey_totp_state.enc` | No-backup file plus `.bak` and `.new` |
+| `createVaultForEnrollment()` and legacy `createVault()` | Compare against stored Decoy/Panic roles, revalidate configuration and save only if no Real envelope exists |
+| `createDecoyVault()` | Compare against Master/Panic roles before modifying the cover database; protect initialization and envelope save |
+| `changeMasterPassword()` | Preserve current-password, session and cancellation checks; guard the conditional envelope replacement |
+| Panic enrollment/replacement | Actual Master/Decoy reauthentication, confirmation and three-way separation, followed by an atomic authorized save |
+
+The separation check runs off main. Final configuration validation and persistence
+share the configuration lock, so a racing update invalidates an earlier permit.
+Permits contain no plaintext password or database key, expire after 60 seconds
+and cannot be reused. Decoy storage's monitor is acquired before the credential
+lock to preserve lock order. The separation permit is not session authorization.
+There is currently no Decoy-password-change API; any future rewrap must use a
+DECOY permit and its own reauthentication/cancellation authorization.
+
+The Panic proof uses Argon2id with the project's existing parameters, an independent
+random salt and nonce, and a purpose-bound AES-GCM authenticated context. Passwords
+and derived keys are not persisted. Service-owned copies are cleared before their
+counted worker exits. Callers must clear their own arrays and screen fields.
+
+## Shared Sign In contract
+
+`PanicBackend.prepareSignIn(candidate)` copies the input and returns one cancellable
+request. Run it on an independent control worker, never the main thread or a vault
+executor that shutdown must drain. The backend checks Master, Decoy and Panic in
+fixed order, including dummy KDF/AEAD work for absent roles. Dummy results cannot
+authorize anything. Ordinary role errors do not skip later checks; any error,
+ambiguous match, cancellation or changed configuration aborts routing.
+
+This equalizes the number of expensive role checks. It does not promise constant
+elapsed time across devices, providers, I/O failures or subsequent UI flows.
+
+| Result | Meaning |
+| --- | --- |
+| `NO_MATCH` | No role matched; no vault is opened and nothing is deleted |
+| `MASTER` | Continue through the existing Real unlock/TOTP/session-claim flow |
+| `DECOY` | Continue through the existing Decoy unlock and session activation |
+| `PANIC_WIPED` | Verified Panic cleanup completed and every owned target was verified absent |
+
+Master/Decoy identification is not an unlocked session or a TOTP bypass. The legacy
+`PanicPasswordService.checkAndWipe()` is not the shared Sign In entry point. UI code
+must not call it ahead of the complete role checks or call the destructive wipe
+primitive directly. Full call sequencing is in [the handoff](t25-hind-handoff.md).
+
+## Shutdown, cleanup and recovery
+
+All production vault/security objects capture the application-owned
+`PanicRuntimeScope`. Accepted background tasks, pending prompts, key handoffs and
+queued callbacks retain ownership until they finish or are cleared. A verified
+trigger permanently blocks new work and invalidates old tickets. UI cancellation
+and session clearing occur before the drain; inputs and the Sign In verification
+lease are released before cleanup waits. A committed trigger remains terminal
+even if its originating screen disappears.
+
+The wipe arms a durable pending marker before deletion, waits for accepted work,
+closes registered workers and database connections, and verifies closure. It then
+attempts every owned target and verifies absence. A queued asynchronous close is
+not proof of closure. Failure retains recovery state and leaves the old runtime
+unusable. The marker is removed only after successful cleanup verification.
+
+| Exact owned resources | Removal |
+| --- | --- |
+| `safekey.db`, `safekey_secondary.db` | Base file plus `-wal`, `-shm` and `-journal` |
+| `safekey_vault_key_envelope`, `safekey_decoy_vault_key_envelope`, `safekey_biometric_key_envelope` | Clear cached preference values; remove XML and `.bak`; verify both |
+| `safekey_totp_state.enc`, `safekey_panic_password.enc` | No-backup file plus `.bak` and `.new` |
 | `safekey_biometric_vault_key`, `safekey_totp_state_key_v1` | Delete these exact Android Keystore aliases and verify absence |
-| `safekey_panic_password.enc` | No-backup proof plus `.bak` and `.new` |
-| `safekey_panic_wipe.pending` | Keep until all cleanup verifications pass, then remove its atomic artifacts |
+| `safekey_panic_wipe.pending` | Retain until cleanup succeeds, then remove its atomic artifacts |
 
-The manifest does not enumerate unrelated files or Keystore aliases. Add any
-new recovery/enrollment artifacts explicitly when integrating their owners.
-Cleanup means removal of app-owned files, envelopes and keys; it does not
-promise physical overwriting of flash storage or removal of off-device copies.
+Unrelated files and aliases are not enumerated or deleted. Cleanup removes app-owned
+files, envelopes and keys; it does not promise physical overwriting of flash or
+removal of off-device copies. No caller-supplied deletion paths are accepted.
 
-## Backend completion and UI handoff
+Cold startup checks marker artifacts before constructing either vault. Partial or
+corrupted markers require recovery. Cleanup runs on a separate worker while
+startup and restored-screen guards prevent authentication and setup. Recovery
+does not need the Panic password again: the prior durable trigger authorized it.
+Success creates a fresh runtime; stopped objects never become usable again.
+Normal startup without a marker performs no wipe. Failed live cleanup must remain
+blocked until recovery; merely recreating an Activity is not a process restart.
 
-1. The merged T26 backend and real coordinator now share the application-owned
-   runtime scope. Security and database queues count accepted work until its
-   `finally` completes. Retained envelope/TOTP adapters reject old-runtime writes.
-   TOTP setup, biometric prompt keys, key handoffs and queued result callbacks are
-   cancelled and cleared on the UI thread; sensitive screens clear their pending
-   input and finish. Extend this ownership to future recovery/UI producers.
-2. `SafeKeyApplication.getPanicShutdownRuntime()` supplies the real shutdown
-   adapter. Use its scope's gate for the password service and wipe coordinator;
-   an unrelated gate is rejected. UI cancellation and session invalidation run
-   before the background drain. Terminal database closure is queued on each
-   database worker, then all registered workers must terminate and all database
-   connections must report closed. Existing asynchronous `closeVault()` and
-   `shutdown()` alone are not used as evidence of completion. Never call the
-   destructive primitive on the main thread or on a counted vault worker; the
-   Panic control worker must not wait for its own operation. A cancellation or closure failure
-   keeps the stopped runtime unusable and must retain pending recovery state.
-3. Startup probes the marker before database initialization. Pending cleanup
-   runs on an independent worker using the exact manifest and shutdown adapter.
-   Screen lifecycle bodies are guarded before their initialization, including
-   restored protected screens. Failure leaves authentication and setup unavailable.
-   Success replaces the stopped scope and clears the old task before fresh setup.
-   Normal startup with no marker performs no wipe. Device/process-relaunch
-   verification of this integrated path is still required.
-4. `AndroidPanicEnrollmentAuthority` verifies a completed Real unlock/session
-   claim, the same TOTP configuration, the actual current master and configured
-   Decoy credentials, and the current session/vault/configuration generations.
-   It never opens the Decoy database to verify that password. A grant is single
-   use, expires after 60 seconds, and rejects lock, closure, reauthentication,
-   runtime shutdown and credential changes. Enrollment copies clear before the
-   counted worker exits. The shared credential lock protects final persistence;
-   no persistence monitor is held while awaiting the UI commit dispatcher.
-   Hind's T27 confirmation and T38 Settings UI must provide warning/confirmation
-   and hide controls in the Decoy vault.
-5. `PanicPasswordSeparation` now guards both Real setup paths, Decoy setup and
-   Master-password replacement. Its background check uses actual stored role
-   proofs. The short final commit revalidates the exact shared configuration,
-   runtime generation and permit lifetime under the configuration lock, then
-   performs the synchronous write under that same lock. A raw preflight boolean
-   or a collision check before an unguarded asynchronous save is insufficient.
-   Existing Panic enrollment/replacement retains its actual master/Decoy
-   reauthentication, three-way policy check and generation-bound atomic save.
-   Either side of a racing role update invalidates the other side's old permit.
-   Decoy setup checks before altering its cover database. Decoy storage's class
-   monitor is acquired before the shared credential lock to preserve lock order.
-6. `PanicBackend.prepareSignIn()` supplies one single-use, cancellable role-check
-   request for Hind's shared Sign In UI. It checks master, Decoy and Panic in a
-   fixed order without returning early on a match or an ordinary role-check error.
-   Absent roles use a dummy KDF/AEAD check whose result is ignored. Any role error,
-   ambiguous match, abandoned request or changed credential snapshot aborts routing.
-   This equalizes the number of expensive role checks; it does not promise exact
-   constant elapsed time across devices, providers, I/O failures or later UI flows.
-   A Panic match stops new work only at the final guarded commit. Inputs and the
-   request's verification lease clear before the shutdown drain, and PANIC_WIPED
-   is returned only after all cleanup verifications succeed. Do not call the legacy
-   `PanicPasswordService.checkAndWipe()` ahead of these role checks. MASTER/DECOY
-   results never claim an unlocked session, open a database or bypass required TOTP.
-   Hind owns the subsequent coordinator calls and navigation.
-7. Verify the exact integrated commit on-device: real/Decoy/TOTP sessions,
-   pending real and Decoy enrollment, backgrounding, stale callbacks, switching,
-   recovery after process death, all password-change collisions and the full
-   existing test suite. Restart recovery tests here use a new coordinator and
-   durable files; they do not kill and relaunch the Android application process.
+## Verified checkpoint and test limits
 
-## Tests
+Code checkpoint: `2de805420d7caae54385e24dd8a4e01feef23310`.
+Included main: `5c6827a10273c679656b285da7d110514ca3fd17`.
+The final fetch confirmed main was an ancestor, the working tree was clean and
+the branch was synced. The full branch whitespace check passed.
 
-The unit tests cover password policy, authorization, input-copy cleanup,
-Argon2id/AES-GCM proof behavior, queue draining, callback invalidation and failure
-recovery. Instrumented tests use uniquely named SQLCipher databases, preferences,
-no-backup files and Android Keystore aliases. They also check retained preference
-objects, sidecars, partial atomic writes and preservation of unrelated resources.
-The original isolated session/authority adapter is a test double. New runtime
-shutdown tests exercise production queues and SQLCipher with uniquely named test
-storage and a test UI-clear callback. They cover both database closures, a queued
-open before deletion, stopped-store writes and clearing abandoned TOTP setup.
-Startup gate tests additionally cover initialization ordering, retained-marker
-failures, rejected dispatch and cold cleanup with isolated owned resources.
-They are not end-to-end production Sign In, Settings, process-restart or Decoy
-switching tests. Android verification of each integration patch is still required.
+Verification on `SafeKey_API_37`, Android 17/API 37, on 2026-10-26:
 
-First verification on the working branch:
-
-```powershell
-.\gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:lintDebug :app:connectedDebugAndroidTest --console=plain
-```
-
-The development host has no Android SDK/emulator. Local checks use Java syntax
-parsing and selected Android/work-gate API stubs; deterministic local lifecycle tests substitute the
-crypto port. The Argon2id implementation and all Android persistence/Keystore/
-SQLCipher behavior must pass the project's Gradle and device tests before any
-verified-backend claim is made.
-
-Android API references used for the storage adapter:
-- https://developer.android.com/reference/android/util/AtomicFile
-- https://developer.android.com/reference/android/content/Context
-- https://developer.android.com/privacy-and-security/keystore
-
-## Concrete enrollment call for Hind (T27/T38)
-
-1. Require an authenticated Real session. Configure the Decoy credential first,
-   then close the Decoy database before returning to Real-vault Settings.
-2. Show clear warnings that use of the Panic password deletes app-owned vault
-   data and protection keys. Obtain explicit confirmation.
-3. Obtain `PanicBackend backend = application.getPanicBackend()` while the runtime
-   is ready. Call `backend.prepareEnrollment(master, decoy, panic, confirmation,
-   true)` to obtain an `EnrollmentRequest` that copies the inputs immediately.
-   Retain the request and call `request.run()` once on a background worker.
-   Close the request when the screen is abandoned, or in the worker's `finally`.
-   Cancellation rejects a later save; an already executing save finishes before
-   cancellation returns. The backend performs actual reauthentication;
-   UI visibility or `SafeKeySession.UNLOCKED` alone cannot authorize it.
-4. Keep all input values in caller-owned `char[]` and clear them in `finally`.
-   Clear input widgets and ignore callbacks for an abandoned/changed screen.
-5. Display success only after `request.run()` returns successfully.
-   Errors require fresh authorization; no previous grant may be reused.
-
-The backend does not require a second TOTP challenge during this enrollment
-because it binds authorization to the completed Real sign-in claim and its
-TOTP configuration. If TOTP has been changed since that sign-in, sign in again.
-An unclaimed unlock or pending TOTP challenge is insufficient even if a caller
-incorrectly marks the shared session unlocked.
-
-New regression tests cover actual master/Decoy reauthentication, claimed and
-unclaimed sessions, pending and completed TOTP, configuration changes, closed/
-expired grants, input cleanup, canceled pending/running enrollment requests,
-single-use submission, and interrupted queued/executing UI commits.
-Instrumented enrollment fixtures use isolated database/preferences/file names
-and a dedicated TOTP Keystore alias; they never run production wipe targets.
-
-## Fixed T25 backend progress parts
-
-1. Panic proof/wipe/shutdown backend — Done.
-2. Startup recovery backend — Done; full UI process-relaunch tests remain T27.
-3. Production enrollment authorization — Done; 709 tests passed on API 37.
-4. Password identification and verified-trigger API — Done; 743 tests passed on API 37.
-5. Password separation across setup/change operations — implemented; Android checks pending.
-6. Final backend safety verification, integration documentation and PR review — pending.
-
-Remaining at preparation of this checkpoint: **2 / 6**. Mark part 5 Done only
-once the exact checkpoint passes the project's Android verification.
-
-
-## Shared Sign In backend call for Hind (T27)
-
-1. On the UI thread, complete `prepareForVaultAuthentication()` before accepting a
-   new attempt. Close an earlier request on replacement, backgrounding or screen
-   abandonment. Call `backend.prepareSignIn(candidate)` while the application
-   runtime is available; it copies the supplied `char[]` immediately. Keep the
-   original input private; clear it after the chosen coordinator has copied it, or
-   in `finally` for NO_MATCH, PANIC_WIPED and errors. Clear caller-owned input and
-   screen fields on cancellation/backgrounding as well. The backend clears only
-   its own copies.
-2. Run `request.run()` on an **independent control worker**, never the main thread
-   or an executor registered with the vault runtime. A Panic wipe drains those
-   vault executors and must not wait for the worker that is currently calling it.
-   Always close the request in `finally`. A canceled unstarted request clears its
-   pending input. Canceling during verification rejects the final commit and keeps
-   active input tracked until the service clears it. After a verified Panic trigger
-   is committed, cleanup is terminal and continues even if its screen disappears.
-3. Handle the result:
-   - `NO_MATCH`: show the common authentication error; do not open either vault.
-   - `MASTER`: use the existing Real coordinator unlock flow, including TOTP and
-     its one-time session claim. Role identification alone is not authentication.
-   - `DECOY`: use the Decoy coordinator and existing session-bound vault activation.
-   - `PANIC_WIPED`: only after successful full cleanup, dispatch
-     `application.continueAfterPanicWipe(backend)` on main. It rejects any backend
-     other than the stopped application's current, successfully completed backend.
-     Startup constructs a fresh scope and requires fresh-setup navigation. Open
-     `PanicStartupActivity` with the old task cleared; its existing startup gate
-     completes the transition to Sign Up. The old backend/runtime stays stopped.
-4. Deliver normal results only to the current attempt. Deliver the terminal wipe
-   result through the application-level Sign In controller: shutdown deliberately
-   clears/finishes sensitive screens, so a callback that depends on the old Activity
-   remaining alive cannot own fresh-setup navigation. On any cleanup error, keep
-   authentication blocked and recover the durable marker at startup. Never turn an
-   exception into NO_MATCH, an unlocked vault, or a successful reset.
-
-The new 20 unit tests verify role ordering, ambiguous/error rejection, cancellation,
-configuration changes, copy lifetime and fail-closed wipe behavior. The 14 new
-instrumented tests exercise actual Argon2id/AES-GCM proofs, mapped envelope stores,
-missing-role dummy checks, the production shutdown adapter and an isolated resource
-manifest. Their database paths contain manifest sentinels; existing runtime tests
-cover live SQLCipher closure. These tests do not implement Hind's UI or kill and
-relaunch the Android application process. Both remain T27 integration checks.
-
-
-## Password separation in supported setup/change operations
-
-Hind continues calling the existing coordinator and enrollment APIs; the guard is
-inside the backend rather than a UI-only comparison:
-
-| Operation | Backend protection |
+| Check | Result |
 | --- | --- |
-| `createVaultForEnrollment()` | Check against stored Decoy/Panic roles, then revalidate and save the Real envelope |
-| Legacy `createVault()` | Same protected setup operation; an existing Real envelope cannot be overwritten |
-| `createDecoyVault()` | Check against stored Master/Panic roles before replacing the cover database; protect initialization and envelope save |
-| `changeMasterPassword()` | Keep current-password/session/cancellation checks; wrap the conditional replacement in the separation permit |
-| `enrollPanicPassword()` / enrollment request | Reauthenticate actual Master/Decoy credentials; policy and atomic authorization keep all three roles different |
+| `:app:testDebugUnitTest` | 524 tests; 0 failures, errors or skips |
+| `:app:assembleDebug` | Passed |
+| `:app:lintDebug` | Passed |
+| `:app:connectedDebugAndroidTest` | 251 tests; 0 failures, errors or skips |
 
-`PanicPasswordSeparation` does not grant session/enrollment authorization and does
-not replace password-strength or breach-check consent rules. A permit contains
-only a generation ticket and ciphertext/salt snapshot, expires after 60 seconds,
-and cannot be reused. Any unreadable or malformed role aborts the operation;
-errors never mean that a password is available. A failed or canceled operation
-must not be reported as a successful password change.
+The 775 tests include policy/crypto, authorization, separation races, input cleanup,
+stale callbacks, runtime shutdown, database closure, exact resource deletion and
+startup recovery. Device fixtures use isolated storage and Keystore aliases.
+The Sign In manifest tests use database-file sentinels; separate runtime tests
+exercise live SQLCipher closure. Restart recovery fixtures use durable files and
+fresh coordinators; they do not kill and relaunch the application process.
 
-No Decoy-password-change operation currently exists. If a Decoy rewrap feature is
-added later, it must use a DECOY separation permit together with its own actual
-reauthentication and cancellation authorization. Public low-level envelope/proof
-store methods are persistence primitives for backend adapters and test fixtures;
-UI code must use the protected coordinator/enrollment APIs.
+Manual normal startup/navigation and force-stop persistence were checked at the
+earlier startup checkpoint. Current full UI enrollment, shared Sign In triggering,
+Decoy concealment and process-death/relaunch scenarios remain Hind's T27 integration
+tests. The backend test results do not establish those UI flows as complete.
 
-The new 20 unit tests use simulated credential snapshots/work gates to cover
-cross-role collisions, racing commits, storage errors, runtime stop, expiry,
-single-use permits and input cleanup. The 12 new instrumented tests use actual
-SQLCipher coordinator setup/change paths, real password crypto and isolated
-storage. They cover both Real setup paths, Decoy cover preservation, Master
-replacement rejection/success, existing Panic enrollment collision checks and
-real stored-configuration invalidation. Full Gradle/device verification of this
-checkpoint is required before Part 5 is marked Done.
+These documentation updates do not change the tested runtime code. Code changes
+during review or integration require the relevant checks again.
