@@ -29,6 +29,7 @@ import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.alerts.AlertsActivity;
+import com.safekey.app.settings.SettingsActivity;
 
 import java.util.Arrays;
 import java.util.List;
@@ -757,20 +758,20 @@ public class GeneratorActivity extends ProtectedActivity {
                 }
         );
 
-        navSettings.setOnClickListener(
-                view -> {
+        navSettings.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) {
+                return;
+            }
 
-                    if (!requireUnlockedSession()) {
-                        return;
-                    }
+            Intent intent = new Intent(
+                    GeneratorActivity.this,
+                    SettingsActivity.class
+            );
 
-                    Toast.makeText(
-                            GeneratorActivity.this,
-                            R.string.home_settings_navigation_pending,
-                            Toast.LENGTH_SHORT
-                    ).show();
-                }
-        );
+            startActivity(intent);
+            finish();
+        });
+
     }
 
     private void returnGeneratedPassword() {

@@ -40,6 +40,9 @@
     <!-- App -->
     <string name="settings_app_section">App</string>
     <string name="settings_about">About SafeKey</string>
+    <string name="settings_about_message">SafeKey is an offline-first password manager for Android that helps protect passwords and secure notes using encrypted local storage.</string>
+    <string name="settings_about_dialog_close">Close</string>
+    <string name="settings_about_version">Version information</string>
 
     <!-- Status -->
     <string name="settings_status_on">On</string>
@@ -47,4 +50,6 @@
     <string name="settings_status_unavailable">Unavailable</string>
     <string name="settings_status_not_configured">Not configured</string>
     <string name="settings_coming_soon">Available after security integration</string>
+
+    <string name="settings_auto_lock_five_minutes">5 minutes</string>
 </resources>

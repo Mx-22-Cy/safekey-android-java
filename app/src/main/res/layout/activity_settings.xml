@@ -19,7 +19,7 @@
         android:paddingTop="@dimen/settings_header_top_margin"
         android:paddingBottom="@dimen/settings_content_bottom_padding"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/bottomNavigationSettings"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
@@ -205,11 +205,11 @@
 
                 <!-- Divider between Account rows -->
                 <View
+                    android:id="@+id/dividerSettingsAccount"
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/settings_row_divider_height"
                     android:layout_marginStart="@dimen/settings_row_icon_size"
                     android:background="@color/auth_input_border" />
-
 
                 <!-- Lock Vault row -->
                 <LinearLayout
@@ -423,21 +423,14 @@
                         android:textColor="@color/auth_text_primary"
                         android:textSize="@dimen/settings_row_text_size" />
 
-                    <!-- Current timeout will be populated from the session manager -->
+                    <!-- Current fixed inactivity timeout from VaultSessionManager -->
                     <TextView
                         android:id="@+id/textSettingsAutoLockValue"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/settings_status_unavailable"
+                        android:text="@string/settings_auto_lock_five_minutes"
                         android:textColor="@color/auth_text_hint"
                         android:textSize="@dimen/settings_row_status_size" />
-
-                    <!-- Chevron -->
-                    <ImageView
-                        android:layout_width="@dimen/settings_edit_icon_size"
-                        android:layout_height="@dimen/settings_edit_icon_size"
-                        android:src="@drawable/ic_alerts_chevron"
-                        android:contentDescription="@null" />
 
                 </LinearLayout>
 
@@ -491,13 +484,6 @@
                         android:text="@string/settings_status_unavailable"
                         android:textColor="@color/auth_text_hint"
                         android:textSize="@dimen/settings_row_status_size" />
-
-                    <!-- Chevron -->
-                    <ImageView
-                        android:layout_width="@dimen/settings_edit_icon_size"
-                        android:layout_height="@dimen/settings_edit_icon_size"
-                        android:src="@drawable/ic_alerts_chevron"
-                        android:contentDescription="@null" />
 
                 </LinearLayout>
 
@@ -571,13 +557,6 @@
                         android:textColor="@color/auth_text_hint"
                         android:textSize="@dimen/settings_row_status_size" />
 
-                    <!-- Chevron -->
-                    <ImageView
-                        android:layout_width="@dimen/settings_edit_icon_size"
-                        android:layout_height="@dimen/settings_edit_icon_size"
-                        android:src="@drawable/ic_alerts_chevron"
-                        android:contentDescription="@null" />
-
                 </LinearLayout>
 
                 <!-- Divider before Panic Mode -->
@@ -630,13 +609,6 @@
                         android:text="@string/settings_status_unavailable"
                         android:textColor="@color/auth_text_hint"
                         android:textSize="@dimen/settings_row_status_size" />
-
-                    <!-- Chevron -->
-                    <ImageView
-                        android:layout_width="@dimen/settings_edit_icon_size"
-                        android:layout_height="@dimen/settings_edit_icon_size"
-                        android:src="@drawable/ic_alerts_chevron"
-                        android:contentDescription="@null" />
 
                 </LinearLayout>
 
@@ -717,5 +689,155 @@
         <!-- End of layoutSettingsSections -->
 
     </androidx.core.widget.NestedScrollView>
+
+    <!-- Bottom navigation -->
+    <LinearLayout
+        android:id="@+id/bottomNavigationSettings"
+        android:layout_width="0dp"
+        android:layout_height="76dp"
+        android:background="@color/vault_panel"
+        android:baselineAligned="false"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <!-- Home -->
+        <LinearLayout
+            android:id="@+id/navHome"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                android:src="@drawable/ic_home"
+                android:contentDescription="@null"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/home_nav_home"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Vault -->
+        <LinearLayout
+            android:id="@+id/navVault"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                android:src="@drawable/ic_vault"
+                android:contentDescription="@null"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/home_nav_vault"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Generator -->
+        <LinearLayout
+            android:id="@+id/navGenerator"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                android:src="@drawable/ic_generate_password"
+                android:contentDescription="@null"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/generator_nav"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Alerts -->
+        <LinearLayout
+            android:id="@+id/navAlerts"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageView
+                android:layout_width="21dp"
+                android:layout_height="21dp"
+                android:src="@drawable/ic_alerts"
+                android:contentDescription="@null"
+                app:tint="@color/vault_text_faint" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:text="@string/home_nav_alerts"
+                android:textColor="@color/vault_text_faint"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- Settings (active) -->
+        <LinearLayout
+            android:id="@+id/navSettings"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:layout_width="42dp"
+                android:layout_height="30dp"
+                android:background="@drawable/vault_nav_active_bg">
+
+                <ImageView
+                    android:layout_width="21dp"
+                    android:layout_height="21dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_settings"
+                    android:contentDescription="@null"
+                    app:tint="@color/vault_accent" />
+            </FrameLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:text="@string/home_nav_settings"
+                android:textColor="@color/vault_accent"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

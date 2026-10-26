@@ -69,6 +69,11 @@
             android:name=".alerts.AlertsActivity"
             android:exported="false" />
 
+        <!-- Week 10 Settings UI (T38) -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false" />
+
         <activity
             android:name=".vault.CredentialDetailsActivity"
             android:exported="false" />
