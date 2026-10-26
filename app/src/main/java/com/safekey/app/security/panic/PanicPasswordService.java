@@ -91,22 +91,24 @@ public final class PanicPasswordService {
             if (result != PanicPasswordPolicy.Result.VALID) {
                 throw new IllegalArgumentException(result.name());
             }
-            synchronized (store.transactionLock()) {
-                if (!operation.ticket().isCurrent()) {
-                    throw new CancellationException("Vault runtime is stopped.");
-                }
-                try (Grant grant = Objects.requireNonNull(
-                             authority.authenticate(copies[0], copies[1]), "grant")) {
-                    PanicPasswordCrypto.Record record = crypto.create(copies[2]);
-                    grant.commitIfCurrent(() -> {
+            if (!operation.ticket().isCurrent()) {
+                throw new CancellationException("Vault runtime is stopped.");
+            }
+            // Authorization may dispatch its short commit to Android's main thread.
+            // Never hold a persistence monitor while waiting for that dispatcher.
+            try (Grant grant = Objects.requireNonNull(
+                    authority.authenticate(copies[0], copies[1]), "grant")) {
+                PanicPasswordCrypto.Record record = crypto.create(copies[2]);
+                grant.commitIfCurrent(() -> {
+                    synchronized (store.transactionLock()) {
                         if (!operation.ticket().isCurrent()) {
                             throw new CancellationException("Vault runtime is stopped.");
                         }
                         store.save(record);
-                    });
-                    if (!operation.ticket().isCurrent()) {
-                        throw new CancellationException("Vault runtime is stopped.");
                     }
+                });
+                if (!operation.ticket().isCurrent()) {
+                    throw new CancellationException("Vault runtime is stopped.");
                 }
             }
         }

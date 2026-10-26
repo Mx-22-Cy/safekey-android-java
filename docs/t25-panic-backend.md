@@ -1,13 +1,17 @@
-# T25 Panic backend: runtime shutdown and startup recovery
+# T25 Panic backend: production enrollment, shutdown and startup recovery
 
 The isolated backend is now joined to the application's real and Decoy runtime
 through one captured `PanicRuntimeScope` and work gate. The application exposes
 a terminal shutdown adapter; normal authentication remains available until a
 verified trigger explicitly stops that runtime. Startup now checks the durable
 marker before constructing vaults. Pending cleanup runs on a separate worker;
-failed cleanup prevents authentication and fresh setup. Panic enrollment and
-the shared Sign In classifier are not enabled by this stage.
-T25 remains in progress until those integration steps are completed and verified.
+failed cleanup prevents authentication and fresh setup. The concrete enrollment
+backend is now wired through `SafeKeyApplication.getPanicBackend()`; its Android
+verification is required for this checkpoint. The shared password classifier,
+verified-trigger API and setup/change collision guards are subsequent T25 steps.
+Hind owns the confirmation/Settings screens and shared Sign In UI integration
+(T27/T38), followed by full UI-flow testing. Those screens are not part of this
+backend patch. T25 is still in progress and the PR remains Draft.
 
 ## Implemented behavior
 
@@ -54,7 +58,7 @@ new recovery/enrollment artifacts explicitly when integrating their owners.
 Cleanup means removal of app-owned files, envelopes and keys; it does not
 promise physical overwriting of flash storage or removal of off-device copies.
 
-## Required integration before marking T25 complete
+## Backend completion and UI handoff
 
 1. The merged T26 backend and real coordinator now share the application-owned
    runtime scope. Security and database queues count accepted work until its
@@ -79,11 +83,16 @@ promise physical overwriting of flash storage or removal of off-device copies.
    Success replaces the stopped scope and clears the old task before fresh setup.
    Normal startup with no marker performs no wipe. Device/process-relaunch
    verification of this integrated path is still required.
-4. Implement the enrollment authority using a fully authenticated REAL session,
-   completed TOTP where configured, verified actual master/Decoy credentials and
-   current session plus credential-configuration generations. Commit while that
-   authorization is still current. Require explicit Settings warning and
-   confirmation before enrollment. Hide Panic/Decoy settings in the Decoy vault.
+4. `AndroidPanicEnrollmentAuthority` verifies a completed Real unlock/session
+   claim, the same TOTP configuration, the actual current master and configured
+   Decoy credentials, and the current session/vault/configuration generations.
+   It never opens the Decoy database to verify that password. A grant is single
+   use, expires after 60 seconds, and rejects lock, closure, reauthentication,
+   runtime shutdown and credential changes. Enrollment copies clear before the
+   counted worker exits. The shared credential lock protects final persistence;
+   no persistence monitor is held while awaiting the UI commit dispatcher.
+   Hind's T27 confirmation and T38 Settings UI must provide warning/confirmation
+   and hide controls in the Decoy vault.
 5. Preserve three-way separation during all later master/Decoy/Panic setup and
    password changes. Use `isReservedPassword()` and the other role verifiers
    inside the same configuration authorization; checking before an unguarded
@@ -132,3 +141,47 @@ Android API references used for the storage adapter:
 - https://developer.android.com/reference/android/util/AtomicFile
 - https://developer.android.com/reference/android/content/Context
 - https://developer.android.com/privacy-and-security/keystore
+
+## Concrete enrollment call for Hind (T27/T38)
+
+1. Require an authenticated Real session. Configure the Decoy credential first,
+   then close the Decoy database before returning to Real-vault Settings.
+2. Show clear warnings that use of the Panic password deletes app-owned vault
+   data and protection keys. Obtain explicit confirmation.
+3. Obtain `PanicBackend backend = application.getPanicBackend()` while the runtime
+   is ready. Call `backend.prepareEnrollment(master, decoy, panic, confirmation,
+   true)` to obtain an `EnrollmentRequest` that copies the inputs immediately.
+   Retain the request and call `request.run()` once on a background worker.
+   Close the request when the screen is abandoned, or in the worker's `finally`.
+   Cancellation rejects a later save; an already executing save finishes before
+   cancellation returns. The backend performs actual reauthentication;
+   UI visibility or `SafeKeySession.UNLOCKED` alone cannot authorize it.
+4. Keep all input values in caller-owned `char[]` and clear them in `finally`.
+   Clear input widgets and ignore callbacks for an abandoned/changed screen.
+5. Display success only after `request.run()` returns successfully.
+   Errors require fresh authorization; no previous grant may be reused.
+
+The backend does not require a second TOTP challenge during this enrollment
+because it binds authorization to the completed Real sign-in claim and its
+TOTP configuration. If TOTP has been changed since that sign-in, sign in again.
+An unclaimed unlock or pending TOTP challenge is insufficient even if a caller
+incorrectly marks the shared session unlocked.
+
+New regression tests cover actual master/Decoy reauthentication, claimed and
+unclaimed sessions, pending and completed TOTP, configuration changes, closed/
+expired grants, input cleanup, canceled pending/running enrollment requests,
+single-use submission, and interrupted queued/executing UI commits.
+Instrumented enrollment fixtures use isolated database/preferences/file names
+and a dedicated TOTP Keystore alias; they never run production wipe targets.
+
+## Fixed T25 backend progress parts
+
+1. Panic proof/wipe/shutdown backend — Done.
+2. Startup recovery backend — Done; full UI process-relaunch tests remain T27.
+3. Production enrollment authorization — implemented; Android checks pending.
+4. Password identification and verified-trigger API — pending.
+5. Password separation across setup/change operations — pending.
+6. Final backend safety verification, integration documentation and PR review — pending.
+
+Remaining at preparation of this checkpoint: **4 / 6**. Mark part 3 Done only
+once the exact checkpoint passes the project's Android verification.

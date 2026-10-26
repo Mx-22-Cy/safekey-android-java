@@ -1,4 +1,3 @@
-
 package com.safekey.app.security.storage;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
@@ -65,6 +64,8 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         runtimeScope.registerExecutor(securityExecutor);
         mainHandler = new Handler(Looper.getMainLooper());
     }
+
+    public boolean belongsToPanicRuntime(PanicRuntimeScope expected) { return runtimeScope == expected; }
 
     public boolean hasDecoyVault() {
         return envelopeStore.hasEnvelope();

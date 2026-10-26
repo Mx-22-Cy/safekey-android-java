@@ -121,6 +121,17 @@ public final class SecureVaultCoordinator {
         return envelopeStore.hasEnvelope();
     }
 
+    public boolean belongsToPanicRuntime(PanicRuntimeScope expected) { return runtimeScope == expected; }
+
+    public VaultUnlockFlow.CompletedAuthentication getCompletedAuthentication() {
+        return unlockFlow.getCompletedAuthentication();
+    }
+
+    public boolean runIfCurrentCompletedAuthentication(
+            VaultUnlockFlow.CompletedAuthentication expected, Runnable action) {
+        return unlockFlow.runIfCurrentCompletedAuthentication(expected, action);
+    }
+
     public boolean isVaultOpen() {
         return vaultDataService.isVaultOpen();
     }

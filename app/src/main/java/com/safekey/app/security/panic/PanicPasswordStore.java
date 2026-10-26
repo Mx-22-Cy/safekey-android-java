@@ -9,7 +9,7 @@ import java.util.Objects;
 /** Verifier persistence only; enrollment authorization belongs to the service. */
 public final class PanicPasswordStore implements PanicPasswordService.Store {
     static final String FILE_NAME = "safekey_panic_password.enc";
-    private static final Object LOCK = new Object();
+    private static final Object LOCK = PanicCredentialConfiguration.lock();
     private final File file;
 
     public PanicPasswordStore(Context context) {
@@ -48,6 +48,9 @@ public final class PanicPasswordStore implements PanicPasswordService.Store {
     @Override
     public void save(PanicPasswordCrypto.Record record) throws IOException {
         Objects.requireNonNull(record, "record");
-        synchronized (LOCK) { PanicFiles.writeExact(file, record.encode()); }
+        synchronized (LOCK) {
+            try { PanicFiles.writeExact(file, record.encode()); }
+            finally { PanicCredentialConfiguration.changed(); }
+        }
     }
 }

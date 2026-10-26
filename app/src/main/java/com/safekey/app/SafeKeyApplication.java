@@ -41,6 +41,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     private DecoyVaultCoordinator decoyVaultCoordinator;
     private VaultOperations realVaultOperations;
     private MasterPasswordHealth masterPasswordHealth;
+    private com.safekey.app.security.panic.PanicBackend panicBackend;
 
     private final Handler mainHandler =
             new Handler(Looper.getMainLooper());
@@ -109,6 +110,8 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         decoyVaultCoordinator = new DecoyVaultCoordinator(this);
         realVaultOperations = new RealVaultOperations(secureVaultCoordinator);
         masterPasswordHealth = new MasterPasswordHealth(this);
+        panicBackend = new com.safekey.app.security.panic.PanicBackend(
+                this, secureVaultCoordinator, decoyVaultCoordinator, getPanicShutdownRuntime());
         synchronized (this) {
             activeVault = ActiveVault.NONE;
             activeVaultOperations = null;
@@ -155,6 +158,11 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         if (!isStartupRuntimeAvailable()) {
             throw new IllegalStateException("SafeKey startup has not completed.");
         }
+    }
+
+    public com.safekey.app.security.panic.PanicBackend getPanicBackend() {
+        requireRuntimeReady();
+        return panicBackend;
     }
 
     public MasterPasswordHealth getMasterPasswordHealth() {

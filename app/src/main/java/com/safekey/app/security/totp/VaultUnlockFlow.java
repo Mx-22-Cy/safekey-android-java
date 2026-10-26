@@ -47,6 +47,7 @@ public final class VaultUnlockFlow {
         private final boolean requiresClaim;
 
         private long completedAtMillis;
+        private byte[] configurationFingerprint;
         private boolean primarySubmitted;
         private boolean initialCloseDone;
         private boolean verifying;
@@ -96,6 +97,33 @@ public final class VaultUnlockFlow {
     private final Handler main;
     private final VaultAccess vault;
     private final LongSupplier elapsedMillis;
+
+    /** Immutable evidence that all factors and the session claim completed. */
+    public static final class CompletedAuthentication {
+        private final byte[] fingerprint;
+        private CompletedAuthentication(byte[] fingerprint) {
+            this.fingerprint = Objects.requireNonNull(fingerprint, "fingerprint").clone();
+        }
+        public boolean matchesConfiguration(byte[] candidate) {
+            return candidate != null && java.security.MessageDigest.isEqual(fingerprint, candidate);
+        }
+    }
+
+    private volatile CompletedAuthentication completedAuthentication;
+
+    public CompletedAuthentication getCompletedAuthentication() { return completedAuthentication; }
+
+    /** UI-thread commit guard; serializes with beginning/cancelling/closing authentication. */
+    public boolean runIfCurrentCompletedAuthentication(CompletedAuthentication expected, Runnable action) {
+        Objects.requireNonNull(action, "action");
+        synchronized (lock) {
+            if (expected == null || completedAuthentication != expected || closed || runtimeScope.isStopped()) {
+                return false;
+            }
+            action.run();
+            return true;
+        }
+    }
 
     private Request current;
     private boolean closed;
@@ -154,6 +182,7 @@ public final class VaultUnlockFlow {
                 cancel(current);
             }
 
+            completedAuthentication = null;
             Request request = new Request(this, gate.begin(), listener);
             current = request;
 
@@ -300,6 +329,7 @@ public final class VaultUnlockFlow {
         Objects.requireNonNull(callback, "callback");
 
         synchronized (lock) {
+            completedAuthentication = null;
             cancelPending();
             vault.close(callback);
         }
@@ -308,6 +338,7 @@ public final class VaultUnlockFlow {
     public void shutdown() {
         synchronized (lock) {
             closed = true;
+            completedAuthentication = null;
             cancelPending();
         }
     }
@@ -350,6 +381,7 @@ public final class VaultUnlockFlow {
                 return false;
             }
 
+            publishCompletedAuthentication(request);
             main.removeCallbacks(request.timeout);
             current = null;
             return true;
@@ -451,6 +483,7 @@ public final class VaultUnlockFlow {
         byte[] key = null;
 
         try {
+            request.configurationFingerprint = gate.copyConfigurationFingerprint(request.attempt);
             key = gate.takeKeyForOpening(request.attempt);
             request.opening = true;
 
@@ -482,6 +515,7 @@ public final class VaultUnlockFlow {
                                 return;
                             }
                         } else {
+                            publishCompletedAuthentication(request);
                             current = null;
                         }
 
@@ -541,7 +575,17 @@ public final class VaultUnlockFlow {
                 && gate.isActive(request.attempt);
     }
 
+    private void publishCompletedAuthentication(Request request) {
+        completedAuthentication = new CompletedAuthentication(request.configurationFingerprint);
+        Arrays.fill(request.configurationFingerprint, (byte) 0);
+        request.configurationFingerprint = null;
+    }
+
     private void cleanup(Request request, Exception original) {
+        if (request.configurationFingerprint != null) {
+            Arrays.fill(request.configurationFingerprint, (byte) 0);
+            request.configurationFingerprint = null;
+        }
         if (!request.opening || request.cleanupQueued) {
             return;
         }

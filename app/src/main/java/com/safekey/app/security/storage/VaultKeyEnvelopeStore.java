@@ -1,4 +1,3 @@
-
 package com.safekey.app.security.storage;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
@@ -49,7 +48,8 @@ public final class VaultKeyEnvelopeStore
      * T45: Synchronize envelope reads, writes,
      * password-check updates and replacements.
      */
-    private static final Object STORE_LOCK = new Object();
+    private static final Object STORE_LOCK =
+            com.safekey.app.security.panic.PanicCredentialConfiguration.lock();
 
     private static final String KEY_PASSWORD_CHECK =
             "master_password_check";
@@ -168,8 +168,9 @@ public final class VaultKeyEnvelopeStore
                                 | Base64.NO_PADDING
                 );
 
-        boolean saved =
-                preferences
+        boolean saved;
+        try {
+            saved = preferences
                         .edit()
                         .putInt(
                                 KEY_FORMAT_VERSION,
@@ -188,6 +189,9 @@ public final class VaultKeyEnvelopeStore
                                 status.name()
                         )
                         .commit();
+        } finally {
+            com.safekey.app.security.panic.PanicCredentialConfiguration.changed();
+        }
 
         if (!saved) {
             throw new IllegalStateException(
@@ -404,11 +408,15 @@ public final class VaultKeyEnvelopeStore
     }
 
     private void clearLocked() {
-        boolean cleared =
-                preferences
+        boolean cleared;
+        try {
+            cleared = preferences
                         .edit()
                         .clear()
                         .commit();
+        } finally {
+            com.safekey.app.security.panic.PanicCredentialConfiguration.changed();
+        }
 
         if (!cleared) {
             throw new IllegalStateException(
