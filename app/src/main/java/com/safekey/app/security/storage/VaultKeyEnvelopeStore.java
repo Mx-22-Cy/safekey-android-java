@@ -1,9 +1,11 @@
+
 package com.safekey.app.security.storage;
 
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.Base64;
 
+import java.util.Arrays;
 import java.util.Objects;
 
 public final class VaultKeyEnvelopeStore
@@ -39,6 +41,15 @@ public final class VaultKeyEnvelopeStore
 
     private static final String INVALID_ENVELOPE_MESSAGE =
             "Stored vault key envelope is invalid.";
+
+    /*
+     * T45: Synchronize envelope reads, writes,
+     * password-check updates and replacements.
+     */
+    private static final Object STORE_LOCK = new Object();
+
+    private static final String KEY_PASSWORD_CHECK =
+            "master_password_check";
 
     private final SharedPreferences preferences;
 
@@ -91,6 +102,12 @@ public final class VaultKeyEnvelopeStore
 
     @Override
     public boolean hasEnvelope() {
+        synchronized (STORE_LOCK) {
+            return hasEnvelopeLocked();
+        }
+    }
+
+    private boolean hasEnvelopeLocked() {
         return preferences.contains(
                 KEY_FORMAT_VERSION
         )
@@ -106,6 +123,33 @@ public final class VaultKeyEnvelopeStore
     public void save(
             VaultKeyEnvelope envelope
     ) {
+        save(
+                envelope,
+                MasterPasswordCheckStatus.PENDING
+        );
+    }
+
+    void save(
+            VaultKeyEnvelope envelope,
+            MasterPasswordCheckStatus status
+    ) {
+        synchronized (STORE_LOCK) {
+            saveLocked(
+                    envelope,
+                    status
+            );
+        }
+    }
+
+    private void saveLocked(
+            VaultKeyEnvelope envelope,
+            MasterPasswordCheckStatus status
+    ) {
+        Objects.requireNonNull(
+                status,
+                "status"
+        );
+
         Objects.requireNonNull(
                 envelope,
                 "envelope"
@@ -134,6 +178,10 @@ public final class VaultKeyEnvelopeStore
                                 KEY_WRAPPED_DATABASE_KEY,
                                 envelope.getWrappedDatabaseKey()
                         )
+                        .putString(
+                                KEY_PASSWORD_CHECK,
+                                status.name()
+                        )
                         .commit();
 
         if (!saved) {
@@ -145,6 +193,12 @@ public final class VaultKeyEnvelopeStore
 
     @Override
     public VaultKeyEnvelope load() {
+        synchronized (STORE_LOCK) {
+            return loadLocked();
+        }
+    }
+
+    private VaultKeyEnvelope loadLocked() {
         boolean hasVersion =
                 preferences.contains(
                         KEY_FORMAT_VERSION
@@ -229,8 +283,124 @@ public final class VaultKeyEnvelopeStore
         }
     }
 
+    /**
+     * T45: Returns the current master-password check status.
+     * Missing or invalid status defaults to PENDING.
+     */
+    public MasterPasswordCheckStatus getMasterPasswordCheckStatus() {
+        synchronized (STORE_LOCK) {
+            try {
+                String stored =
+                        preferences.getString(
+                                KEY_PASSWORD_CHECK,
+                                null
+                        );
+
+                return stored == null
+                        ? MasterPasswordCheckStatus.PENDING
+                        : MasterPasswordCheckStatus.valueOf(stored);
+
+            } catch (
+                    IllegalArgumentException
+                    | ClassCastException invalid
+            ) {
+                return MasterPasswordCheckStatus.PENDING;
+            }
+        }
+    }
+
+    /**
+     * T45: Update the password-check status only when
+     * the stored envelope matches the expected envelope.
+     */
+    public boolean updateMasterPasswordCheckStatus(
+            VaultKeyEnvelope expected,
+            MasterPasswordCheckStatus status
+    ) {
+        Objects.requireNonNull(
+                expected,
+                "expected"
+        );
+
+        Objects.requireNonNull(
+                status,
+                "status"
+        );
+
+        synchronized (STORE_LOCK) {
+            if (!matches(loadLocked(), expected)) {
+                return false;
+            }
+
+            boolean saved =
+                    preferences
+                            .edit()
+                            .putString(
+                                    KEY_PASSWORD_CHECK,
+                                    status.name()
+                            )
+                            .commit();
+
+            if (!saved) {
+                throw new IllegalStateException(
+                        "Unable to save password check status."
+                );
+            }
+
+            return true;
+        }
+    }
+
+    /**
+     * T45: Replace the protected envelope only when
+     * the previously stored envelope still matches.
+     *
+     * This protects against replacing an envelope
+     * that has changed since authentication began.
+     */
+    boolean replaceIfMatches(
+            VaultKeyEnvelope expected,
+            VaultKeyEnvelope replacement,
+            MasterPasswordCheckStatus status
+    ) {
+        synchronized (STORE_LOCK) {
+            if (!matches(loadLocked(), expected)) {
+                return false;
+            }
+
+            saveLocked(
+                    replacement,
+                    status
+            );
+
+            return true;
+        }
+    }
+
+    private static boolean matches(
+            VaultKeyEnvelope first,
+            VaultKeyEnvelope second
+    ) {
+        return first != null
+                && second != null
+                && first.getFormatVersion() == second.getFormatVersion()
+                && Arrays.equals(
+                first.getSalt(),
+                second.getSalt()
+        )
+                && first.getWrappedDatabaseKey().equals(
+                second.getWrappedDatabaseKey()
+        );
+    }
+
     @Override
     public void clear() {
+        synchronized (STORE_LOCK) {
+            clearLocked();
+        }
+    }
+
+    private void clearLocked() {
         boolean cleared =
                 preferences
                         .edit()

@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.safekey.app.auth.MasterPasswordHealth;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.DecoyVaultCoordinator;
 import com.safekey.app.security.storage.DecoyVaultStorage;
@@ -33,6 +34,7 @@ public final class SafeKeyApplication extends Application {
     private SecureVaultCoordinator secureVaultCoordinator;
     private DecoyVaultCoordinator decoyVaultCoordinator;
     private VaultOperations realVaultOperations;
+    private MasterPasswordHealth masterPasswordHealth;
 
     private final Handler mainHandler =
             new Handler(Looper.getMainLooper());
@@ -68,7 +70,15 @@ public final class SafeKeyApplication extends Application {
                         secureVaultCoordinator
                 );
 
+        // T45: Master-password security health.
+        masterPasswordHealth =
+                new MasterPasswordHealth(this);
+
         registerSessionCleanup();
+    }
+
+    public MasterPasswordHealth getMasterPasswordHealth() {
+        return masterPasswordHealth;
     }
 
     public SecureVaultCoordinator getSecureVaultCoordinator() {
@@ -282,6 +292,9 @@ public final class SafeKeyApplication extends Application {
         deliverSuccess(callback, readinessGeneration);
     }
 
+    /**
+     * Register cleanup for both vaults when the session locks.
+     */
     public void registerSessionCleanup() {
         SafeKeySession.registerSensitiveDataCleanup(
                 this::clearSessionAndCloseVaults
@@ -289,6 +302,10 @@ public final class SafeKeyApplication extends Application {
     }
 
     private void clearSessionAndCloseVaults() {
+
+        // T45: Stop pending master-password health checks.
+        masterPasswordHealth.cancelRecheck();
+
         final long cleanupId;
 
         synchronized (this) {
@@ -304,9 +321,11 @@ public final class SafeKeyApplication extends Application {
             cleanupId = ++cleanupGeneration;
         }
 
+        // Close the primary Real Vault.
         try {
             secureVaultCoordinator.closeVault(
                     new VaultDataService.SimpleCallback() {
+
                         @Override
                         public void onSuccess() {
                             finishVaultClose(cleanupId, null);
@@ -328,13 +347,20 @@ public final class SafeKeyApplication extends Application {
                     }
             );
         } catch (RuntimeException exception) {
-            Log.e(TAG, "Failed to schedule real vault close.", exception);
+            Log.e(
+                    TAG,
+                    "Failed to schedule real vault close.",
+                    exception
+            );
+
             finishVaultClose(cleanupId, exception);
         }
 
+        // Close the independent Decoy Vault.
         try {
             decoyVaultCoordinator.closeDecoyVault(
                     new VaultDataService.SimpleCallback() {
+
                         @Override
                         public void onSuccess() {
                             finishVaultClose(cleanupId, null);
@@ -356,7 +382,12 @@ public final class SafeKeyApplication extends Application {
                     }
             );
         } catch (RuntimeException exception) {
-            Log.e(TAG, "Failed to schedule Decoy vault close.", exception);
+            Log.e(
+                    TAG,
+                    "Failed to schedule Decoy vault close.",
+                    exception
+            );
+
             finishVaultClose(cleanupId, exception);
         }
     }
@@ -418,15 +449,13 @@ public final class SafeKeyApplication extends Application {
     ) {
         mainHandler.post(
                 () -> {
-                    // Read session state first. It can block behind
-                    // a concurrent unlock/lock and cleanup transition.
+                    // Read session state before taking the app lock.
+                    // This avoids recreating the session/cleanup lock cycle.
                     boolean sessionLocked =
                             SafeKeySession.getState() == SessionState.LOCKED;
 
                     boolean ready;
 
-                    // Recheck the cleanup generation only after
-                    // the potentially blocking session-state read.
                     synchronized (this) {
                         ready =
                                 sessionLocked

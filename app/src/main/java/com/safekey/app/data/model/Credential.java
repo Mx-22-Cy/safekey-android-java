@@ -1,6 +1,11 @@
 package com.safekey.app.data.model;
 
+import com.safekey.app.breach.PasswordBreachResult;
+import java.util.Objects;
+
 public class Credential {
+
+    private PasswordBreachResult.Status breachStatus = PasswordBreachResult.Status.NOT_CHECKED;
 
     private long id;
     private String title;
@@ -57,6 +62,14 @@ public class Credential {
                 System.currentTimeMillis(),
                 System.currentTimeMillis()
         );
+    }
+
+    public PasswordBreachResult.Status getBreachStatus() {
+        return breachStatus;
+    }
+
+    public void setBreachStatus(PasswordBreachResult.Status status) {
+        breachStatus = Objects.requireNonNull(status, "status");
     }
 
     public long getId() {

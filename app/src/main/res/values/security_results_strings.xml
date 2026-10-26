@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="security_not_checked">Not checked</string>
+    <string name="security_unavailable">Unavailable</string>
+    <string name="security_no_credentials">No credentials</string>
+    <string name="security_loading">Loading security results&#8230;</string>
+    <string name="security_no_known_issues">No known issues</string>
+    <string name="security_needs_attention">Needs attention</string>
+    <string name="security_known_risk_label">known at risk</string>
+    <string name="security_breached_label">known breached</string>
+    <string name="security_saved_basis">Based on saved breach checks and current password strength and reuse.</string>
+    <string name="security_score_method">The score is the percentage of credentials with a strong, unique password and a saved no-breach result. Incomplete checks hide the score.</string>
+    <string name="security_alert_summary">%1$s\n%2$s\n%3$s</string>
+    <string name="security_check_heading">Security checks</string>
+    <string name="security_review_empty">Add credentials to see their security results.</string>
+    <string name="security_review_clean">No issues identified in the saved checks.</string>
+    <string name="security_check_all">Check all passwords</string>
+    <string name="security_checking">Checking for known breaches&#8230;</string>
+    <string name="security_refresh_failed">Refresh unavailable. Completed saved checks are kept.</string>
+    <string name="security_missing_password">Missing password</string>
+    <string name="security_strength_unavailable">Password strength unavailable</string>
+    <string name="security_strength_format">Strength: %1$s</string>
+    <string name="security_strength_0">Very weak</string>
+    <string name="security_strength_1">Weak</string>
+    <string name="security_strength_2">Fair</string>
+    <string name="security_strength_3">Strong</string>
+    <string name="security_strength_4">Very strong</string>
+    <string name="security_reused">Password reused by another credential</string>
+    <plurals name="security_risk_count">
+        <item quantity="one">%1$d credential has a known risk.</item>
+        <item quantity="other">%1$d credentials have known risks.</item>
+    </plurals>
+    <plurals name="security_incomplete_count">
+        <item quantity="one">%1$d credential has incomplete checks.</item>
+        <item quantity="other">%1$d credentials have incomplete checks.</item>
+    </plurals>
+</resources>
