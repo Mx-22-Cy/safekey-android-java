@@ -38,8 +38,8 @@ public class AlertsActivity extends ProtectedActivity {
     private boolean failed;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.enableEdgeToEdge(getWindow());
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
@@ -74,8 +74,8 @@ public class AlertsActivity extends ProtectedActivity {
         });
     }
 
-    @Override protected void onStart() {
-        super.onStart();
+    @Override protected void onRuntimeStart() {
+        super.onRuntimeStart();
         activityStarted = true;
         if (SafeKeySession.getState() == SessionState.UNLOCKED) { loadCredentials(); }
     }
@@ -241,17 +241,17 @@ public class AlertsActivity extends ProtectedActivity {
         }
     }
 
-    @Override protected void onStop() {
+    @Override protected void onRuntimeStop() {
         activityStarted = false;
         controller.stop();
         summary = null;
         refreshAlertsDashboard();
-        super.onStop();
+        super.onRuntimeStop();
     }
 
-    @Override protected void onDestroy() {
+    @Override protected void onRuntimeDestroy() {
         if (controller != null) { controller.close(); }
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void setupNavigation() {

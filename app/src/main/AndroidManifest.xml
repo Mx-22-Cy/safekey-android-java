@@ -17,6 +17,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SafeKey">
 
+        <activity
+            android:name=".PanicStartupActivity"
+            android:exported="false" />
+
         <!--
             Week 2 authentication UI.
             SignUpActivity remains the temporary launcher

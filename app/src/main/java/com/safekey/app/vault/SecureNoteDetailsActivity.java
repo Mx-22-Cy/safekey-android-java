@@ -29,11 +29,11 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
             "secure_note_id";
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(
+        super.onRuntimeCreate(
                 savedInstanceState
         );
 
@@ -90,8 +90,8 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onRestart() {
-        super.onRestart();
+    protected void onRuntimeRestart() {
+        super.onRuntimeRestart();
         bindData();
     }
 

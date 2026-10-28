@@ -184,6 +184,12 @@ public final class VaultUnlockGate {
         }
     }
 
+    /** Copy a one-way binding before the authenticated key is handed to storage. */
+    public synchronized byte[] copyConfigurationFingerprint(Attempt attempt) {
+        requireStage(attempt, Stage.READY_TO_OPEN);
+        return TotpConfigurationFingerprint.ofSecret(attempt.totpSecret);
+    }
+
     /** Only a still-current successful database-open callback may complete. */
     public synchronized boolean complete(Attempt attempt) {
         requireOwner(attempt);

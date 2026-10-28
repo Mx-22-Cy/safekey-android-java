@@ -1,5 +1,10 @@
 package com.safekey.app.security.storage;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+import com.safekey.app.security.panic.PanicPasswordSeparation;
+import com.safekey.app.security.panic.AndroidPanicPasswordSeparation;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -38,8 +43,10 @@ public final class SecureVaultCoordinator {
     private static final String DATABASE_KEY_CONTEXT =
             "safekey:database-key-envelope:v1";
 
+    private final PanicRuntimeScope runtimeScope;
     private final VaultDataService vaultDataService;
     private final VaultKeyEnvelopeStore envelopeStore;
+    private final PanicPasswordSeparation passwordSeparation;
     private final Argon2idMasterKeyDeriver keyDeriver;
     private final AesGcmCipher cipher;
     private final SecureRandom secureRandom;
@@ -62,13 +69,16 @@ public final class SecureVaultCoordinator {
         Objects.requireNonNull(context, "context");
 
         Context applicationContext = context.getApplicationContext();
+        runtimeScope = PanicRuntimeScope.capture(applicationContext);
 
         vaultDataService = new VaultDataService(applicationContext);
         envelopeStore = new VaultKeyEnvelopeStore(applicationContext);
+        passwordSeparation = AndroidPanicPasswordSeparation.create(applicationContext, runtimeScope);
         keyDeriver = new Argon2idMasterKeyDeriver();
         cipher = new AesGcmCipher();
         secureRandom = new SecureRandom();
         securityExecutor = Executors.newSingleThreadExecutor();
+        runtimeScope.registerExecutor(securityExecutor);
         mainHandler = new Handler(Looper.getMainLooper());
 
         VaultUnlockGate gate = suppliedGate != null
@@ -96,7 +106,8 @@ public final class SecureVaultCoordinator {
                     public void close(VaultDataService.SimpleCallback callback) {
                         vaultDataService.closeVault(callback);
                     }
-                }
+                },
+                runtimeScope
         );
 
         biometricUnlockSource = suppliedBiometricSource != null
@@ -112,6 +123,17 @@ public final class SecureVaultCoordinator {
 
     public boolean hasVault() {
         return envelopeStore.hasEnvelope();
+    }
+
+    public boolean belongsToPanicRuntime(PanicRuntimeScope expected) { return runtimeScope == expected; }
+
+    public VaultUnlockFlow.CompletedAuthentication getCompletedAuthentication() {
+        return unlockFlow.getCompletedAuthentication();
+    }
+
+    public boolean runIfCurrentCompletedAuthentication(
+            VaultUnlockFlow.CompletedAuthentication expected, Runnable action) {
+        return unlockFlow.runIfCurrentCompletedAuthentication(expected, action);
     }
 
     public boolean isVaultOpen() {
@@ -132,7 +154,7 @@ public final class SecureVaultCoordinator {
         return new BiometricVaultKeyManager(activity).isConfigured();
     }
 
-    public void enableBiometricUnlock(
+    private void enableBiometricUnlockWhileRunning(
             FragmentActivity activity,
             char[] masterPassword,
             String title,
@@ -145,7 +167,7 @@ public final class SecureVaultCoordinator {
         char[] passwordCopy = copyAndValidatePassword(masterPassword);
 
         try {
-            securityExecutor.execute(() ->
+            executeSecurity(() ->
                     enableBiometricUnlockInBackground(
                             activity,
                             passwordCopy,
@@ -192,18 +214,23 @@ public final class SecureVaultCoordinator {
             final byte[] keyForBiometric =
                     Arrays.copyOf(databaseKey, databaseKey.length);
 
-            boolean posted = mainHandler.post(() ->
-                    startBiometricEnrollment(
-                            activity,
-                            keyForBiometric,
-                            title,
-                            subtitle,
-                            callback
-                    )
-            );
+            final PanicRuntimeScope.PendingOperation handoff;
+            try {
+                handoff = runtimeScope.pending(() -> clear(keyForBiometric), () -> {});
+            } catch (RuntimeException stopped) {
+                clear(keyForBiometric);
+                throw stopped;
+            }
+            boolean posted = runtimeScope.deliver(mainHandler, () -> {
+                try {
+                    if (handoff.isCurrent()) {
+                        startBiometricEnrollment(activity, keyForBiometric, title, subtitle, callback);
+                    }
+                } finally { handoff.close(); }
+            });
 
             if (!posted) {
-                clear(keyForBiometric);
+                handoff.close();
                 throw new IllegalStateException(
                         "Unable to start biometric enrollment."
                 );
@@ -260,7 +287,7 @@ public final class SecureVaultCoordinator {
         }
     }
 
-    public VaultUnlockFlow.Request unlockVaultWithBiometrics(
+    private VaultUnlockFlow.Request unlockVaultWithBiometricsWhileRunning(
             FragmentActivity activity,
             String title,
             String subtitle,
@@ -311,7 +338,7 @@ public final class SecureVaultCoordinator {
                     }
                 });
 
-        boolean posted = mainHandler.post(() -> {
+        boolean posted = runtimeScope.deliver(mainHandler, () -> {
             if (!request.isActive()) {
                 return;
             }
@@ -369,7 +396,8 @@ public final class SecureVaultCoordinator {
         requireActivity(activity);
         Objects.requireNonNull(callback, "callback");
 
-        boolean posted = mainHandler.post(() -> {
+        boolean posted = runtimeScope.deliver(mainHandler, () -> {
+            if (runtimeScope.isStopped()) { return; }
             try {
                 BiometricVaultKeyManager biometricManager =
                         new BiometricVaultKeyManager(activity);
@@ -511,7 +539,7 @@ public final class SecureVaultCoordinator {
     }
 
     /** Enrollment UI uses the same cancellable handoff/session claim as sign-in. */
-    public VaultUnlockFlow.Request createVaultForEnrollment(
+    private VaultUnlockFlow.Request createVaultForEnrollmentWhileRunning(
             char[] masterPassword,
             MasterPasswordCheckStatus checkStatus,
             VaultDataService.SimpleCallback callback
@@ -532,7 +560,7 @@ public final class SecureVaultCoordinator {
                 }
             });
             VaultUnlockFlow.Request scheduled = request;
-            securityExecutor.execute(() -> createEnrollmentInBackground(
+            executeSecurity(() -> createEnrollmentInBackground(
                     copy, checkStatus, scheduled));
             return request;
         } catch (RuntimeException error) {
@@ -561,8 +589,14 @@ public final class SecureVaultCoordinator {
             secureRandom.nextBytes(databaseKey);
             VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt,
                     cipher.encrypt(databaseKey, masterKey, databaseKeyContext()));
-            if (!request.isActive()) { return; }
-            envelopeStore.save(envelope, checkStatus);
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, password)) {
+                if (!request.isActive()) { return; }
+                separation.commit(() -> {
+                    if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A vault has already been created."); }
+                    envelopeStore.save(envelope, checkStatus);
+                });
+            }
             // A saved envelope is retained if the UI leaves: future sign-in can
             // open this vault. Cancellation still prevents a session claim.
             unlockFlow.acceptPrimary(request, databaseKey);
@@ -581,7 +615,7 @@ public final class SecureVaultCoordinator {
      * password first and obtain explicit consent before passing PENDING.
      * The database key stays the same, preserving credentials, TOTP and biometrics.
      */
-    public MasterPasswordChangeRequest changeMasterPassword(
+    private MasterPasswordChangeRequest changeMasterPasswordWhileRunning(
             char[] currentPassword,
             char[] newPassword,
             MasterPasswordCheckStatus checkStatus,
@@ -602,9 +636,9 @@ public final class SecureVaultCoordinator {
             throw new IllegalStateException("An authenticated vault session is required.");
         }
         MasterPasswordChangeRequest request =
-                new MasterPasswordChangeRequest(currentPassword, newPassword);
+                new MasterPasswordChangeRequest(currentPassword, newPassword, runtimeScope);
         try {
-            securityExecutor.execute(() -> changeMasterPasswordInBackground(
+            executeSecurity(() -> changeMasterPasswordInBackground(
                     request, authentication, checkStatus, callback));
             return request;
         } catch (RuntimeException error) {
@@ -641,31 +675,33 @@ public final class SecureVaultCoordinator {
             newMasterKey = keyDeriver.deriveKey(passwords[1], newSalt);
             VaultKeyEnvelope replacement = new VaultKeyEnvelope(newSalt,
                     cipher.encrypt(databaseKey, newMasterKey, databaseKeyContext()));
+            PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, passwords[1]);
             // Commit on the UI thread: unlock-flow callbacks can hold their
             // own lock while consulting the session manager. A security worker
             // must not hold the session lock and call back into that flow.
             // Only salt/ciphertext cross this boundary, never a raw key/password.
-            if (!mainHandler.post(() -> {
-                if (request.isCancelled()) { return; }
+            if (!runtimeScope.deliver(mainHandler, () -> {
+                if (request.isCancelled() || runtimeScope.isStopped()) { separation.close(); request.close(); return; }
                 try {
                     boolean[] committed = {false};
                     SafeKeySession.getManager().runIfCurrentAuthentication(authentication, () ->
-                            committed[0] = request.commit(() -> {
+                            committed[0] = request.commit(() -> separation.commit(() -> {
                                 if (!isVaultOpen() || !envelopeStore.replaceIfMatches(
                                         original, replacement, checkStatus)) {
                                     throw new IllegalStateException("Vault state changed; sign in again.");
                                 }
-                            }));
+                            })));
                     if (committed[0] && !request.isCancelled()) { callback.onSuccess(); }
                 } catch (RuntimeException error) {
                     if (!request.isCancelled()
                             && SafeKeySession.getManager().getAuthenticationGeneration()
                             == authentication) { callback.onError(error); }
-                }
-            })) { request.close(); }
+                } finally { separation.close(); }
+            })) { separation.close(); request.close(); }
         } catch (Exception error) {
-            mainHandler.post(() -> {
-                if (!request.isCancelled()
+            runtimeScope.deliver(mainHandler, () -> {
+                if (!request.isCancelled() && !runtimeScope.isStopped()
                         && SafeKeySession.getManager().getAuthenticationGeneration()
                         == authentication) {
                     callback.onError(error);
@@ -695,7 +731,7 @@ public final class SecureVaultCoordinator {
         }
     }
 
-    public void createVault(
+    private void createVaultWhileRunning(
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
@@ -704,7 +740,7 @@ public final class SecureVaultCoordinator {
         char[] passwordCopy = copyAndValidatePassword(masterPassword);
 
         try {
-            securityExecutor.execute(() ->
+            executeSecurity(() ->
                     createVaultInBackground(passwordCopy, callback)
             );
         } catch (RuntimeException schedulingError) {
@@ -745,7 +781,13 @@ public final class SecureVaultCoordinator {
             VaultKeyEnvelope envelope =
                     new VaultKeyEnvelope(salt, wrappedDatabaseKey);
 
-            envelopeStore.save(envelope);
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, masterPassword)) {
+                separation.commit(() -> {
+                    if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A vault has already been created."); }
+                    envelopeStore.save(envelope);
+                });
+            }
             envelopeSaved = true;
 
             vaultDataService.openVault(
@@ -777,7 +819,7 @@ public final class SecureVaultCoordinator {
         }
     }
 
-    public VaultUnlockFlow.Request unlockVault(
+    private VaultUnlockFlow.Request unlockVaultWhileRunning(
             char[] masterPassword,
             VaultDataService.SimpleCallback callback
     ) {
@@ -820,7 +862,7 @@ public final class SecureVaultCoordinator {
 
             VaultUnlockFlow.Request scheduled = request;
 
-            securityExecutor.execute(() ->
+            executeSecurity(() ->
                     unlockVaultInBackground(passwordCopy, scheduled)
             );
 
@@ -888,7 +930,7 @@ public final class SecureVaultCoordinator {
             return;
         }
 
-        securityExecutor.execute(vaultDataService::shutdown);
+        executeSecurity(vaultDataService::shutdown);
         securityExecutor.shutdown();
     }
 
@@ -904,14 +946,14 @@ public final class SecureVaultCoordinator {
             VaultDataService.SimpleCallback callback,
             Exception exception
     ) {
-        mainHandler.post(() -> callback.onError(exception));
+        runtimeScope.deliver(mainHandler, () -> { if (!runtimeScope.isStopped()) { callback.onError(exception); } });
     }
 
     private void deliverBiometricSetupError(
             BiometricSetupCallback callback,
             String message
     ) {
-        mainHandler.post(() -> callback.onError(message));
+        runtimeScope.deliver(mainHandler, () -> { if (!runtimeScope.isStopped()) { callback.onError(message); } });
     }
 
     private static char[] copyAndValidatePassword(char[] masterPassword) {
@@ -980,4 +1022,77 @@ public final class SecureVaultCoordinator {
                 BiometricVaultKeyManager.UnlockCallback callback
         );
     }
+
+    public VaultUnlockFlow.Request createVaultForEnrollment(
+            char[] masterPassword,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return createVaultForEnrollmentWhileRunning(masterPassword, checkStatus, callback);
+        }
+    }
+
+
+    public MasterPasswordChangeRequest changeMasterPassword(
+            char[] currentPassword,
+            char[] newPassword,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return changeMasterPasswordWhileRunning(currentPassword, newPassword, checkStatus, callback);
+        }
+    }
+
+
+    public void createVault(
+            char[] masterPassword,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            createVaultWhileRunning(masterPassword, callback);
+        }
+    }
+
+
+    public VaultUnlockFlow.Request unlockVault(
+            char[] masterPassword,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return unlockVaultWhileRunning(masterPassword, callback);
+        }
+    }
+
+
+    public void enableBiometricUnlock(
+            FragmentActivity activity,
+            char[] masterPassword,
+            String title,
+            String subtitle,
+            BiometricSetupCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            enableBiometricUnlockWhileRunning(activity, masterPassword, title, subtitle, callback);
+        }
+    }
+
+
+    public VaultUnlockFlow.Request unlockVaultWithBiometrics(
+            FragmentActivity activity,
+            String title,
+            String subtitle,
+            BiometricUnlockCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return unlockVaultWithBiometricsWhileRunning(activity, title, subtitle, callback);
+        }
+    }
+
+
+    private void executeSecurity(Runnable work) {
+        runtimeScope.execute(securityExecutor, work);
+    }
+
 }

@@ -34,11 +34,11 @@ public class AddSecureNoteActivity extends ProtectedActivity {
     private AppCompatEditText editSecureNoteContent;
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(
+        super.onRuntimeCreate(
                 savedInstanceState
         );
 

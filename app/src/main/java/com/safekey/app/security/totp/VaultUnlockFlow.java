@@ -1,5 +1,7 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.os.Handler;
 import android.os.SystemClock;
 
@@ -45,6 +47,7 @@ public final class VaultUnlockFlow {
         private final boolean requiresClaim;
 
         private long completedAtMillis;
+        private byte[] configurationFingerprint;
         private boolean primarySubmitted;
         private boolean initialCloseDone;
         private boolean verifying;
@@ -87,12 +90,40 @@ public final class VaultUnlockFlow {
         }
     }
 
+    private final PanicRuntimeScope runtimeScope;
     private final Object lock = new Object();
     private final VaultUnlockGate gate;
     private final Executor worker;
     private final Handler main;
     private final VaultAccess vault;
     private final LongSupplier elapsedMillis;
+
+    /** Immutable evidence that all factors and the session claim completed. */
+    public static final class CompletedAuthentication {
+        private final byte[] fingerprint;
+        private CompletedAuthentication(byte[] fingerprint) {
+            this.fingerprint = Objects.requireNonNull(fingerprint, "fingerprint").clone();
+        }
+        public boolean matchesConfiguration(byte[] candidate) {
+            return candidate != null && java.security.MessageDigest.isEqual(fingerprint, candidate);
+        }
+    }
+
+    private volatile CompletedAuthentication completedAuthentication;
+
+    public CompletedAuthentication getCompletedAuthentication() { return completedAuthentication; }
+
+    /** UI-thread commit guard; serializes with beginning/cancelling/closing authentication. */
+    public boolean runIfCurrentCompletedAuthentication(CompletedAuthentication expected, Runnable action) {
+        Objects.requireNonNull(action, "action");
+        synchronized (lock) {
+            if (expected == null || completedAuthentication != expected || closed || runtimeScope.isStopped()) {
+                return false;
+            }
+            action.run();
+            return true;
+        }
+    }
 
     private Request current;
     private boolean closed;
@@ -103,7 +134,12 @@ public final class VaultUnlockFlow {
             Handler main,
             VaultAccess vault
     ) {
-        this(gate, worker, main, vault, SystemClock::elapsedRealtime);
+        this(gate, worker, main, vault, SystemClock::elapsedRealtime, new PanicRuntimeScope());
+    }
+
+    public VaultUnlockFlow(VaultUnlockGate gate, Executor worker, Handler main,
+                           VaultAccess vault, PanicRuntimeScope runtimeScope) {
+        this(gate, worker, main, vault, SystemClock::elapsedRealtime, runtimeScope);
     }
 
     // Tests can check claim expiry without waiting for real time.
@@ -114,13 +150,23 @@ public final class VaultUnlockFlow {
             VaultAccess vault,
             LongSupplier elapsedMillis
     ) {
+        this(gate, worker, main, vault, elapsedMillis, new PanicRuntimeScope());
+    }
+
+    private VaultUnlockFlow(VaultUnlockGate gate, Executor worker, Handler main,
+                            VaultAccess vault, LongSupplier elapsedMillis,
+                            PanicRuntimeScope runtimeScope) {
+        this.runtimeScope = Objects.requireNonNull(runtimeScope, "runtimeScope");
         this.gate = Objects.requireNonNull(gate, "gate");
-        this.worker = Objects.requireNonNull(worker, "worker");
+        Objects.requireNonNull(worker, "worker");
+        this.worker = work -> runtimeScope.execute(worker, work);
         this.main = Objects.requireNonNull(main, "main");
         this.vault = Objects.requireNonNull(vault, "vault");
         this.elapsedMillis = Objects.requireNonNull(
                 elapsedMillis, "elapsedMillis"
         );
+
+        runtimeScope.onStop(this::shutdown);
     }
 
     /** Begin before starting password derivation or the biometric prompt. */
@@ -128,7 +174,7 @@ public final class VaultUnlockFlow {
         Objects.requireNonNull(listener, "listener");
 
         synchronized (lock) {
-            if (closed) {
+            if (closed || runtimeScope.isStopped()) {
                 throw new IllegalStateException("Unlock flow is shut down.");
             }
 
@@ -136,6 +182,7 @@ public final class VaultUnlockFlow {
                 cancel(current);
             }
 
+            completedAuthentication = null;
             Request request = new Request(this, gate.begin(), listener);
             current = request;
 
@@ -282,6 +329,7 @@ public final class VaultUnlockFlow {
         Objects.requireNonNull(callback, "callback");
 
         synchronized (lock) {
+            completedAuthentication = null;
             cancelPending();
             vault.close(callback);
         }
@@ -290,6 +338,7 @@ public final class VaultUnlockFlow {
     public void shutdown() {
         synchronized (lock) {
             closed = true;
+            completedAuthentication = null;
             cancelPending();
         }
     }
@@ -317,6 +366,7 @@ public final class VaultUnlockFlow {
 
             if (current != request
                     || closed
+                    || runtimeScope.isStopped()
                     || request.cancelled
                     || !request.completed
                     || !request.requiresClaim) {
@@ -331,6 +381,7 @@ public final class VaultUnlockFlow {
                 return false;
             }
 
+            publishCompletedAuthentication(request);
             main.removeCallbacks(request.timeout);
             current = null;
             return true;
@@ -432,6 +483,7 @@ public final class VaultUnlockFlow {
         byte[] key = null;
 
         try {
+            request.configurationFingerprint = gate.copyConfigurationFingerprint(request.attempt);
             key = gate.takeKeyForOpening(request.attempt);
             request.opening = true;
 
@@ -463,6 +515,7 @@ public final class VaultUnlockFlow {
                                 return;
                             }
                         } else {
+                            publishCompletedAuthentication(request);
                             current = null;
                         }
 
@@ -502,6 +555,7 @@ public final class VaultUnlockFlow {
         if (!main.post(() -> {
             synchronized (lock) {
                 if (current == request
+                        && !runtimeScope.isStopped()
                         && !request.cancelled
                         && !request.terminal) {
                     action.run();
@@ -515,12 +569,23 @@ public final class VaultUnlockFlow {
     private boolean active(Request request) {
         return current == request
                 && !closed
+                && !runtimeScope.isStopped()
                 && !request.cancelled
                 && !request.terminal
                 && gate.isActive(request.attempt);
     }
 
+    private void publishCompletedAuthentication(Request request) {
+        completedAuthentication = new CompletedAuthentication(request.configurationFingerprint);
+        Arrays.fill(request.configurationFingerprint, (byte) 0);
+        request.configurationFingerprint = null;
+    }
+
     private void cleanup(Request request, Exception original) {
+        if (request.configurationFingerprint != null) {
+            Arrays.fill(request.configurationFingerprint, (byte) 0);
+            request.configurationFingerprint = null;
+        }
         if (!request.opening || request.cleanupQueued) {
             return;
         }

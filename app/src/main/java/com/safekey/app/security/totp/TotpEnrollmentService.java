@@ -1,5 +1,8 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -36,6 +39,7 @@ public final class TotpEnrollmentService {
 
         private final Object owner;
         private final byte[] secret;
+        private final PanicRuntimeScope.PendingOperation pendingWork;
         private final LongSupplier monotonicMillis;
         private final long createdAtMillis;
         private int failedAttempts;
@@ -45,12 +49,15 @@ public final class TotpEnrollmentService {
                 Object owner,
                 byte[] secret,
                 LongSupplier monotonicMillis,
-                long createdAtMillis
+                long createdAtMillis,
+            PanicRuntimeScope runtimeScope
         ) {
             this.owner = owner;
             this.secret = secret.clone();
             this.monotonicMillis = monotonicMillis;
             this.createdAtMillis = createdAtMillis;
+            try { pendingWork = runtimeScope.pending(this::wipeSecret, () -> {}); }
+            catch (RuntimeException stopped) { wipeSecret(); throw stopped; }
         }
 
         /** Caller owns and must clear the returned manual-entry key. */
@@ -103,7 +110,9 @@ public final class TotpEnrollmentService {
         }
 
         @Override
-        public synchronized void close() {
+        public synchronized void close() { pendingWork.close(); }
+
+        private synchronized void wipeSecret() {
             Arrays.fill(secret, (byte) 0);
             closed = true;
         }
@@ -131,6 +140,7 @@ public final class TotpEnrollmentService {
         }
     }
 
+    private final PanicRuntimeScope runtimeScope;
     private final EnrollmentStore store;
     private final Object transactionLock;
     private final Object owner = new Object();
@@ -155,6 +165,7 @@ public final class TotpEnrollmentService {
             LongSupplier monotonicMillis
     ) {
         this.store = Objects.requireNonNull(store, "store");
+        runtimeScope = Objects.requireNonNull(store.getPanicRuntimeScope(), "runtimeScope");
         this.transactionLock = Objects.requireNonNull(
                 store.getTransactionLock(), "transactionLock"
         );
@@ -163,7 +174,7 @@ public final class TotpEnrollmentService {
         this.monotonicMillis = Objects.requireNonNull(monotonicMillis, "monotonicMillis");
     }
 
-    public PendingSetup begin() throws GeneralSecurityException, IOException {
+    private PendingSetup beginWhileRunning() throws GeneralSecurityException, IOException {
         synchronized (transactionLock) {
             try (TotpState existing = store.load()) {
                 if (existing != null) {
@@ -176,14 +187,14 @@ public final class TotpEnrollmentService {
             try {
                 random.nextBytes(secret);
                 long created = monotonicMillis.getAsLong();
-                return new PendingSetup(owner, secret, monotonicMillis, created);
+                return new PendingSetup(owner, secret, monotonicMillis, created, runtimeScope);
             } finally {
                 Arrays.fill(secret, (byte) 0);
             }
         }
     }
 
-    public Confirmation confirm(PendingSetup pending, char[] submittedCode)
+    private Confirmation confirmWhileRunning(PendingSetup pending, char[] submittedCode)
             throws GeneralSecurityException, IOException {
         Objects.requireNonNull(pending, "pending");
 
@@ -264,4 +275,19 @@ public final class TotpEnrollmentService {
             }
         }
     }
+
+    public PendingSetup begin() throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return beginWhileRunning();
+        }
+    }
+
+
+    public Confirmation confirm(PendingSetup pending, char[] submittedCode)
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return confirmWhileRunning(pending, submittedCode);
+        }
+    }
+
 }
