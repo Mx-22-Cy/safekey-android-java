@@ -427,12 +427,6 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
             );
         }
 
-        synchronized (this) {
-            if (cleanupInProgress) {
-                return;
-            }
-        }
-
         clearSessionAndCloseVaults();
     }
 
@@ -468,6 +462,13 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         final long cleanupId;
 
         synchronized (this) {
+
+            // An existing cleanup already owns both vault-close operations.
+            // Do not replace its generation or pending-close tracking.
+            if (cleanupInProgress) {
+                return;
+            }
+
             activeVault = ActiveVault.NONE;
             activeVaultOperations = null;
 

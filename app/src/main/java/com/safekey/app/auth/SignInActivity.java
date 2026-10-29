@@ -90,6 +90,10 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private boolean busy;
     private boolean authenticated;
     private boolean navigatingToHome;
+    // True after a Real or Decoy Vault unlock has been initiated.
+    // Used to distinguish abandoned vault operations from ordinary
+    // authentication errors that never opened a vault.
+    private boolean vaultAuthenticationStarted;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
@@ -270,6 +274,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
     private void unlockRealVault(long token, char[] password) {
         try {
+            vaultAuthenticationStarted = true;
             if (shouldOfferBiometricEnrollment()) {
                 pendingBiometricEnrollmentPassword = password.clone();
             }
@@ -310,6 +315,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
     private void unlockDecoyVault(long token, char[] password) {
         try {
+            vaultAuthenticationStarted = true;
             decoyVaultCoordinator.unlockDecoyVault(
                     password,
                     new VaultDataService.SimpleCallback() {
@@ -333,7 +339,10 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     }
 
     private void unlockVaultWithBiometrics() {
-        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)) { return; }
+        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)) {
+            return;
+        }
+
         if (!resumed || busy) {
             return;
         }
@@ -346,7 +355,43 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         setBusy(true);
         hideKeyboard();
 
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+
         try {
+            app.prepareForVaultAuthentication(
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            if (!resumed || !isCurrent(token)) {
+                                return;
+                            }
+
+                            startBiometricVaultUnlock(token);
+                        }
+
+                        @Override
+                        public void onError(Exception error) {
+                            if (isCurrent(token)) {
+                                abortSignIn(R.string.biometric_unlock_error);
+                            }
+                        }
+                    }
+            );
+        } catch (RuntimeException error) {
+            abortSignIn(R.string.biometric_unlock_error);
+        }
+    }
+
+    private void startBiometricVaultUnlock(long token) {
+        if (!resumed || !isCurrent(token)) {
+            return;
+        }
+
+        try {
+            // A biometric unlock is now entering the Real Vault backend.
+            // Cancellation must also close this abandoned operation.
+            vaultAuthenticationStarted = true;
+
             pendingUnlock = secureVaultCoordinator.unlockVaultWithBiometrics(
                     this,
                     getString(R.string.biometric_unlock_prompt_title),
@@ -375,7 +420,8 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
                         ) {
                             showTotpChallenge(token, request);
                         }
-                    });
+                    }
+            );
         } catch (RuntimeException error) {
             abortSignIn(R.string.biometric_unlock_error);
         }
@@ -504,6 +550,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
             SafeKeyApplication app = (SafeKeyApplication) getApplication();
             app.activateRealVault();
+            vaultAuthenticationStarted = false;
 
             try {
                 app.getMasterPasswordHealth()
@@ -546,6 +593,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
             SafeKeyApplication app = (SafeKeyApplication) getApplication();
             app.activateDecoyVault();
+            vaultAuthenticationStarted = false;
 
             Intent intent = new Intent(this, HomeActivity.class);
             intent.addFlags(
@@ -705,6 +753,8 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     }
 
     private void abortSignIn(int messageId) {
+        final boolean mustCloseAbandonedVault = vaultAuthenticationStarted;
+        vaultAuthenticationStarted = false;
         cancelPendingPanicSignIn();
 
         if (pendingRolePassword != null) {
@@ -723,6 +773,19 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
         if (request != null) {
             request.close();
+        }
+        // Activity-level cancellation alone does not guarantee that an
+        // asynchronous Real or Decoy database unlock has been closed.
+        if (mustCloseAbandonedVault) {
+            SafeKeyApplication app =
+                    (SafeKeyApplication) getApplication();
+
+            if (SafeKeySession.getState()
+                    == com.safekey.app.session.logic.SessionState.LOCKED
+                    && app.isStartupRuntimeAvailable()) {
+
+                app.cancelPendingVaultAuthentication();
+            }
         }
 
         dismissTotpDialog();
