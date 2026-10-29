@@ -401,6 +401,42 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     /**
+     * Explicitly cleans up a canceled authentication attempt.
+     *
+     * The session may already be locked during Sign In, so a normal
+     * SafeKeySession.lock() call would not trigger vault cleanup.
+     *
+     * The application coordinates closing both vaults and invalidating
+     * pending operations before another authentication can proceed.
+     */
+    public void cancelPendingVaultAuthentication() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException(
+                    "Authentication cancellation must run on the main thread."
+            );
+        }
+
+        if (!isStartupRuntimeAvailable()
+                || panicRuntimeScope.isStopped()) {
+            return;
+        }
+
+        if (SafeKeySession.getState() != SessionState.LOCKED) {
+            throw new IllegalStateException(
+                    "Authentication cancellation requires a locked session."
+            );
+        }
+
+        synchronized (this) {
+            if (cleanupInProgress) {
+                return;
+            }
+        }
+
+        clearSessionAndCloseVaults();
+    }
+
+    /**
      * Register cleanup for both vaults when the session locks.
      */
     public void registerSessionCleanup() {
