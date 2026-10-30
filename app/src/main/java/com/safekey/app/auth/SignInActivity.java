@@ -52,6 +52,7 @@ import java.util.concurrent.Executors;
 
 public class SignInActivity extends com.safekey.app.StartupGuardActivity
         implements TotpCodeDialogFragment.Listener {
+    private static final String TAG = SignInActivity.class.getSimpleName();
     private PanicRuntimeScope.Registration panicCancellation;
 
 
@@ -638,10 +639,29 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
                     if (result == PanicSignInService.Result.PANIC_WIPED) {
                         Arrays.fill(password, '\0');
 
+                        // The wipe has already completed. Navigation must not depend
+                        // on whether the original Sign In Activity still exists.
                         Handler applicationHandler = new Handler(Looper.getMainLooper());
-                        applicationHandler.post(
-                                () -> continueAfterPanicWipe(application, backend)
-                        );
+
+                        boolean posted = applicationHandler.post(() -> {
+                            try {
+                                continueAfterPanicWipe(application, backend);
+                            } catch (RuntimeException error) {
+                                android.util.Log.e(
+                                        TAG,
+                                        "Unable to complete post-wipe startup navigation.",
+                                        error
+                                );
+                            }
+                        });
+
+                        if (!posted) {
+                            android.util.Log.e(
+                                    TAG,
+                                    "Unable to schedule post-wipe startup navigation."
+                            );
+                        }
+
                         return;
                     }
 
