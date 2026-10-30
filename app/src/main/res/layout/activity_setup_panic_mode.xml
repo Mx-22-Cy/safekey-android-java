@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootSetupPanicMode"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/auth_background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingTop="32dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="32dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/buttonPanicBack"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/t27_outline_button_bg"
+                android:contentDescription="@string/t27_back"
+                android:padding="12dp"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="@color/auth_text_secondary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:fontFamily="@font/fraunces_semibold"
+                android:text="@string/t27_panic_title"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="24sp" />
+
+        </LinearLayout>
+
+        <!-- Description -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:lineSpacingExtra="4dp"
+            android:text="@string/t27_panic_description"
+            android:textColor="@color/auth_text_secondary"
+            android:textSize="14sp" />
+
+        <!-- Security Warning -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/alerts_attention_card_bg"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_vault_error_warning" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:text="@string/t27_panic_warning_title"
+                    android:textColor="@color/auth_text_primary"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/t27_panic_warning"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+
+        <!-- Panic Password Form -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/auth_card_bg"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- Current Master Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/t27_panic_master_password"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editPanicMasterPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_panic_master_password"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonTogglePanicMaster"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <!-- Decoy Vault Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/t27_panic_decoy_password"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editPanicDecoyPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_panic_decoy_password"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonTogglePanicDecoy"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <!-- New Panic Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/t27_panic_new_password"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editPanicNewPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_panic_new_password"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonTogglePanicNew"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <!-- Password Help -->
+            <TextView
+                android:id="@+id/textPanicPasswordHelp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/t27_panic_password_help"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="12sp" />
+
+            <!-- Confirm Panic Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/t27_panic_confirm_password"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editPanicConfirmPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_panic_confirm_password"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonTogglePanicConfirm"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <!-- Validation Error -->
+            <TextView
+                android:id="@+id/textPanicFormError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:accessibilityLiveRegion="polite"
+                android:textColor="@color/dashboard_alert_text"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Permanent Deletion Confirmation -->
+        <CheckBox
+            android:id="@+id/checkPanicConfirmation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:buttonTint="@color/auth_text_primary"
+            android:checked="false"
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:padding="4dp"
+            android:text="@string/t27_panic_confirmation"
+            android:textColor="@color/auth_text_secondary"
+            android:textSize="13sp" />
+
+        <!-- Enable Panic Mode Button -->
+        <Button
+            android:id="@+id/buttonEnablePanic"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/auth_primary_button_bg"
+            android:enabled="false"
+            android:text="@string/t27_panic_enable"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_primary_button_text"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@null" />
+
+        <!-- Cancel Button -->
+        <Button
+            android:id="@+id/buttonCancelPanic"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/t27_outline_button_bg"
+            android:text="@string/t27_cancel"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_text_secondary"
+            android:textSize="14sp"
+            app:backgroundTint="@null" />
+
+    </LinearLayout>
+
+</ScrollView>
