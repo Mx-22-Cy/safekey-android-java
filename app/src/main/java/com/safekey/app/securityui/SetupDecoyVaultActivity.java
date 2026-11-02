@@ -13,6 +13,11 @@ import android.widget.Toast;
 
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.appcompat.widget.AppCompatImageButton;
+import androidx.activity.OnBackPressedCallback;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.safekey.app.R;
 import com.safekey.app.session.ProtectedActivity;
@@ -48,7 +53,36 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
         super.onRuntimeCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        WindowCompat.enableEdgeToEdge(getWindow());
+
+        WindowCompat.getInsetsController(
+                getWindow(),
+                getWindow().getDecorView()
+        ).setAppearanceLightStatusBars(false);
+
+        WindowCompat.getInsetsController(
+                getWindow(),
+                getWindow().getDecorView()
+        ).setAppearanceLightNavigationBars(false);
         setContentView(R.layout.activity_setup_decoy_vault);
+        View root = findViewById(R.id.rootSetupDecoyVault);
+
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets bars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars()
+            );
+
+            view.setPadding(
+                    bars.left,
+                    bars.top,
+                    bars.right,
+                    bars.bottom
+            );
+
+            return insets;
+        });
+
+        ViewCompat.requestApplyInsets(root);
         createDecoyButton = findViewById(R.id.buttonCreateDecoyVault);
 
         decoyPasswordError = findViewById(R.id.textDecoyPasswordError);
@@ -78,6 +112,16 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
 
         findViewById(R.id.buttonCancelDecoySetup)
                 .setOnClickListener(view -> cancelSetupIfIdle());
+
+        getOnBackPressedDispatcher().addCallback(
+                this,
+                new OnBackPressedCallback(true) {
+                    @Override
+                    public void handleOnBackPressed() {
+                        cancelSetupIfIdle();
+                    }
+                }
+        );
 
         TextWatcher passwordWatcher = new TextWatcher() {
 
@@ -204,6 +248,12 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
             clearSensitiveInputs();
             finish();
         }
+    }
+
+    @Override
+    protected void onRuntimeStop() {
+        clearSensitiveInputs();
+        super.onRuntimeStop();
     }
 
     @Override
