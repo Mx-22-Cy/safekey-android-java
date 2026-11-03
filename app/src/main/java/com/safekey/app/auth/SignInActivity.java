@@ -1,9 +1,6 @@
 package com.safekey.app.auth;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
-import com.safekey.app.security.panic.PanicBackend;
-import com.safekey.app.security.panic.PanicSignInService;
-import com.safekey.app.security.storage.DecoyVaultCoordinator;
 
 import android.content.Intent;
 import android.graphics.Color;
@@ -47,12 +44,9 @@ import com.safekey.app.security.totp.VaultUnlockGate;
 import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class SignInActivity extends com.safekey.app.StartupGuardActivity
         implements TotpCodeDialogFragment.Listener {
-    private static final String TAG = SignInActivity.class.getSimpleName();
     private PanicRuntimeScope.Registration panicCancellation;
 
 
@@ -62,8 +56,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private char[] pendingMasterPasswordRecheck;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService panicSignInExecutor =
-            Executors.newSingleThreadExecutor();
 
     private EditText editMasterPassword;
     private ImageButton buttonTogglePassword;
@@ -74,10 +66,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private LinearLayout biometricUnlockSection;
 
     private SecureVaultCoordinator secureVaultCoordinator;
-    private DecoyVaultCoordinator decoyVaultCoordinator;
-    private PanicBackend panicBackend;
-    private PanicBackend.SignInRequest pendingPanicSignIn;
-    private char[] pendingRolePassword;
     private VaultUnlockFlow.Request pendingUnlock;
     private AlertDialog biometricEnrollmentDialog;
     private char[] pendingBiometricEnrollmentPassword;
@@ -91,10 +79,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private boolean busy;
     private boolean authenticated;
     private boolean navigatingToHome;
-    // True after a Real or Decoy Vault unlock has been initiated.
-    // Used to distinguish abandoned vault operations from ordinary
-    // authentication errors that never opened a vault.
-    private boolean vaultAuthenticationStarted;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
@@ -133,11 +117,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
         secureVaultCoordinator = ((SafeKeyApplication) getApplication())
                 .getSecureVaultCoordinator();
-
-        SafeKeyApplication app = (SafeKeyApplication) getApplication();
-
-        decoyVaultCoordinator = app.getDecoyVaultCoordinator();
-        panicBackend = app.getPanicBackend();
 
         SafeKeySession.lock();
 
@@ -210,8 +189,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     protected void onRuntimeDestroy() {
         if (panicCancellation != null) { panicCancellation.close(); }
 
-        panicSignInExecutor.shutdown();
-
         if (!navigatingToHome) {
             abortSignIn(0);
         }
@@ -246,52 +223,22 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         hideKeyboard();
         clearPendingBiometricEnrollmentPassword();
 
-        clearPendingMasterPasswordRecheck();
-        pendingRolePassword = password;
-        editMasterPassword.setText("");
-
-        SafeKeyApplication app = (SafeKeyApplication) getApplication();
-
-        try {
-            app.prepareForVaultAuthentication(new VaultDataService.SimpleCallback() {
-                @Override
-                public void onSuccess() {
-                    if (isCurrent(token) && pendingRolePassword == password) {
-                        startPasswordRoleCheck(token, password);
-                    }
-                }
-
-                @Override
-                public void onError(Exception error) {
-                    if (isCurrent(token)) {
-                        abortSignIn(R.string.signin_vault_unlock_error);
-                    }
-                }
-            });
-        } catch (RuntimeException error) {
-            abortSignIn(R.string.signin_vault_unlock_error);
+        if (shouldOfferBiometricEnrollment()) {
+            pendingBiometricEnrollmentPassword = password.clone();
         }
-    }
-
-    private void unlockRealVault(long token, char[] password) {
+        clearPendingMasterPasswordRecheck();
         try {
-            vaultAuthenticationStarted = true;
-            if (shouldOfferBiometricEnrollment()) {
-                pendingBiometricEnrollmentPassword = password.clone();
-            }
-
-            if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth()
-                    .getStatus()
+            if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
                     != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
                 pendingMasterPasswordRecheck = password.clone();
             }
-
             pendingUnlock = secureVaultCoordinator.unlockVault(
                     password,
                     new SecureVaultCoordinator.TotpUnlockCallback() {
                         @Override
                         public void onSuccess() {
-                            dispatchUi(token, () -> authenticationCompleted(token));
+                            dispatchUi(token,
+                                    () -> authenticationCompleted(token));
                         }
 
                         @Override
@@ -303,7 +250,9 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
                         }
 
                         @Override
-                        public void onTotpRequired(VaultUnlockFlow.Request request) {
+                        public void onTotpRequired(
+                                VaultUnlockFlow.Request request
+                        ) {
                             showTotpChallenge(token, request);
                         }
                     });
@@ -314,36 +263,8 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         }
     }
 
-    private void unlockDecoyVault(long token, char[] password) {
-        try {
-            vaultAuthenticationStarted = true;
-            decoyVaultCoordinator.unlockDecoyVault(
-                    password,
-                    new VaultDataService.SimpleCallback() {
-                        @Override
-                        public void onSuccess() {
-                            dispatchUi(token, () -> continueToDecoyHome(token));
-                        }
-
-                        @Override
-                        public void onError(Exception error) {
-                            dispatchUi(token, () -> abortSignIn(
-                                    R.string.signin_vault_unlock_error));
-                        }
-                    }
-            );
-        } catch (RuntimeException error) {
-            abortSignIn(R.string.signin_vault_unlock_error);
-        } finally {
-            Arrays.fill(password, '\0');
-        }
-    }
-
     private void unlockVaultWithBiometrics() {
-        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)) {
-            return;
-        }
-
+        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)) { return; }
         if (!resumed || busy) {
             return;
         }
@@ -356,43 +277,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         setBusy(true);
         hideKeyboard();
 
-        SafeKeyApplication app = (SafeKeyApplication) getApplication();
-
         try {
-            app.prepareForVaultAuthentication(
-                    new VaultDataService.SimpleCallback() {
-                        @Override
-                        public void onSuccess() {
-                            if (!resumed || !isCurrent(token)) {
-                                return;
-                            }
-
-                            startBiometricVaultUnlock(token);
-                        }
-
-                        @Override
-                        public void onError(Exception error) {
-                            if (isCurrent(token)) {
-                                abortSignIn(R.string.biometric_unlock_error);
-                            }
-                        }
-                    }
-            );
-        } catch (RuntimeException error) {
-            abortSignIn(R.string.biometric_unlock_error);
-        }
-    }
-
-    private void startBiometricVaultUnlock(long token) {
-        if (!resumed || !isCurrent(token)) {
-            return;
-        }
-
-        try {
-            // A biometric unlock is now entering the Real Vault backend.
-            // Cancellation must also close this abandoned operation.
-            vaultAuthenticationStarted = true;
-
             pendingUnlock = secureVaultCoordinator.unlockVaultWithBiometrics(
                     this,
                     getString(R.string.biometric_unlock_prompt_title),
@@ -421,8 +306,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
                         ) {
                             showTotpChallenge(token, request);
                         }
-                    }
-            );
+                    });
         } catch (RuntimeException error) {
             abortSignIn(R.string.biometric_unlock_error);
         }
@@ -546,242 +430,31 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         generation++;
         navigatingToHome = true;
 
+        SafeKeySession.unlockAfterAuthentication();
         try {
-            SafeKeySession.unlockAfterAuthentication();
-
-            SafeKeyApplication app = (SafeKeyApplication) getApplication();
-            app.activateRealVault();
-            vaultAuthenticationStarted = false;
-
-            try {
-                app.getMasterPasswordHealth()
-                        .recheckAfterAuthentication(pendingMasterPasswordRecheck);
-            } catch (RuntimeException ignored) {
-                // Health checks must not invalidate successful authentication.
-            } finally {
-                clearPendingMasterPasswordRecheck();
-            }
-
-            Intent intent = new Intent(this, HomeActivity.class);
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
-            );
-
-            startActivity(intent);
-            finish();
-
-        } catch (RuntimeException error) {
-            SafeKeySession.lock();
-            navigatingToHome = false;
-            abortSignIn(R.string.signin_vault_unlock_error);
-        }
-    }
-
-    private void continueToDecoyHome(long token) {
-        if (!resumed || !isCurrent(token)) {
-            return;
-        }
-
-        clearPendingBiometricEnrollmentPassword();
-        clearPendingMasterPasswordRecheck();
-
-        navigatingToHome = true;
-        generation++;
-
-        try {
-            SafeKeySession.unlockAfterAuthentication();
-
-            SafeKeyApplication app = (SafeKeyApplication) getApplication();
-            app.activateDecoyVault();
-            vaultAuthenticationStarted = false;
-
-            Intent intent = new Intent(this, HomeActivity.class);
-            intent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
-            );
-
-            startActivity(intent);
-            finish();
-
-        } catch (RuntimeException error) {
-            SafeKeySession.lock();
-            navigatingToHome = false;
-            abortSignIn(R.string.signin_vault_unlock_error);
-        }
-    }
-
-    private void startPasswordRoleCheck(long token, char[] password) {
-        if (!isCurrent(token) || pendingRolePassword != password) {
-            return;
-        }
-
-        final PanicBackend.SignInRequest request;
-
-        try {
-            request = panicBackend.prepareSignIn(password);
-            pendingPanicSignIn = request;
-        } catch (RuntimeException error) {
-            abortSignIn(R.string.signin_vault_unlock_error);
-            return;
-        }
-
-        final SafeKeyApplication application =
-                (SafeKeyApplication) getApplication();
-        final PanicBackend backend = panicBackend;
-
-        try {
-            panicSignInExecutor.execute(() -> {
-                try {
-                    PanicSignInService.Result result = request.run();
-
-                    if (result == PanicSignInService.Result.PANIC_WIPED) {
-                        Arrays.fill(password, '\0');
-
-                        // The wipe has already completed. Navigation must not depend
-                        // on whether the original Sign In Activity still exists.
-                        Handler applicationHandler = new Handler(Looper.getMainLooper());
-
-                        boolean posted = applicationHandler.post(() -> {
-                            try {
-                                continueAfterPanicWipe(application, backend);
-                            } catch (RuntimeException error) {
-                                android.util.Log.e(
-                                        TAG,
-                                        "Unable to complete post-wipe startup navigation.",
-                                        error
-                                );
-                            }
-                        });
-
-                        if (!posted) {
-                            android.util.Log.e(
-                                    TAG,
-                                    "Unable to schedule post-wipe startup navigation."
-                            );
-                        }
-
-                        return;
-                    }
-
-                    boolean posted = handler.post(() -> {
-                        if (pendingPanicSignIn == request) {
-                            pendingPanicSignIn = null;
-                        }
-
-                        if (!isCurrent(token)
-                                || pendingRolePassword != password) {
-                            Arrays.fill(password, '\0');
-                            return;
-                        }
-
-                        pendingRolePassword = null;
-                        handlePasswordRole(token, result, password);
-                    });
-
-                    if (!posted) {
-                        Arrays.fill(password, '\0');
-                    }
-                } catch (Exception error) {
-                    boolean posted = handler.post(() -> {
-                        if (pendingPanicSignIn == request) {
-                            pendingPanicSignIn = null;
-                        }
-
-                        if (isCurrent(token)
-                                && pendingRolePassword == password) {
-                            abortSignIn(R.string.signin_vault_unlock_error);
-                        } else {
-                            Arrays.fill(password, '\0');
-                        }
-                    });
-
-                    if (!posted) {
-                        Arrays.fill(password, '\0');
-                    }
-                } finally {
-                    request.close();
-                }
-            });
-        } catch (RuntimeException error) {
-            request.close();
-            abortSignIn(R.string.signin_vault_unlock_error);
-        }
-    }
-
-    private void handlePasswordRole(
-            long token,
-            PanicSignInService.Result result,
-            char[] password
-    ) {
-        try {
-            // Destructive cleanup may already have destroyed this Activity.
-            // Never gate completed-wipe navigation on isCurrent(token).
-            if (!isCurrent(token)) {
-                return;
-            }
-
-            switch (result) {
-                case NO_MATCH:
-                    abortSignIn(R.string.signin_vault_unlock_error);
-                    break;
-
-                case MASTER:
-                    unlockRealVault(token, password);
-                    break;
-
-                case DECOY:
-                    unlockDecoyVault(token, password);
-                    break;
-
-                default:
-                    abortSignIn(R.string.signin_vault_unlock_error);
-                    break;
-            }
+            ((SafeKeyApplication) getApplication()).getMasterPasswordHealth()
+                    .recheckAfterAuthentication(pendingMasterPasswordRecheck);
+        } catch (RuntimeException ignored) {
+            // Checking availability cannot turn a valid authentication into a failure.
         } finally {
-            Arrays.fill(password, '\0');
+            clearPendingMasterPasswordRecheck();
         }
-    }
 
-    private static void continueAfterPanicWipe(
-            SafeKeyApplication app,
-            PanicBackend backend
-    ) {
-        app.continueAfterPanicWipe(backend);
-
-        Intent intent = new Intent(
-                app,
-                com.safekey.app.PanicStartupActivity.class
-        );
-
-        intent.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TASK
-        );
-
-        app.startActivity(intent);
-    }
-
-    private void cancelPendingPanicSignIn() {
-        PanicBackend.SignInRequest request = pendingPanicSignIn;
-        pendingPanicSignIn = null;
-
-        if (request != null) {
-            request.close();
+        try {
+            Intent intent = new Intent(this, HomeActivity.class);
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        } catch (RuntimeException error) {
+            SafeKeySession.lock();
+            navigatingToHome = false;
+            abortSignIn(R.string.signin_vault_unlock_error);
         }
     }
 
     private void abortSignIn(int messageId) {
-        final boolean mustCloseAbandonedVault = vaultAuthenticationStarted;
-        vaultAuthenticationStarted = false;
-        cancelPendingPanicSignIn();
-
-        if (pendingRolePassword != null) {
-            Arrays.fill(pendingRolePassword, '\0');
-            pendingRolePassword = null;
-        }
-
         clearPendingMasterPasswordRecheck();
         generation++;
         pendingUiAction = null;
@@ -793,19 +466,6 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
         if (request != null) {
             request.close();
-        }
-        // Activity-level cancellation alone does not guarantee that an
-        // asynchronous Real or Decoy database unlock has been closed.
-        if (mustCloseAbandonedVault) {
-            SafeKeyApplication app =
-                    (SafeKeyApplication) getApplication();
-
-            if (SafeKeySession.getState()
-                    == com.safekey.app.session.logic.SessionState.LOCKED
-                    && app.isStartupRuntimeAvailable()) {
-
-                app.cancelPendingVaultAuthentication();
-            }
         }
 
         dismissTotpDialog();
