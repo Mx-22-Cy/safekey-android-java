@@ -31,6 +31,20 @@ import java.util.concurrent.atomic.AtomicReference;
 public class T27ProtectedScreensInstrumentedTest {
 
     @Test
+    public void unlockedWithoutActiveRealVaultCannotOpenDecoySetup() {
+        assertUnlockedWithoutRealVaultCannotOpen(
+                SetupDecoyVaultActivity.class
+        );
+    }
+
+    @Test
+    public void unlockedWithoutActiveRealVaultCannotOpenPanicSetup() {
+        assertUnlockedWithoutRealVaultCannotOpen(
+                SetupPanicModeActivity.class
+        );
+    }
+
+    @Test
     public void lockedDecoySetupRedirectsToSignIn() throws Exception {
         assertRedirectsToSignIn(SetupDecoyVaultActivity.class);
     }
@@ -378,6 +392,44 @@ public class T27ProtectedScreensInstrumentedTest {
         }
     }
 
+    private void assertUnlockedWithoutRealVaultCannotOpen(
+            Class<? extends Activity> protectedClass
+    ) {
+        SafeKeyApplication application =
+                (SafeKeyApplication) InstrumentationRegistry
+                        .getInstrumentation()
+                        .getTargetContext()
+                        .getApplicationContext();
+
+        SafeKeySession.unregisterSensitiveDataCleanup();
+
+        try {
+            SafeKeySession.lock();
+            SafeKeySession.unlockAfterAuthentication();
+
+            assertEquals(
+                    SafeKeyApplication.ActiveVault.NONE,
+                    application.getActiveVault()
+            );
+
+            Intent intent = new Intent(application, protectedClass);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            try (ActivityScenario<? extends Activity> scenario =
+                         ActivityScenario.launch(intent)) {
+
+                assertEquals(
+                        "Unauthorized setup screen was not destroyed",
+                        androidx.lifecycle.Lifecycle.State.DESTROYED,
+                        scenario.getState()
+                );
+            }
+        } finally {
+            SafeKeySession.lock();
+            application.registerSessionCleanup();
+        }
+    }
+
     private void assertRedirectsToSignIn(
             Class<? extends Activity> protectedClass
     ) throws Exception {
@@ -403,6 +455,9 @@ public class T27ProtectedScreensInstrumentedTest {
         CountDownLatch signInResumed =
                 new CountDownLatch(1);
 
+        AtomicReference<String> lastResumedActivity =
+                new AtomicReference<>("None");
+
         Application.ActivityLifecycleCallbacks callbacks =
                 new Application.ActivityLifecycleCallbacks() {
 
@@ -422,6 +477,8 @@ public class T27ProtectedScreensInstrumentedTest {
 
                     @Override
                     public void onActivityResumed(Activity activity) {
+                        lastResumedActivity.set(activity.getClass().getName());
+
                         if (activity instanceof SignInActivity
                                 && protectedActivity.get() != null) {
 
@@ -466,7 +523,10 @@ public class T27ProtectedScreensInstrumentedTest {
             application.startActivity(intent);
 
             assertTrue(
-                    "Sign In did not appear after opening a locked setup screen",
+                    "Sign In did not appear. Last resumed Activity: "
+                            + lastResumedActivity.get()
+                            + "; protected Activity created: "
+                            + (protectedActivity.get() != null),
                     signInResumed.await(10, TimeUnit.SECONDS)
             );
 

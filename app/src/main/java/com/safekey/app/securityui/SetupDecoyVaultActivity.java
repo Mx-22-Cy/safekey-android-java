@@ -10,6 +10,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.view.View;
 import android.widget.Toast;
+import android.content.Intent;
 
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.appcompat.widget.AppCompatImageButton;
@@ -28,6 +29,7 @@ import com.safekey.app.security.storage.DecoyVaultCoordinator;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.auth.SignInActivity;
 
 import java.util.Arrays;
 
@@ -156,6 +158,15 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
         updateCreateButtonState();
 
         createDecoyButton.setOnClickListener(view -> validateDecoyPasswords());
+
+        requireRealVaultSession();
+    }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+
+        requireRealVaultSession();
     }
 
     private void updateVisibility(
@@ -226,10 +237,40 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
         generalError.setVisibility(View.VISIBLE);
     }
 
-    private boolean isSessionStillUnlocked() {
+    private boolean isAuthorizedRealSession() {
+        SafeKeyApplication application =
+                (SafeKeyApplication) getApplication();
+
         return SafeKeySession.getState() == SessionState.UNLOCKED
+                && application.getActiveVault()
+                == SafeKeyApplication.ActiveVault.REAL
                 && !isFinishing()
                 && !isDestroyed();
+    }
+
+    private boolean requireRealVaultSession() {
+        if (isAuthorizedRealSession()) {
+            return true;
+        }
+
+        clearSensitiveInputs();
+
+        if (SafeKeySession.getState() == SessionState.LOCKED
+                && !isFinishing()
+                && !isDestroyed()) {
+
+            Intent intent = new Intent(this, SignInActivity.class);
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
+            );
+
+            startActivity(intent);
+        }
+
+        finish();
+        return false;
     }
 
     private void clearSensitiveInputs() {
@@ -263,6 +304,10 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
     }
 
     private void validateDecoyPasswords() {
+        if (!requireRealVaultSession()) {
+            return;
+        }
+
         clearValidationErrors();
 
         char[] password = new char[decoyPassword.length()];
@@ -323,6 +368,10 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
     }
 
     private void createDecoyVault(char[] password) {
+        if (!requireRealVaultSession()) {
+            return;
+        }
+
         if (creationInProgress) {
             return;
         }
@@ -354,18 +403,20 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
 
                         @Override
                         public void onError(Exception exception) {
-                            if (!isFinishing() && !isDestroyed()) {
-                                setCreationInProgress(false);
-                                showGeneralError(
-                                        R.string.t27_decoy_creation_failed
-                                );
+                            if (!isAuthorizedRealSession()) {
+                                return;
                             }
+
+                            setCreationInProgress(false);
+                            showGeneralError(
+                                    R.string.t27_decoy_creation_failed
+                            );
                         }
                     }
             );
 
         } catch (RuntimeException exception) {
-            if (!isFinishing() && !isDestroyed()) {
+            if (isAuthorizedRealSession()) {
                 setCreationInProgress(false);
                 showGeneralError(R.string.t27_decoy_creation_failed);
             }
@@ -380,7 +431,7 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
                     new VaultDataService.SimpleCallback() {
                         @Override
                         public void onSuccess() {
-                            if (!isSessionStillUnlocked()) {
+                            if (!isAuthorizedRealSession()) {
                                 return;
                             }
 
@@ -397,7 +448,7 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
 
                         @Override
                         public void onError(Exception exception) {
-                            if (isSessionStillUnlocked()) {
+                            if (isAuthorizedRealSession()) {
                                 // Keep the form locked because the Decoy Vault
                                 // may still be open after a failed close.
                                 showGeneralError(R.string.t27_decoy_creation_failed);
@@ -406,7 +457,7 @@ public final class SetupDecoyVaultActivity extends ProtectedActivity {
                     }
             );
         } catch (RuntimeException exception) {
-            if (isSessionStillUnlocked()) {
+            if (isAuthorizedRealSession()) {
                 // Do not permit another enrollment attempt
                 // when closing the Decoy Vault failed.
                 showGeneralError(R.string.t27_decoy_creation_failed);

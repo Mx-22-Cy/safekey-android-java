@@ -11,6 +11,7 @@ import android.widget.CheckBox;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.Intent;
 
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.appcompat.widget.AppCompatImageButton;
@@ -27,6 +28,7 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.security.panic.PanicBackend;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.auth.SignInActivity;
 
 import java.util.Arrays;
 
@@ -162,6 +164,15 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
                     }
                 }
         );
+
+        requireRealVaultSession();
+    }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+
+        requireRealVaultSession();
     }
 
     private void setupPasswordToggle(
@@ -230,6 +241,10 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
     }
 
     private void validatePanicPasswords() {
+        if (!requireRealVaultSession()) {
+            return;
+        }
+
         clearPanicError();
 
         char[] master = readPassword(masterPassword);
@@ -288,10 +303,47 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
         }
     }
 
-    private boolean isSessionStillUnlocked() {
+    private boolean isAuthorizedRealSession() {
+        SafeKeyApplication application =
+                (SafeKeyApplication) getApplication();
+
         return SafeKeySession.getState() == SessionState.UNLOCKED
+                && application.getActiveVault()
+                == SafeKeyApplication.ActiveVault.REAL
                 && !isFinishing()
                 && !isDestroyed();
+    }
+
+    private boolean requireRealVaultSession() {
+        if (isAuthorizedRealSession()) {
+            return true;
+        }
+
+        PanicBackend.EnrollmentRequest request = enrollmentRequest;
+        enrollmentRequest = null;
+
+        if (request != null) {
+            request.close();
+        }
+
+        clearSensitiveInputs();
+
+        if (SafeKeySession.getState() == SessionState.LOCKED
+                && !isFinishing()
+                && !isDestroyed()) {
+
+            Intent intent = new Intent(this, SignInActivity.class);
+
+            intent.addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
+            );
+
+            startActivity(intent);
+        }
+
+        finish();
+        return false;
     }
 
     private void clearSensitiveInputs() {
@@ -379,7 +431,7 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
             char[] confirmation
     ) {
         if (enrollmentInProgress
-                || !isSessionStillUnlocked()
+                || !isAuthorizedRealSession()
                 || !panicConfirmation.isChecked()) {
             return;
         }
@@ -401,7 +453,9 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
             );
 
         } catch (RuntimeException exception) {
-            showPanicError(R.string.t27_panic_enrollment_failed);
+            if (isAuthorizedRealSession()) {
+                showPanicError(R.string.t27_panic_enrollment_failed);
+            }
             return;
         }
 
@@ -432,7 +486,7 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
 
                 enrollmentRequest = null;
 
-                if (!isSessionStillUnlocked()) {
+                if (!isAuthorizedRealSession()) {
                     return;
                 }
 
@@ -459,8 +513,11 @@ public final class SetupPanicModeActivity extends ProtectedActivity {
         } catch (RuntimeException exception) {
             request.close();
             enrollmentRequest = null;
-            setEnrollmentInProgress(false);
-            showPanicError(R.string.t27_panic_enrollment_failed);
+
+            if (isAuthorizedRealSession()) {
+                setEnrollmentInProgress(false);
+                showPanicError(R.string.t27_panic_enrollment_failed);
+            }
         }
     }
 }
