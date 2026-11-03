@@ -18,10 +18,15 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.MasterPasswordCheckStatus;
+import com.safekey.app.security.totp.VaultUnlockFlow;
+import com.safekey.app.data.service.VaultDataService;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -55,9 +60,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void emptyDecoyPasswordShowsValidationError() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void emptyDecoyPasswordShowsValidationError() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupDecoyVaultActivity> scenario =
                      ActivityScenario.launch(SetupDecoyVaultActivity.class)) {
@@ -99,9 +103,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void emptyPanicMasterPasswordShowsValidationError() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void emptyPanicMasterPasswordShowsValidationError() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupPanicModeActivity> scenario =
                      ActivityScenario.launch(SetupPanicModeActivity.class)) {
@@ -142,9 +145,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void cancelDecoySetupClosesScreen() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void cancelDecoySetupClosesScreen() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupDecoyVaultActivity> scenario =
                      ActivityScenario.launch(SetupDecoyVaultActivity.class)) {
@@ -174,9 +176,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void cancelPanicSetupClosesScreen() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void cancelPanicSetupClosesScreen() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupPanicModeActivity> scenario =
                      ActivityScenario.launch(SetupPanicModeActivity.class)) {
@@ -206,9 +207,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void decoyPasswordClearedWhenScreenStops() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void decoyPasswordClearedWhenScreenStops() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupDecoyVaultActivity> scenario =
                      ActivityScenario.launch(SetupDecoyVaultActivity.class)) {
@@ -256,9 +256,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void panicPasswordsClearedWhenScreenStops() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void panicPasswordsClearedWhenScreenStops() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupPanicModeActivity> scenario =
                      ActivityScenario.launch(SetupPanicModeActivity.class)) {
@@ -333,9 +332,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void systemBackClosesDecoySetup() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void systemBackClosesDecoySetup() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupDecoyVaultActivity> scenario =
                      ActivityScenario.launch(SetupDecoyVaultActivity.class)) {
@@ -363,9 +361,8 @@ public class T27ProtectedScreensInstrumentedTest {
     }
 
     @Test
-    public void systemBackClosesPanicSetup() {
-        SafeKeySession.unregisterSensitiveDataCleanup();
-        SafeKeySession.unlockAfterAuthentication();
+    public void systemBackClosesPanicSetup() throws Exception {
+        authenticateRealVaultForUiTest();
 
         try (ActivityScenario<SetupPanicModeActivity> scenario =
                      ActivityScenario.launch(SetupPanicModeActivity.class)) {
@@ -389,6 +386,97 @@ public class T27ProtectedScreensInstrumentedTest {
                             .getApplicationContext();
 
             ((SafeKeyApplication) application).registerSessionCleanup();
+        }
+    }
+
+
+    // Runs only on a dedicated disposable emulator. Never delete existing vault data.
+    // If another master password is already enrolled, authentication fails safely.
+    private static final String TEST_MASTER = "T27DisposableMasterPassword123!";
+
+    private void authenticateRealVaultForUiTest() throws Exception {
+        SafeKeyApplication app = (SafeKeyApplication) InstrumentationRegistry
+                .getInstrumentation().getTargetContext().getApplicationContext();
+        long deadline = android.os.SystemClock.elapsedRealtime() + 15_000L;
+        while (!app.isStartupRuntimeAvailable()
+                && android.os.SystemClock.elapsedRealtime() < deadline) {
+            Thread.sleep(100L);
+        }
+        assertTrue("SafeKey runtime not ready", app.isStartupRuntimeAvailable());
+        // Do NOT unregister session cleanup: real vaults must close on lock.
+        SafeKeySession.lock();
+
+        CountDownLatch ready = new CountDownLatch(1);
+        AtomicReference<Exception> readinessError = new AtomicReference<>();
+        app.prepareForVaultAuthentication(new VaultDataService.SimpleCallback() {
+            @Override public void onSuccess() { ready.countDown(); }
+            @Override public void onError(Exception error) {
+                readinessError.set(error);
+                ready.countDown();
+            }
+        });
+        assertTrue("Previous vault cleanup timed out", ready.await(20, TimeUnit.SECONDS));
+        if (readinessError.get() != null) { throw readinessError.get(); }
+
+        SecureVaultCoordinator coordinator = app.getSecureVaultCoordinator();
+        final boolean alreadyEnrolled = coordinator.hasVault();
+        final CountDownLatch opened = new CountDownLatch(1);
+        final AtomicReference<Exception> openError = new AtomicReference<>();
+        final AtomicReference<VaultUnlockFlow.Request> requestHolder = new AtomicReference<>();
+        final char[] master = TEST_MASTER.toCharArray();
+        try {
+            VaultDataService.SimpleCallback callback = new VaultDataService.SimpleCallback() {
+                @Override public void onSuccess() {
+                    // requestHolder is set before the asynchronous callback fires.
+                    Runnable completeOnMain = () -> {
+                        VaultUnlockFlow.Request request = requestHolder.get();
+                        if (request == null || !request.claimSession()) {
+                            openError.set(new IllegalStateException("Vault session claim failed"));
+                        } else {
+                            try {
+                                SafeKeySession.unlockAfterAuthentication();
+                                app.activateRealVault();
+                            } catch (Exception error) {
+                                openError.set(error);
+                            }
+                        }
+                    };
+                    if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                        completeOnMain.run();
+                    } else {
+                        InstrumentationRegistry.getInstrumentation().runOnMainSync(completeOnMain);
+                    }
+                    opened.countDown();
+                }
+                @Override public void onError(Exception error) {
+                    openError.set(error);
+                    opened.countDown();
+                }
+            };
+            if (alreadyEnrolled) {
+                requestHolder.set(coordinator.unlockVault(master,
+                        new SecureVaultCoordinator.TotpUnlockCallback() {
+                            @Override public void onSuccess() { callback.onSuccess(); }
+                            @Override public void onError(Exception error) { callback.onError(error); }
+                            @Override public void onTotpRequired(VaultUnlockFlow.Request request) {
+                                openError.set(new IllegalStateException(
+                                        "Test vault has TOTP enabled; use a fresh test-only emulator"));
+                                opened.countDown();
+                            }
+                        }));
+            } else {
+                requestHolder.set(coordinator.createVaultForEnrollment(
+                        master, MasterPasswordCheckStatus.CHECKED, callback));
+            }
+            assertTrue("Test vault authentication timed out", opened.await(25, TimeUnit.SECONDS));
+            if (openError.get() != null) {
+                throw new AssertionError("Test-only REAL Vault authentication failed. "
+                        + "Use only a disposable emulator enrolled with the test credential.",
+                        openError.get());
+            }
+            assertEquals(SafeKeyApplication.ActiveVault.REAL, app.getActiveVault());
+        } finally {
+            Arrays.fill(master, '\0');
         }
     }
 
