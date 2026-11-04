@@ -12,6 +12,47 @@ import static org.junit.Assert.assertTrue;
 
 public class MasterPasswordChangeRequestTest {
     @Test
+    public void runtimeStopClearsQueuedPasswordCopiesAndRejectsCommit() throws Exception {
+        com.safekey.app.security.panic.PanicRuntimeScope scope =
+                new com.safekey.app.security.panic.PanicRuntimeScope();
+        MasterPasswordChangeRequest request = new MasterPasswordChangeRequest(
+                new char[]{'a'}, new char[]{'b'}, scope);
+        java.lang.reflect.Field field = MasterPasswordChangeRequest.class.getDeclaredField("pending");
+        field.setAccessible(true);
+        char[][] owned = (char[][]) field.get(request);
+        scope.cancelPending();
+        assertTrue(request.isCancelled());
+        assertNull(request.takePasswords());
+        assertArrayEquals(new char[1], owned[0]);
+        assertArrayEquals(new char[1], owned[1]);
+        assertFalse(request.commit(() -> { throw new AssertionError("Stopped commit"); }));
+    }
+
+    @Test
+    public void completedRequestCannotCommitAgainInStoppedRuntime() {
+        com.safekey.app.security.panic.PanicRuntimeScope scope =
+                new com.safekey.app.security.panic.PanicRuntimeScope();
+        MasterPasswordChangeRequest request = new MasterPasswordChangeRequest(
+                new char[]{'a'}, new char[]{'b'}, scope);
+        assertTrue(request.commit(() -> {}));
+        scope.cancelPending();
+        assertFalse(request.commit(() -> { throw new AssertionError("Stopped commit"); }));
+    }
+
+    @Test
+    public void successfulCommitClearsAnyRemainingOwnedCopies() throws Exception {
+        MasterPasswordChangeRequest request = new MasterPasswordChangeRequest(
+                new char[]{'a'}, new char[]{'b'});
+        java.lang.reflect.Field field = MasterPasswordChangeRequest.class.getDeclaredField("pending");
+        field.setAccessible(true);
+        char[][] owned = (char[][]) field.get(request);
+        assertTrue(request.commit(() -> {}));
+        assertNull(request.takePasswords());
+        assertArrayEquals(new char[1], owned[0]);
+        assertArrayEquals(new char[1], owned[1]);
+    }
+
+    @Test
     public void queuedRequestOwnsCopiesIndependentOfCallerClearingArrays() {
         char[] current = "old passphrase".toCharArray();
         char[] next = "new passphrase".toCharArray();

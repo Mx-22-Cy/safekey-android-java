@@ -1,5 +1,9 @@
-
 package com.safekey.app.security.storage;
+
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+import com.safekey.app.security.panic.PanicPasswordSeparation;
+import com.safekey.app.security.panic.AndroidPanicPasswordSeparation;
 
 import android.content.Context;
 import android.os.Handler;
@@ -32,9 +36,11 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     private static final String DATABASE_KEY_CONTEXT =
             "safekey:decoy-database-key-envelope:v1";
 
+    private final PanicRuntimeScope runtimeScope;
     private final Context applicationContext;
     private final DecoyVaultDataService vaultDataService;
     private final VaultKeyEnvelopeStore envelopeStore;
+    private final PanicPasswordSeparation passwordSeparation;
     private final Argon2idMasterKeyDeriver keyDeriver;
     private final AesGcmCipher cipher;
     private final SecureRandom secureRandom;
@@ -50,15 +56,20 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     public DecoyVaultCoordinator(Context context) {
         Objects.requireNonNull(context, "context");
         applicationContext = context.getApplicationContext();
+        runtimeScope = PanicRuntimeScope.capture(applicationContext);
         vaultDataService = new DecoyVaultDataService(
                 applicationContext, DecoyVaultStorage.DATABASE_NAME);
         envelopeStore = VaultKeyEnvelopeStore.forDecoy(applicationContext);
+        passwordSeparation = AndroidPanicPasswordSeparation.create(applicationContext, runtimeScope);
         keyDeriver = new Argon2idMasterKeyDeriver();
         cipher = new AesGcmCipher();
         secureRandom = new SecureRandom();
         securityExecutor = Executors.newSingleThreadExecutor();
+        runtimeScope.registerExecutor(securityExecutor);
         mainHandler = new Handler(Looper.getMainLooper());
     }
+
+    public boolean belongsToPanicRuntime(PanicRuntimeScope expected) { return runtimeScope == expected; }
 
     public boolean hasDecoyVault() {
         return envelopeStore.hasEnvelope();
@@ -68,13 +79,13 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         return vaultDataService.isVaultOpen();
     }
 
-    public void createDecoyVault(char[] decoyPassword,
+    private void createDecoyVaultWhileRunning(char[] decoyPassword,
                                  VaultDataService.SimpleCallback callback) {
         Objects.requireNonNull(callback, "callback");
         char[] passwordCopy = copyAndValidatePassword(decoyPassword);
         final long requestGeneration;
         synchronized (lifecycleLock) {
-            if (closeInProgress) {
+            if (runtimeScope.isStopped() || closeInProgress) {
                 clear(passwordCopy);
                 deliverError(callback, new IllegalStateException("Decoy Vault is closing."));
                 return;
@@ -82,7 +93,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             requestGeneration = unlockGeneration;
         }
         try {
-            securityExecutor.execute(() -> createDecoyVaultInBackground(
+            executeSecurity(() -> createDecoyVaultInBackground(
                     passwordCopy, callback, requestGeneration));
         } catch (RuntimeException schedulingError) {
             clear(passwordCopy);
@@ -96,8 +107,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         byte[] salt = null;
         byte[] derivedMasterKey = null;
         byte[] databaseKey = null;
-        boolean enrollmentStarted = false;
-        boolean envelopeSaved = false;
+        boolean[] created = {false, false};
 
         try {
             if (envelopeStore.hasEnvelope()) {
@@ -112,34 +122,44 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             String wrappedDatabaseKey = cipher.encrypt(
                     databaseKey, derivedMasterKey, databaseKeyContext());
 
-            // Replace the unconfigured cover DB with the enrolled Decoy SQLCipher DB.
-            synchronized (lifecycleLock) {
-                if (requestGeneration != unlockGeneration || closeInProgress) {
-                    throw new IllegalStateException("Decoy enrollment was invalidated.");
+            VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt, wrappedDatabaseKey);
+            byte[] enrolledKey = databaseKey;
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.DECOY, decoyPassword)) {
+                // Replace the unconfigured cover DB with the enrolled Decoy SQLCipher DB.
+                synchronized (lifecycleLock) {
+                    if (runtimeScope.isStopped() || requestGeneration != unlockGeneration || closeInProgress) {
+                        throw new IllegalStateException("Decoy enrollment was invalidated.");
+                    }
+
+                    // Storage helpers also inspect envelopes: acquire their monitor before the configuration lock.
+                    synchronized (DecoyVaultStorage.class) {
+                        separation.commit(() -> {
+                            if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A Decoy Vault has already been created."); }
+                            DecoyVaultStorage.prepareDatabaseForEnrollment(applicationContext);
+                            created[0] = true;
+                            initializeDecoyDatabase(enrolledKey);
+                            envelopeStore.save(envelope);
+                            created[1] = true;
+                        });
+                    }
+
+                    vaultDataService.openVault(databaseKey, new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            deliverOpenedVaultResult(callback, requestGeneration,
+                                    "Decoy enrollment was invalidated.");
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            scheduleCreationFailureCleanup(callback, exception, requestGeneration);
+                        }
+                    });
                 }
-
-                DecoyVaultStorage.prepareDatabaseForEnrollment(applicationContext);
-                enrollmentStarted = true;
-                initializeDecoyDatabase(databaseKey);
-                VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt, wrappedDatabaseKey);
-                envelopeStore.save(envelope);
-                envelopeSaved = true;
-
-                vaultDataService.openVault(databaseKey, new VaultDataService.SimpleCallback() {
-                    @Override
-                    public void onSuccess() {
-                        deliverOpenedVaultResult(callback, requestGeneration,
-                                "Decoy enrollment was invalidated.");
-                    }
-
-                    @Override
-                    public void onError(Exception exception) {
-                        scheduleCreationFailureCleanup(callback, exception, requestGeneration);
-                    }
-                });
             }
         } catch (Exception exception) {
-            if (enrollmentStarted || envelopeSaved) {
+            if (created[0] || created[1]) {
                 cleanupFailedCreation(exception, requestGeneration);
             }
             deliverError(callback, exception);
@@ -161,13 +181,13 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         }
     }
 
-    public void unlockDecoyVault(char[] decoyPassword,
+    private void unlockDecoyVaultWhileRunning(char[] decoyPassword,
                                  VaultDataService.SimpleCallback callback) {
         Objects.requireNonNull(callback, "callback");
         char[] passwordCopy = copyAndValidatePassword(decoyPassword);
         final long requestGeneration;
         synchronized (lifecycleLock) {
-            if (closeInProgress) {
+            if (runtimeScope.isStopped() || closeInProgress) {
                 clear(passwordCopy);
                 deliverError(callback, new IllegalStateException("Decoy Vault is closing."));
                 return;
@@ -175,7 +195,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             requestGeneration = unlockGeneration;
         }
         try {
-            securityExecutor.execute(() -> unlockDecoyVaultInBackground(
+            executeSecurity(() -> unlockDecoyVaultInBackground(
                     passwordCopy, callback, requestGeneration));
         } catch (RuntimeException schedulingError) {
             clear(passwordCopy);
@@ -201,7 +221,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
                     derivedMasterKey, databaseKeyContext());
 
             synchronized (lifecycleLock) {
-                if (requestGeneration != unlockGeneration || closeInProgress) {
+                if (runtimeScope.isStopped() || requestGeneration != unlockGeneration || closeInProgress) {
                     throw new IllegalStateException("Decoy unlock was invalidated.");
                 }
 
@@ -238,7 +258,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
                 @Override
                 public void onSuccess() {
                     // Defer delivery even if closeVault completes synchronously.
-                    mainHandler.post(() -> {
+                    runtimeScope.deliver(mainHandler, () -> {
                         boolean current;
                         synchronized (lifecycleLock) {
                             current = closeGeneration == unlockGeneration;
@@ -248,7 +268,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
                         }
                         // Never call external code while holding lifecycleLock.
                         if (current) {
-                            callback.onSuccess();
+                            if (!runtimeScope.isStopped()) { callback.onSuccess(); }
                         } else {
                             callback.onError(new IllegalStateException(
                                     "Decoy close was superseded."));
@@ -351,7 +371,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         if (securityExecutor.isShutdown()) {
             return;
         }
-        securityExecutor.execute(vaultDataService::shutdown);
+        executeSecurity(vaultDataService::shutdown);
         securityExecutor.shutdown();
     }
 
@@ -359,7 +379,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
                                                 Exception originalError,
                                                 long requestGeneration) {
         try {
-            securityExecutor.execute(() -> {
+            executeSecurity(() -> {
                 cleanupFailedCreation(originalError, requestGeneration);
                 deliverError(callback, originalError);
             });
@@ -367,11 +387,19 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             originalError.addSuppressed(schedulingError);
             // Emergency worker avoids blocking the Android UI with cleanup.
             try {
-                Thread fallbackWorker = new Thread(() -> {
-                    cleanupFailedCreation(originalError, requestGeneration);
-                    deliverError(callback, originalError);
-                }, "SafeKey-Decoy-Recovery");
-                fallbackWorker.start();
+                PanicWorkGate.Operation recovery = runtimeScope.begin();
+                try {
+                    Thread fallbackWorker = new Thread(() -> {
+                        try {
+                            cleanupFailedCreation(originalError, requestGeneration);
+                            deliverError(callback, originalError);
+                        } finally { recovery.close(); }
+                    }, "SafeKey-Decoy-Recovery");
+                    fallbackWorker.start();
+                } catch (RuntimeException error) {
+                    recovery.close();
+                    throw error;
+                }
             } catch (RuntimeException threadError) {
                 originalError.addSuppressed(threadError);
                 deliverError(callback, originalError);
@@ -382,7 +410,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     private void cleanupFailedCreation(Exception originalError, long requestGeneration) {
         synchronized (lifecycleLock) {
             // An old enrollment must never erase a newer vault.
-            if (requestGeneration != unlockGeneration || closeInProgress) {
+            if (runtimeScope.isStopped() || requestGeneration != unlockGeneration || closeInProgress) {
                 return;
             }
             cleanupFailedCreationStorageOnly(originalError);
@@ -409,13 +437,13 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     private void deliverOpenedVaultResult(VaultDataService.SimpleCallback callback,
                                           long requestGeneration,
                                           String invalidatedMessage) {
-        mainHandler.post(() -> {
+        runtimeScope.deliver(mainHandler, () -> {
             boolean active;
             synchronized (lifecycleLock) {
                 active = requestGeneration == unlockGeneration && !closeInProgress;
             }
             if (active) {
-                callback.onSuccess();
+                if (!runtimeScope.isStopped()) { callback.onSuccess(); }
             } else {
                 callback.onError(new IllegalStateException(invalidatedMessage));
             }
@@ -423,7 +451,7 @@ public final class DecoyVaultCoordinator implements VaultOperations {
     }
 
     private void deliverError(VaultDataService.SimpleCallback callback, Exception exception) {
-        mainHandler.post(() -> callback.onError(exception));
+        runtimeScope.deliver(mainHandler, () -> { if (!runtimeScope.isStopped()) { callback.onError(exception); } });
     }
 
     private static char[] copyAndValidatePassword(char[] password) {
@@ -451,4 +479,25 @@ public final class DecoyVaultCoordinator implements VaultOperations {
             Arrays.fill(value, '\0');
         }
     }
+
+    public void createDecoyVault(char[] decoyPassword,
+                                 VaultDataService.SimpleCallback callback) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            createDecoyVaultWhileRunning(decoyPassword, callback);
+        }
+    }
+
+
+    public void unlockDecoyVault(char[] decoyPassword,
+                                 VaultDataService.SimpleCallback callback) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            unlockDecoyVaultWhileRunning(decoyPassword, callback);
+        }
+    }
+
+
+    private void executeSecurity(Runnable work) {
+        runtimeScope.execute(securityExecutor, work);
+    }
+
 }

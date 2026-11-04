@@ -1,5 +1,7 @@
 package com.safekey.app.auth;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -43,8 +45,10 @@ import com.safekey.app.session.SafeKeySession;
 
 import java.util.Arrays;
 
-public class SignInActivity extends AppCompatActivity
+public class SignInActivity extends com.safekey.app.StartupGuardActivity
         implements TotpCodeDialogFragment.Listener {
+    private PanicRuntimeScope.Registration panicCancellation;
+
 
     public static final String REQUIRE_MASTER_PASSWORD =
             "com.safekey.app.auth.REQUIRE_MASTER_PASSWORD";
@@ -77,8 +81,8 @@ public class SignInActivity extends AppCompatActivity
     private boolean navigatingToHome;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.enableEdgeToEdge(getWindow());
@@ -137,11 +141,14 @@ public class SignInActivity extends AppCompatActivity
 
         // A restored dialog cannot restore its former authentication request.
         dismissTotpDialog();
+
+        panicCancellation = com.safekey.app.security.panic.PanicSensitiveUi.bind(
+                this, () -> { abortSignIn(0); });
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
         resumed = true;
 
         if (authenticated
@@ -162,24 +169,26 @@ public class SignInActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onPause() {
+    protected void onRuntimePause() {
         resumed = false;
-        super.onPause();
+        super.onRuntimePause();
     }
 
     @Override
-    protected void onStop() {
+    protected void onRuntimeStop() {
         resumed = false;
 
         if (!navigatingToHome) {
             abortSignIn(0);
         }
 
-        super.onStop();
+        super.onRuntimeStop();
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onRuntimeDestroy() {
+        if (panicCancellation != null) { panicCancellation.close(); }
+
         if (!navigatingToHome) {
             abortSignIn(0);
         }
@@ -187,7 +196,7 @@ public class SignInActivity extends AppCompatActivity
         clearPendingMasterPasswordRecheck();
         clearPendingBiometricEnrollmentPassword();
         removePostAuthenticationTimeout();
-        super.onDestroy();
+        super.onRuntimeDestroy();
     }
 
     private void validateSignInForm() {
@@ -218,12 +227,11 @@ public class SignInActivity extends AppCompatActivity
             pendingBiometricEnrollmentPassword = password.clone();
         }
         clearPendingMasterPasswordRecheck();
-        if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
-                != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
-            pendingMasterPasswordRecheck = password.clone();
-        }
-
         try {
+            if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
+                    != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
+                pendingMasterPasswordRecheck = password.clone();
+            }
             pendingUnlock = secureVaultCoordinator.unlockVault(
                     password,
                     new SecureVaultCoordinator.TotpUnlockCallback() {

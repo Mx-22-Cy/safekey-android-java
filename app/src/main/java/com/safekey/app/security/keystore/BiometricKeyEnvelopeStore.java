@@ -1,5 +1,8 @@
 package com.safekey.app.security.keystore;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 
@@ -22,6 +25,7 @@ public class BiometricKeyEnvelopeStore {
     static final int ENVELOPE_VERSION =
             1;
 
+    private final PanicRuntimeScope runtimeScope;
     private final SharedPreferences preferences;
 
     public BiometricKeyEnvelopeStore(
@@ -35,6 +39,7 @@ public class BiometricKeyEnvelopeStore {
             );
         }
 
+        runtimeScope = PanicRuntimeScope.capture(context);
         preferences =
                 context.getApplicationContext()
                         .getSharedPreferences(
@@ -43,7 +48,7 @@ public class BiometricKeyEnvelopeStore {
                         );
     }
 
-    public void save(
+    private void saveWhileRunning(
             BiometricVaultKeyProtector.WrappedKey wrappedKey
     ) {
 
@@ -90,7 +95,7 @@ public class BiometricKeyEnvelopeStore {
         }
     }
 
-    public boolean hasEnvelope() {
+    private boolean hasEnvelopeWhileRunning() {
 
         return preferences.contains(
                 KEY_VERSION
@@ -103,7 +108,7 @@ public class BiometricKeyEnvelopeStore {
         );
     }
 
-    public BiometricVaultKeyProtector.WrappedKey load() {
+    private BiometricVaultKeyProtector.WrappedKey loadWhileRunning() {
 
         boolean hasVersion =
                 preferences.contains(
@@ -235,7 +240,7 @@ public class BiometricKeyEnvelopeStore {
         }
     }
 
-    public void clear() {
+    private void clearWhileRunning() {
 
         boolean cleared =
                 preferences.edit()
@@ -249,4 +254,34 @@ public class BiometricKeyEnvelopeStore {
             );
         }
     }
+
+    public boolean hasEnvelope() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return hasEnvelopeWhileRunning();
+        }
+    }
+
+
+    public void save(
+            BiometricVaultKeyProtector.WrappedKey wrappedKey
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            saveWhileRunning(wrappedKey);
+        }
+    }
+
+
+    public BiometricVaultKeyProtector.WrappedKey load() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return loadWhileRunning();
+        }
+    }
+
+
+    public void clear() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            clearWhileRunning();
+        }
+    }
+
 }

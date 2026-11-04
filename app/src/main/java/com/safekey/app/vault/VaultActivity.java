@@ -84,11 +84,11 @@ public class VaultActivity extends ProtectedActivity {
     private TextView filterNotes;
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(
+        super.onRuntimeCreate(
                 savedInstanceState
         );
 
@@ -1206,8 +1206,8 @@ public class VaultActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
 
         if (isFinishing()) {
             return;

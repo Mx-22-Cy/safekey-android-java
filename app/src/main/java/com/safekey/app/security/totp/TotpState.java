@@ -1,5 +1,7 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
@@ -20,6 +22,8 @@ public final class TotpState implements AutoCloseable {
     private final int failedAttempts;
     private final long blockedUntilEpochMillis;
     private boolean closed;
+    private PanicRuntimeScope runtimeScope;
+    private PanicRuntimeScope.PendingOperation pendingWork;
 
     public TotpState(
             byte[] secret,
@@ -75,7 +79,8 @@ public final class TotpState implements AutoCloseable {
             long blockedUntil
     ) {
         requireOpen();
-        return new TotpState(secret, acceptedStep, failures, blockedUntil);
+        TotpState updated = new TotpState(secret, acceptedStep, failures, blockedUntil);
+        return runtimeScope == null ? updated : updated.bindRuntime(runtimeScope);
     }
 
     synchronized byte[] encode() {
@@ -121,12 +126,26 @@ public final class TotpState implements AutoCloseable {
 
     @Override
     public synchronized void close() {
+        if (pendingWork == null) { wipeSecret(); }
+        else { pendingWork.close(); }
+    }
+
+    synchronized TotpState bindRuntime(PanicRuntimeScope scope) {
+        requireOpen();
+        if (runtimeScope != null) { throw new IllegalStateException("TOTP state is already bound."); }
+        runtimeScope = Objects.requireNonNull(scope, "scope");
+        try { pendingWork = runtimeScope.pending(this::wipeSecret, () -> {}); }
+        catch (RuntimeException stopped) { wipeSecret(); throw stopped; }
+        return this;
+    }
+
+    private synchronized void wipeSecret() {
         Arrays.fill(secret, (byte) 0);
         closed = true;
     }
 
     private void requireOpen() {
-        if (closed) {
+        if (closed || (runtimeScope != null && runtimeScope.isStopped())) {
             throw new IllegalStateException("TOTP state has been closed.");
         }
     }

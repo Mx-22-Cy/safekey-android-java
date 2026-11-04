@@ -1,5 +1,8 @@
 package com.safekey.app.security.storage;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.content.Context;
 
 import com.safekey.app.data.database.SafeKeyDatabase;
@@ -35,7 +38,7 @@ public final class DecoyVaultStorage {
      *
      * If the file already exists, it is left untouched.
      */
-    public static synchronized void ensureDatabaseFile(
+    private static synchronized void ensureDatabaseFileWhileRunning(
             Context context
     ) {
         Context applicationContext =
@@ -104,7 +107,7 @@ public final class DecoyVaultStorage {
      * The Decoy coordinator then recreates this same filename
      * as a SQLCipher vault with the new independent Decoy key.
      */
-    static synchronized void prepareDatabaseForEnrollment(
+    private static synchronized void prepareDatabaseForEnrollmentWhileRunning(
             Context context
     ) {
         Context applicationContext =
@@ -121,7 +124,7 @@ public final class DecoyVaultStorage {
      * Restores the always-present encrypted cover database if
      * Decoy enrollment fails before it is completed.
      */
-    static synchronized void restoreCoverDatabase(
+    private static synchronized void restoreCoverDatabaseWhileRunning(
             Context context
     ) {
         Context applicationContext =
@@ -189,4 +192,31 @@ public final class DecoyVaultStorage {
             );
         }
     }
+
+    public static synchronized void ensureDatabaseFile(
+            Context context
+    ) {
+        try (PanicWorkGate.Operation ignored = PanicRuntimeScope.capture(context).begin()) {
+            ensureDatabaseFileWhileRunning(context);
+        }
+    }
+
+
+    static synchronized void prepareDatabaseForEnrollment(
+            Context context
+    ) {
+        try (PanicWorkGate.Operation ignored = PanicRuntimeScope.capture(context).begin()) {
+            prepareDatabaseForEnrollmentWhileRunning(context);
+        }
+    }
+
+
+    static synchronized void restoreCoverDatabase(
+            Context context
+    ) {
+        try (PanicWorkGate.Operation ignored = PanicRuntimeScope.capture(context).begin()) {
+            restoreCoverDatabaseWhileRunning(context);
+        }
+    }
+
 }

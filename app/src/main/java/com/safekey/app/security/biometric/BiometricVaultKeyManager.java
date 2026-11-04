@@ -1,5 +1,8 @@
 package com.safekey.app.security.biometric;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.security.keystore.KeyPermanentlyInvalidatedException;
 
 import androidx.fragment.app.FragmentActivity;
@@ -21,6 +24,7 @@ public class BiometricVaultKeyManager {
     private static final String RE_ENROLL_INVALIDATED_KEY_MESSAGE =
             "Biometric unlock key is no longer valid. Re-enroll biometric unlock.";
 
+    private final PanicRuntimeScope runtimeScope;
     private final BiometricAuthenticator authenticator;
     private final BiometricKeyStore keyStore;
     private final BiometricVaultKeyProtector protector;
@@ -36,6 +40,8 @@ public class BiometricVaultKeyManager {
                     "Activity cannot be null."
             );
         }
+
+        runtimeScope = PanicRuntimeScope.capture(activity);
 
         authenticator =
                 new BiometricAuthenticator(
@@ -66,7 +72,7 @@ public class BiometricVaultKeyManager {
                 && envelopeStore.hasEnvelope();
     }
 
-    public void enableBiometricUnlock(
+    private void enableBiometricUnlockWhileRunning(
             byte[] vaultKey,
             String title,
             String subtitle,
@@ -100,7 +106,17 @@ public class BiometricVaultKeyManager {
                         vaultKey.length
                 );
 
+        final PanicRuntimeScope.PendingOperation pending;
         try {
+            pending = runtimeScope.pending(
+                    () -> Arrays.fill(vaultKeyCopy, (byte) 0), authenticator::cancelAuthentication);
+        } catch (RuntimeException stopped) {
+            Arrays.fill(vaultKeyCopy, (byte) 0);
+            throw stopped;
+        }
+
+        try {
+            if (!pending.isCurrent()) { pending.close(); return; }
 
             Cipher cipher =
                     keyStore.createEncryptionCipher();
@@ -116,6 +132,7 @@ public class BiometricVaultKeyManager {
                                 Cipher authenticatedCipher
                         ) {
 
+                            if (!pending.isCurrent()) { pending.close(); return; }
                             try {
 
                                 BiometricVaultKeyProtector.WrappedKey wrappedKey =
@@ -139,10 +156,7 @@ public class BiometricVaultKeyManager {
 
                             } finally {
 
-                                Arrays.fill(
-                                        vaultKeyCopy,
-                                        (byte) 0
-                                );
+                                pending.close();
                             }
                         }
 
@@ -151,10 +165,9 @@ public class BiometricVaultKeyManager {
                                 String message
                         ) {
 
-                            Arrays.fill(
-                                    vaultKeyCopy,
-                                    (byte) 0
-                            );
+                            boolean current = pending.isCurrent();
+                            pending.close();
+                            if (!current) { return; }
 
                             callback.onError(
                                     message
@@ -170,17 +183,14 @@ public class BiometricVaultKeyManager {
                              * BiometricPrompt can report a failed scan
                              * while keeping the prompt open for another try.
                              */
-                            callback.onFailed();
+                            if (pending.isCurrent()) { callback.onFailed(); }
                         }
                     }
             );
 
         } catch (KeyPermanentlyInvalidatedException exception) {
 
-            Arrays.fill(
-                    vaultKeyCopy,
-                    (byte) 0
-            );
+            pending.close();
 
             callback.onError(
                     RE_ENROLL_INVALIDATED_KEY_MESSAGE
@@ -188,10 +198,7 @@ public class BiometricVaultKeyManager {
 
         } catch (Exception exception) {
 
-            Arrays.fill(
-                    vaultKeyCopy,
-                    (byte) 0
-            );
+            pending.close();
 
             callback.onError(
                     "Unable to prepare biometric unlock."
@@ -199,7 +206,7 @@ public class BiometricVaultKeyManager {
         }
     }
 
-    public void unlockWithBiometrics(
+    private void unlockWithBiometricsWhileRunning(
             String title,
             String subtitle,
             UnlockCallback callback
@@ -247,7 +254,11 @@ public class BiometricVaultKeyManager {
             return;
         }
 
+        final PanicRuntimeScope.PendingOperation pending =
+                runtimeScope.pending(() -> {}, authenticator::cancelAuthentication);
+
         try {
+            if (!pending.isCurrent()) { pending.close(); return; }
 
             Cipher cipher =
                     keyStore.createDecryptionCipher(
@@ -265,6 +276,7 @@ public class BiometricVaultKeyManager {
                                 Cipher authenticatedCipher
                         ) {
 
+                            if (!pending.isCurrent()) { pending.close(); return; }
                             try {
 
                                 byte[] vaultKey =
@@ -290,7 +302,7 @@ public class BiometricVaultKeyManager {
                                 callback.onError(
                                         "Unable to unlock the protected vault key."
                                 );
-                            }
+                            } finally { pending.close(); }
                         }
 
                         @Override
@@ -298,32 +310,35 @@ public class BiometricVaultKeyManager {
                                 String message
                         ) {
 
-                            callback.onError(
-                                    message
-                            );
+                            boolean current = pending.isCurrent();
+                            pending.close();
+                            if (current) { callback.onError(message); }
                         }
 
                         @Override
                         public void onFailed() {
 
-                            callback.onFailed();
+                            if (pending.isCurrent()) { callback.onFailed(); }
                         }
                     }
             );
 
         } catch (BiometricKeyStore.BiometricKeyMissingException exception) {
+            pending.close();
 
             callback.onError(
                     RE_ENROLL_MISSING_KEY_MESSAGE
             );
 
         } catch (KeyPermanentlyInvalidatedException exception) {
+            pending.close();
 
             callback.onError(
                     RE_ENROLL_INVALIDATED_KEY_MESSAGE
             );
 
         } catch (Exception exception) {
+            pending.close();
 
             callback.onError(
                     "Unable to prepare biometric authentication."
@@ -331,7 +346,7 @@ public class BiometricVaultKeyManager {
         }
     }
 
-    public void disableBiometricUnlock()
+    private void disableBiometricUnlockWhileRunning()
             throws Exception {
 
         envelopeStore.clear();
@@ -366,4 +381,35 @@ public class BiometricVaultKeyManager {
 
         void onFailed();
     }
+
+    public void disableBiometricUnlock()
+            throws Exception {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            disableBiometricUnlockWhileRunning();
+        }
+    }
+
+
+    public void enableBiometricUnlock(
+            byte[] vaultKey,
+            String title,
+            String subtitle,
+            SetupCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            enableBiometricUnlockWhileRunning(vaultKey, title, subtitle, callback);
+        }
+    }
+
+
+    public void unlockWithBiometrics(
+            String title,
+            String subtitle,
+            UnlockCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            unlockWithBiometricsWhileRunning(title, subtitle, callback);
+        }
+    }
+
 }

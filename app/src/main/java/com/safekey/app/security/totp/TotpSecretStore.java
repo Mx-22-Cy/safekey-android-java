@@ -1,5 +1,8 @@
 package com.safekey.app.security.totp;
 
+import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicWorkGate;
+
 import android.content.Context;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
@@ -48,6 +51,7 @@ public final class TotpSecretStore
             Integer.BYTES + NONCE_LENGTH
                     + TotpState.ENCODED_LENGTH + TAG_BITS / 8;
 
+    private final PanicRuntimeScope runtimeScope;
     private final String keyAlias;
     private final File baseFile;
     private final AtomicFile atomicFile;
@@ -67,6 +71,7 @@ public final class TotpSecretStore
             throw new IllegalArgumentException("Invalid TOTP storage names.");
         }
 
+        runtimeScope = PanicRuntimeScope.capture(context);
         this.keyAlias = keyAlias;
 
         File directory = Objects.requireNonNull(
@@ -83,7 +88,7 @@ public final class TotpSecretStore
         return LOCK;
     }
 
-    public boolean isConfigured()
+    private boolean isConfiguredWhileRunning()
             throws GeneralSecurityException, IOException {
         synchronized (LOCK) {
             return hasFileArtifacts()
@@ -92,7 +97,7 @@ public final class TotpSecretStore
     }
 
     /** Returns null only when neither state files nor a key alias exist. */
-    public TotpState load()
+    private TotpState loadWhileRunning()
             throws GeneralSecurityException, IOException {
         synchronized (LOCK) {
             KeyStore keyStore = openKeyStore();
@@ -141,7 +146,7 @@ public final class TotpSecretStore
                 plaintext = cipher.doFinal(ciphertext);
 
                 try {
-                    return TotpState.decode(plaintext);
+                    return TotpState.decode(plaintext).bindRuntime(runtimeScope);
                 } catch (IllegalArgumentException invalidState) {
                     throw new IOException(
                             "Stored TOTP state is invalid.",
@@ -156,7 +161,7 @@ public final class TotpSecretStore
         }
     }
 
-    public void save(TotpState state)
+    private void saveWhileRunning(TotpState state)
             throws GeneralSecurityException, IOException {
         Objects.requireNonNull(state, "state");
 
@@ -214,7 +219,7 @@ public final class TotpSecretStore
     }
 
     /** Call only after authorized disable, or during the full Panic wipe. */
-    public void clear()
+    private void clearWhileRunning()
             throws GeneralSecurityException, IOException {
         synchronized (LOCK) {
             for (File artifact : artifacts()) {
@@ -357,4 +362,39 @@ public final class TotpSecretStore
             }
         }
     }
+
+    public boolean isConfigured()
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return isConfiguredWhileRunning();
+        }
+    }
+
+
+    public TotpState load()
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            return loadWhileRunning();
+        }
+    }
+
+
+    public void save(TotpState state)
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            saveWhileRunning(state);
+        }
+    }
+
+
+    public void clear()
+            throws GeneralSecurityException, IOException {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            clearWhileRunning();
+        }
+    }
+
+
+    @Override public PanicRuntimeScope getPanicRuntimeScope() { return runtimeScope; }
+
 }

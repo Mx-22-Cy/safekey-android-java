@@ -16,6 +16,7 @@ public class BiometricAuthenticator {
             BiometricManager.Authenticators.BIOMETRIC_STRONG;
 
     private final FragmentActivity activity;
+    private BiometricPrompt activePrompt;
 
     public BiometricAuthenticator(
             FragmentActivity activity
@@ -102,6 +103,7 @@ public class BiometricAuthenticator {
                         activity
                 );
 
+        final BiometricPrompt[] ownedPrompt = new BiometricPrompt[1];
         BiometricPrompt biometricPrompt =
                 new BiometricPrompt(
                         activity,
@@ -113,9 +115,8 @@ public class BiometricAuthenticator {
                                     @NonNull BiometricPrompt.AuthenticationResult result
                             ) {
 
-                                super.onAuthenticationSucceeded(
-                                        result
-                                );
+                                super.onAuthenticationSucceeded(result);
+                                if (activePrompt == ownedPrompt[0]) { activePrompt = null; }
 
                                 BiometricPrompt.CryptoObject cryptoObject =
                                         result.getCryptoObject();
@@ -141,10 +142,8 @@ public class BiometricAuthenticator {
                                     @NonNull CharSequence errorString
                             ) {
 
-                                super.onAuthenticationError(
-                                        errorCode,
-                                        errorString
-                                );
+                                super.onAuthenticationError(errorCode, errorString);
+                                if (activePrompt == ownedPrompt[0]) { activePrompt = null; }
 
                                 callback.onError(
                                         errorString.toString()
@@ -186,6 +185,8 @@ public class BiometricAuthenticator {
                         cipher
                 );
 
+        ownedPrompt[0] = biometricPrompt;
+        activePrompt = biometricPrompt;
         biometricPrompt.authenticate(
                 promptBuilder.build(),
                 cryptoObject
@@ -213,4 +214,12 @@ public class BiometricAuthenticator {
 
         void onFailed();
     }
+
+    /** Call on the main thread; owners clear their key copy before cancellation. */
+    public void cancelAuthentication() {
+        BiometricPrompt prompt = activePrompt;
+        activePrompt = null;
+        if (prompt != null) { prompt.cancelAuthentication(); }
+    }
+
 }

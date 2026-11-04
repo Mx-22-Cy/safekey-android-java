@@ -101,11 +101,11 @@ public class AddCredentialActivity extends ProtectedActivity {
             "edit_credential_notes";
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(
+        super.onRuntimeCreate(
                 savedInstanceState
         );
 

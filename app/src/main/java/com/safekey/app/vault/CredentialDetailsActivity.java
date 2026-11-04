@@ -55,11 +55,11 @@ public class CredentialDetailsActivity extends ProtectedActivity {
     private SecureVaultCoordinator secureVaultCoordinator;
 
     @Override
-    protected void onCreate(
+    protected void onRuntimeCreate(
             Bundle savedInstanceState
     ) {
 
-        super.onCreate(savedInstanceState);
+        super.onRuntimeCreate(savedInstanceState);
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -120,9 +120,9 @@ public class CredentialDetailsActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onRestart() {
+    protected void onRuntimeRestart() {
 
-        super.onRestart();
+        super.onRuntimeRestart();
 
         bindData();
     }

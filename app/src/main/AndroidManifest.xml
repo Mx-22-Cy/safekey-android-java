@@ -17,6 +17,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SafeKey">
 
+        <activity
+            android:name=".PanicStartupActivity"
+            android:exported="false" />
+
         <!--
             Week 2 authentication UI.
             SignUpActivity remains the temporary launcher
@@ -91,6 +95,16 @@
         -->
         <activity
             android:name=".MainActivity"
+            android:exported="false" />
+
+        <!-- Week 10 Decoy Vault Setup -->
+        <activity
+            android:name=".securityui.SetupDecoyVaultActivity"
+            android:exported="false" />
+
+        <!-- Week 10 Panic Mode Setup -->
+        <activity
+            android:name=".securityui.SetupPanicModeActivity"
             android:exported="false" />
 
     </application>
