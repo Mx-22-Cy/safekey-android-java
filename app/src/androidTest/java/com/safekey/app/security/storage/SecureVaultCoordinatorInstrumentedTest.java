@@ -1,5 +1,6 @@
 package com.safekey.app.security.storage;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -10,12 +11,14 @@ import static org.junit.Assert.fail;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
+import com.safekey.app.security.crypto.AesGcmCipher;
 import com.safekey.app.security.crypto.AesGcmException;
 
 import org.junit.After;
@@ -23,9 +26,14 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @RunWith(AndroidJUnit4.class)
 public class SecureVaultCoordinatorInstrumentedTest {
@@ -62,6 +70,77 @@ public class SecureVaultCoordinatorInstrumentedTest {
         clearStoredVault();
 
         context = null;
+    }
+
+    @Test
+    public void measureMasterPasswordUnlockAndDecryption() throws Exception {
+        char[] masterPassword = "SafeKey-Benchmark-Only-Master-2026!".toCharArray();
+        AesGcmCipher cipher = new AesGcmCipher();
+        byte[] key = new byte[AesGcmCipher.KEY_LENGTH_BYTES];
+        byte[] plaintext = "SafeKey sample credential field".getBytes(StandardCharsets.UTF_8);
+        byte[] associatedData = "safekey-benchmark-field".getBytes(StandardCharsets.UTF_8);
+
+        try {
+            new SecureRandom().nextBytes(key);
+            timeBenchmarkOperation("Fixture enrollment",
+                    callback -> coordinator.createVault(masterPassword, callback));
+            String encrypted = cipher.encrypt(plaintext, key, associatedData);
+
+            for (int run = 0; run <= 3; run++) {
+                timeBenchmarkOperation("Close vault", coordinator::closeVault);
+                long unlockNanos = timeBenchmarkOperation("Master password unlock",
+                        callback -> coordinator.unlockVault(masterPassword, callback));
+                assertTrue(coordinator.isVaultOpen());
+
+                long start = SystemClock.elapsedRealtimeNanos();
+                byte[] decrypted = cipher.decrypt(encrypted, key, associatedData);
+                long decryptNanos = SystemClock.elapsedRealtimeNanos() - start;
+                try {
+                    assertArrayEquals(plaintext, decrypted);
+                } finally {
+                    Arrays.fill(decrypted, (byte) 0);
+                }
+
+                if (run > 0) {
+                    Log.i("SafeKeyNfr02Benchmark", "NFR-02 run=" + run
+                            + " unlock_ms=" + unlockNanos / 1_000_000.0
+                            + " decrypt_ms=" + decryptNanos / 1_000_000.0);
+                }
+            }
+        } finally {
+            Arrays.fill(masterPassword, '\0');
+            Arrays.fill(key, (byte) 0);
+            Arrays.fill(plaintext, (byte) 0);
+        }
+    }
+
+    private static long timeBenchmarkOperation(
+            String name,
+            Consumer<VaultDataService.SimpleCallback> operation
+    ) throws InterruptedException {
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Exception> error = new AtomicReference<>();
+        AtomicLong finishedAt = new AtomicLong();
+
+        VaultDataService.SimpleCallback callback = new VaultDataService.SimpleCallback() {
+            @Override public void onSuccess() {
+                finishedAt.set(SystemClock.elapsedRealtimeNanos());
+                done.countDown();
+            }
+
+            @Override public void onError(Exception failure) {
+                error.set(failure);
+                done.countDown();
+            }
+        };
+
+        long startedAt = SystemClock.elapsedRealtimeNanos();
+        operation.accept(callback);
+        assertTrue(name + " timed out", done.await(120, TimeUnit.SECONDS));
+        if (error.get() != null) {
+            throw new AssertionError(name + " failed", error.get());
+        }
+        return finishedAt.get() - startedAt;
     }
 
     @Test
