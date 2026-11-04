@@ -107,6 +107,16 @@
                 android:resource="@xml/safekey_autofill_service" />
 
         </service>
+
+        <!-- Week 10 Decoy Vault Setup -->
+        <activity
+            android:name=".securityui.SetupDecoyVaultActivity"
+            android:exported="false" />
+
+        <!-- Week 10 Panic Mode Setup -->
+        <activity
+            android:name=".securityui.SetupPanicModeActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

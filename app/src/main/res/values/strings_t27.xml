@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Decoy Vault Setup -->
+    <string name="t27_decoy_title">Set Up Decoy Vault</string>
+
+    <string name="t27_decoy_description">Create a separate vault to protect your information with a different password.</string>
+
+    <string name="t27_decoy_info">Your Decoy Vault stores different information from your real vault.</string>
+
+    <string name="t27_decoy_password">Decoy Vault Password</string>
+    <string name="t27_decoy_confirm">Confirm Decoy Vault Password</string>
+
+    <string name="t27_decoy_password_hint">Enter decoy vault password</string>
+    <string name="t27_decoy_confirm_hint">Re-enter decoy vault password</string>
+
+    <string name="t27_decoy_password_help">Minimum 15 characters. Must differ from your master password.</string>
+
+    <string name="t27_decoy_create">Create Decoy Vault</string>
+    <string name="t27_decoy_creating">Creating...</string>
+    <string name="t27_decoy_success">Decoy Vault created successfully.</string>
+
+    <!-- Panic Mode Setup -->
+    <string name="t27_panic_title">Set Up Panic Mode</string>
+
+    <string name="t27_panic_description">Set a Panic Password to permanently delete your SafeKey data in an emergency.</string>
+
+    <string name="t27_panic_warning_title">Important Security Warning</string>
+
+    <string name="t27_panic_warning">Entering your Panic Password during Sign In will permanently delete all your SafeKey vault data. This cannot be undone.</string>
+
+    <string name="t27_panic_master_password">Current Master Password</string>
+    <string name="t27_panic_decoy_password">Decoy Vault Password</string>
+    <string name="t27_panic_new_password">New Panic Password</string>
+    <string name="t27_panic_confirm_password">Confirm Panic Password</string>
+
+    <string name="t27_panic_password_help">Minimum 15 characters. Must differ from the master and decoy passwords.</string>
+
+    <string name="t27_panic_confirmation">I understand that entering my Panic Password at Sign In will permanently delete all my SafeKey vault data.</string>
+
+    <string name="t27_panic_enable">Enable Panic Mode</string>
+    <string name="t27_panic_enabling">Enabling...</string>
+    <string name="t27_panic_success">Panic Mode enabled successfully.</string>
+
+    <!-- Shared Buttons -->
+    <string name="t27_cancel">Cancel</string>
+
+    <!-- Validation Messages -->
+    <string name="t27_password_min_length">Password must be at least 15 characters.</string>
+    <string name="t27_passwords_mismatch">Passwords do not match.</string>
+    <string name="t27_panic_passwords_mismatch">Panic passwords do not match.</string>
+    <string name="t27_decoy_already_exists">A Decoy Vault has already been created.</string>
+
+    <string name="t27_back">Back</string>
+
+    <!-- Decoy Vault Validation -->
+    <string name="t27_decoy_password_required">Enter a Decoy Vault password.</string>
+    <string name="t27_decoy_confirm_required">Confirm your Decoy Vault password.</string>
+    <string name="t27_decoy_password_too_long">Password must not exceed 128 characters.</string>
+    <string name="t27_decoy_password_weak">Choose a less predictable password.</string>
+    <string name="t27_decoy_password_separation_error">Your Decoy Vault password must differ from your master password.</string>
+    <string name="t27_decoy_creation_failed">Unable to create Decoy Vault. Please try again.</string>
+
+    <!-- Panic Mode Validation -->
+    <string name="t27_panic_master_required">Enter your current master password.</string>
+    <string name="t27_panic_decoy_required">Enter your Decoy Vault password.</string>
+    <string name="t27_panic_password_invalid">Choose a valid Panic Password of 15 to 128 characters that is not easily guessed.</string>
+    <string name="t27_panic_passwords_must_differ">Your master, decoy, and Panic passwords must all be different.</string>
+    <string name="t27_panic_enrollment_failed">Unable to enable Panic Mode. Please try again.</string>
+
+</resources>

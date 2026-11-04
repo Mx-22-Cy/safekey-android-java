@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootSetupDecoyVault"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingTop="48dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="32dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/buttonDecoyBack"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/t27_outline_button_bg"
+                android:contentDescription="@string/t27_back"
+                android:padding="12dp"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="@color/auth_text_secondary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:fontFamily="@font/fraunces_semibold"
+                android:text="@string/t27_decoy_title"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="24sp" />
+
+        </LinearLayout>
+
+        <!-- Description -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:lineSpacingExtra="4dp"
+            android:text="@string/t27_decoy_description"
+            android:textColor="@color/auth_text_secondary"
+            android:textSize="14sp" />
+
+        <!-- Information Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/auth_card_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_safekey_logo" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/t27_decoy_info"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="13sp" />
+
+        </LinearLayout>
+
+        <!-- Password Form -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/auth_card_bg"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <!-- Decoy Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/t27_decoy_password"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editDecoyPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_decoy_password_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonToggleDecoyPassword"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/textDecoyPasswordHelp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/t27_decoy_password_help"
+                android:textColor="@color/auth_text_secondary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/textDecoyPasswordError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:accessibilityLiveRegion="polite"
+                android:textColor="@color/dashboard_alert_text"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <!-- Confirm Decoy Password -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/t27_decoy_confirm"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="8dp">
+
+                <androidx.appcompat.widget.AppCompatEditText
+                    android:id="@+id/editConfirmDecoyPassword"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/auth_input_bg"
+                    android:hint="@string/t27_decoy_confirm_hint"
+                    android:importantForAutofill="no"
+                    android:inputType="textPassword"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="52dp"
+                    android:saveEnabled="false"
+                    android:singleLine="true"
+                    android:textColor="@color/auth_text_primary"
+                    android:textColorHint="@color/auth_text_secondary"
+                    android:textSize="15sp" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/buttonToggleConfirmDecoyPassword"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="@string/show_password_content_description"
+                    android:padding="12dp"
+                    app:srcCompat="@drawable/ic_password_visible" />
+
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/textDecoyConfirmError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:accessibilityLiveRegion="polite"
+                android:textColor="@color/dashboard_alert_text"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- General Error -->
+        <TextView
+            android:id="@+id/textDecoyGeneralError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:accessibilityLiveRegion="polite"
+            android:textColor="@color/dashboard_alert_text"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Create Button -->
+        <Button
+            android:id="@+id/buttonCreateDecoyVault"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/auth_primary_button_bg"
+            android:enabled="false"
+            android:text="@string/t27_decoy_create"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_primary_button_text"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@null" />
+
+        <!-- Cancel Button -->
+        <Button
+            android:id="@+id/buttonCancelDecoySetup"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/t27_outline_button_bg"
+            android:text="@string/t27_cancel"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_text_secondary"
+            android:textSize="14sp"
+            app:backgroundTint="@null" />
+
+    </LinearLayout>
+
+</ScrollView>
