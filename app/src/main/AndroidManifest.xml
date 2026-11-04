@@ -117,6 +117,10 @@
         <activity
             android:name=".securityui.SetupPanicModeActivity"
             android:exported="false" />
+        <!-- Week 11: Autofill Authentication -->
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

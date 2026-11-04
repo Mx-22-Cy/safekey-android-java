@@ -131,4 +131,22 @@ public final class AutofillRequestMetadata {
                 fields
         );
     }
+
+    /**
+     * Creates request metadata for package-level security tests.
+     *
+     * Package-private: not exposed as part of the public API.
+     * Production request handling must continue using extract().
+     */
+    static AutofillRequestMetadata forTesting(
+            String packageName,
+            String claimedWebHost,
+            AutofillLoginFields.Fields fields
+    ) {
+        return new AutofillRequestMetadata(
+                packageName,
+                claimedWebHost,
+                fields
+        );
+    }
 }

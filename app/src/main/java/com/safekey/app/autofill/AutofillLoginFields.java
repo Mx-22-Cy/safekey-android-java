@@ -38,6 +38,19 @@ public final class AutofillLoginFields {
         public AutofillId getPasswordId() {
             return passwordId;
         }
+
+        /**
+         * Creates Autofill field identifiers for security tests.
+         *
+         * Package-private: not part of the public API.
+         * Production code must continue using find().
+         */
+        static Fields forTesting(
+                AutofillId usernameId,
+                AutofillId passwordId
+        ) {
+            return new Fields(usernameId, passwordId);
+        }
     }
 
     public static Fields find(AssistStructure structure) {
