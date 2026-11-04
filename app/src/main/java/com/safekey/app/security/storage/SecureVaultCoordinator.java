@@ -454,6 +454,29 @@ public final class SecureVaultCoordinator {
         vaultDataService.setCredentialFavorite(id, favorite, callback);
     }
 
+    /**
+     * Reads the display name from the real encrypted vault.
+     */
+    public void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    ) {
+        vaultDataService.getVaultDisplayName(
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
+
+    /**
+     * Updates the display name in the real encrypted vault.
+     */
+    public void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateVaultDisplayName(
+                displayName,
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
     public void getVaultCounts(
             VaultDataService.ResultCallback<VaultCounts> callback
     ) {

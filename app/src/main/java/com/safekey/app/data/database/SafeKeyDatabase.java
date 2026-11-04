@@ -10,7 +10,8 @@ import java.util.Arrays;
 public class SafeKeyDatabase {
 
     private static final String DEFAULT_DATABASE_NAME = "safekey.db";
-    private static final int DATABASE_VERSION = 2;
+    private static final int DATABASE_VERSION = 3;
+
     public static final int DATABASE_KEY_LENGTH_BYTES = 32;
 
     private final Context context;
@@ -203,6 +204,37 @@ public class SafeKeyDatabase {
         );
     }
 
+    /*
+     * Each encrypted vault database stores its own
+     * display name.
+     *
+     * The fixed ID ensures that the table contains
+     * only one vault-profile record.
+     *
+     * REAL and DECOY databases remain independent.
+     */
+    private void createVaultProfileTable(
+            SQLiteDatabase db
+    ) {
+        db.execSQL(
+                "CREATE TABLE IF NOT EXISTS vault_profile (" +
+                        "id INTEGER PRIMARY KEY CHECK (id = 1), " +
+                        "display_name TEXT NOT NULL DEFAULT 'Local Vault'" +
+                        ")"
+        );
+
+        /*
+         * Insert the default only when the profile
+         * has not already been created.
+         *
+         * Existing customized names are preserved.
+         */
+        db.execSQL(
+                "INSERT OR IGNORE INTO vault_profile " +
+                        "(id, display_name) VALUES (1, 'Local Vault')"
+        );
+    }
+
     private void migrateDatabase(
             SQLiteDatabase db,
             int oldVersion,
@@ -214,8 +246,13 @@ public class SafeKeyDatabase {
         db.beginTransaction();
 
         try {
-            // Fresh databases use the same upgrade path as existing vaults.
-            // Table creation, migration and user_version commit together.
+            /*
+             * Fresh databases use the same upgrade path
+             * as existing vaults.
+             *
+             * Table creation, migration and user_version
+             * are committed together.
+             */
             if (version == 0) {
                 createCredentialsTable(db);
                 createSecureNotesTable(db);
@@ -233,7 +270,19 @@ public class SafeKeyDatabase {
                                         + "CHECK (breach_status IN ("
                                         + "'NOT_CHECKED', 'NOT_FOUND', 'BREACHED', 'ERROR'))"
                         );
+
                         version = 2;
+                        break;
+
+                    case 2:
+                        /*
+                         * Upgrade existing REAL or DECOY
+                         * vaults without modifying their
+                         * credentials or secure notes.
+                         */
+                        createVaultProfileTable(db);
+
+                        version = 3;
                         break;
 
                     default:
