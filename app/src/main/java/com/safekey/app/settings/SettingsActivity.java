@@ -29,6 +29,74 @@ import com.safekey.app.security.storage.SecureVaultCoordinator;
 public class SettingsActivity extends ProtectedActivity {
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (!isFinishing()) {
+            refreshProtectedSettings();
+        }
+    }
+
+    /**
+     * Keep REAL-only controls hidden unless a live, authenticated REAL vault
+     * is selected. Re-run when returning to Settings after another screen.
+     */
+    private boolean refreshProtectedSettings() {
+        SafeKeyApplication application = (SafeKeyApplication) getApplication();
+        SafeKeyApplication.ActiveVault activeVault = application.getActiveVault();
+        boolean unlocked = SafeKeySession.getState()
+                == com.safekey.app.session.logic.SessionState.UNLOCKED;
+
+        if (!unlocked || activeVault == SafeKeyApplication.ActiveVault.NONE) {
+            Intent signIn = new Intent(this, SignInActivity.class);
+            signIn.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(signIn);
+            finish();
+            return false;
+        }
+
+        boolean real = activeVault == SafeKeyApplication.ActiveVault.REAL;
+        int realOnlyVisibility = real ? View.VISIBLE : View.GONE;
+        findViewById(R.id.textSettingsEmergencySection)
+                .setVisibility(realOnlyVisibility);
+        findViewById(R.id.cardSettingsEmergency)
+                .setVisibility(realOnlyVisibility);
+        findViewById(R.id.rowSettingsChangePassword)
+                .setVisibility(realOnlyVisibility);
+        findViewById(R.id.dividerSettingsAccount)
+                .setVisibility(realOnlyVisibility);
+
+        TextView decoyStatus = findViewById(R.id.textSettingsDecoyStatus);
+        if (real) {
+            try {
+                boolean configured = application.getDecoyVaultCoordinator()
+                        .hasDecoyVault();
+                decoyStatus.setText(configured
+                        ? R.string.settings_status_on
+                        : R.string.settings_status_not_configured);
+            } catch (RuntimeException error) {
+                decoyStatus.setText(R.string.settings_status_unavailable);
+            }
+        } else {
+            decoyStatus.setText(R.string.settings_status_unavailable);
+        }
+
+        SwitchCompat biometricSwitch = findViewById(R.id.switchSettingsBiometric);
+        biometricSwitch.setEnabled(false);
+        if (!real) {
+            biometricSwitch.setChecked(false);
+        } else {
+            try {
+                biometricSwitch.setChecked(application.getSecureVaultCoordinator()
+                        .isBiometricUnlockConfigured(this));
+            } catch (Exception error) {
+                biometricSwitch.setChecked(false);
+            }
+        }
+        return true;
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -48,44 +116,8 @@ public class SettingsActivity extends ProtectedActivity {
 
         setContentView(R.layout.activity_settings);
 
-        SafeKeyApplication currentApplication =
-                (SafeKeyApplication) getApplication();
-
-        boolean isRealVault =
-                currentApplication.getActiveVault()
-                        == SafeKeyApplication.ActiveVault.REAL;
-
-        int emergencyVisibility =
-                isRealVault ? View.VISIBLE : View.GONE;
-
-        findViewById(R.id.textSettingsEmergencySection)
-                .setVisibility(emergencyVisibility);
-
-        findViewById(R.id.cardSettingsEmergency)
-                .setVisibility(emergencyVisibility);
-
-        findViewById(R.id.rowSettingsChangePassword)
-                .setVisibility(isRealVault ? View.VISIBLE : View.GONE);
-
-        findViewById(R.id.dividerSettingsAccount)
-                .setVisibility(isRealVault ? View.VISIBLE : View.GONE);
-
-        if (isRealVault) {
-            TextView decoyStatus =
-                    findViewById(R.id.textSettingsDecoyStatus);
-
-            try {
-                boolean configured =
-                        currentApplication.getDecoyVaultCoordinator()
-                                .hasDecoyVault();
-
-                decoyStatus.setText(configured
-                        ? R.string.settings_status_on
-                        : R.string.settings_status_not_configured);
-
-            } catch (Exception exception) {
-                decoyStatus.setText(R.string.settings_status_unavailable);
-            }
+        if (!refreshProtectedSettings()) {
+            return;
         }
 
         // Keep Settings content clear of system bars.
@@ -250,32 +282,5 @@ public class SettingsActivity extends ProtectedActivity {
                     .show();
         });
 
-        SwitchCompat biometricSwitch =
-                findViewById(R.id.switchSettingsBiometric);
-
-        biometricSwitch.setEnabled(false);
-
-        try {
-            SecureVaultCoordinator coordinator =
-                    ((SafeKeyApplication) getApplication())
-                            .getSecureVaultCoordinator();
-
-            boolean isRealBiometricVault =
-                    ((SafeKeyApplication) getApplication()).getActiveVault()
-                            == SafeKeyApplication.ActiveVault.REAL;
-
-            if (isRealBiometricVault) {
-                boolean configured =
-                        coordinator.isBiometricUnlockConfigured(this);
-
-                biometricSwitch.setChecked(configured);
-            } else {
-                biometricSwitch.setChecked(false);
-            }
-
-        } catch (Exception exception) {
-            // Do not show an enabled state if the configuration cannot be read.
-            biometricSwitch.setChecked(false);
-        }
     }
 }
