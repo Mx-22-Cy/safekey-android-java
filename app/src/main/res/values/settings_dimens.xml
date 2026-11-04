@@ -18,7 +18,6 @@
     <dimen name="settings_vault_title_size">15sp</dimen>
     <dimen name="settings_vault_subtitle_size">12sp</dimen>
     <dimen name="settings_vault_badge_text_size">11sp</dimen>
-    <dimen name="settings_vault_edit_touch_size">48dp</dimen>
     <dimen name="settings_edit_icon_size">24dp</dimen>
 
     <!-- Sections -->
@@ -36,8 +35,6 @@
     <dimen name="settings_row_divider_height">1dp</dimen>
 
     <!-- Switch -->
-    <dimen name="settings_switch_width">44dp</dimen>
-    <dimen name="settings_switch_height">26dp</dimen>
 
     <!-- Bottom navigation: reuse existing SafeKey dimensions -->
     <dimen name="settings_content_bottom_padding">16dp</dimen>

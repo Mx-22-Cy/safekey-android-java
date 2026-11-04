@@ -5,6 +5,9 @@ import android.view.WindowManager;
 import android.content.Intent;
 import android.view.View;
 import android.widget.TextView;
+import android.content.SharedPreferences;
+import android.widget.EditText;
+import android.text.InputType;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -25,14 +28,16 @@ import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.alerts.AlertsActivity;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.securityui.SetupDecoyVaultActivity;
+import com.safekey.app.securityui.SetupPanicModeActivity;
 
 public class SettingsActivity extends ProtectedActivity {
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        if (!isFinishing()) {
-            refreshProtectedSettings();
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (!isFinishing() && refreshProtectedSettings()) {
+            refreshVaultDisplayName();
         }
     }
 
@@ -97,8 +102,8 @@ public class SettingsActivity extends ProtectedActivity {
     }
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onRuntimeCreate(Bundle savedInstanceState) {
+        super.onRuntimeCreate(savedInstanceState);
 
         // Prevent screenshots and screen recording on the Settings screen.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -120,6 +125,11 @@ public class SettingsActivity extends ProtectedActivity {
             return;
         }
 
+        refreshVaultDisplayName();
+
+        findViewById(R.id.buttonSettingsEditName)
+                .setOnClickListener(view -> showEditVaultNameDialog());
+
         // Keep Settings content clear of system bars.
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(R.id.rootSettings),
@@ -139,6 +149,38 @@ public class SettingsActivity extends ProtectedActivity {
                     return windowInsets;
                 }
         );
+
+        findViewById(R.id.rowSettingsDecoy).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+
+            SafeKeyApplication app = (SafeKeyApplication) getApplication();
+
+            if (SafeKeySession.getState()
+                    != com.safekey.app.session.logic.SessionState.UNLOCKED
+                    || app.getActiveVault() != SafeKeyApplication.ActiveVault.REAL) {
+                return;
+            }
+
+            startActivity(new Intent(this, SetupDecoyVaultActivity.class));
+        });
+
+        findViewById(R.id.rowSettingsPanic).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity()) {
+                return;
+            }
+
+            SafeKeyApplication app = (SafeKeyApplication) getApplication();
+
+            if (SafeKeySession.getState()
+                    != com.safekey.app.session.logic.SessionState.UNLOCKED
+                    || app.getActiveVault() != SafeKeyApplication.ActiveVault.REAL) {
+                return;
+            }
+
+            startActivity(new Intent(this, SetupPanicModeActivity.class));
+        });
 
         findViewById(R.id.rowSettingsChangePassword).setOnClickListener(view -> {
             if (!SafeKeySession.recordActivity()) {
@@ -282,5 +324,87 @@ public class SettingsActivity extends ProtectedActivity {
                     .show();
         });
 
+    }
+
+    private static final String VAULT_NAME_PREFS = "safekey_vault_display";
+    private static final String REAL_VAULT_NAME = "real_vault_name";
+    private static final String DECOY_VAULT_NAME = "decoy_vault_name";
+
+    private String getVaultNameKey() {
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+
+        return app.getActiveVault() == SafeKeyApplication.ActiveVault.DECOY
+                ? DECOY_VAULT_NAME
+                : REAL_VAULT_NAME;
+    }
+
+    private void refreshVaultDisplayName() {
+        SharedPreferences preferences =
+                getSharedPreferences(VAULT_NAME_PREFS, MODE_PRIVATE);
+
+        String name = preferences.getString(
+                getVaultNameKey(),
+                getString(R.string.settings_local_vault)
+        );
+
+        ((TextView) findViewById(R.id.textSettingsVaultName)).setText(name);
+    }
+
+    private void showEditVaultNameDialog() {
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+
+        if (!SafeKeySession.recordActivity()
+                || SafeKeySession.getState()
+                != com.safekey.app.session.logic.SessionState.UNLOCKED
+                || app.getActiveVault() == SafeKeyApplication.ActiveVault.NONE) {
+            return;
+        }
+
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        input.setFilters(new android.text.InputFilter[]{
+                new android.text.InputFilter.LengthFilter(40)
+        });
+
+        SharedPreferences preferences =
+                getSharedPreferences(VAULT_NAME_PREFS, MODE_PRIVATE);
+
+        String key = getVaultNameKey();
+        input.setText(preferences.getString(
+                key,
+                getString(R.string.settings_local_vault)
+        ));
+
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        int verticalPadding = (int) (8 * getResources().getDisplayMetrics().density);
+
+        android.widget.FrameLayout container = new android.widget.FrameLayout(this);
+        container.setPadding(padding, verticalPadding, padding, verticalPadding);
+        container.addView(input);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Edit Vault Name")
+                .setView(container)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    if (!SafeKeySession.recordActivity()
+                            || app.getActiveVault()
+                            == SafeKeyApplication.ActiveVault.NONE
+                            || !key.equals(getVaultNameKey())) {
+                        return;
+                    }
+
+                    String name = input.getText().toString().trim();
+
+                    if (name.isEmpty()) {
+                        return;
+                    }
+
+                    preferences.edit().putString(key, name).apply();
+                    refreshVaultDisplayName();
+                })
+                .show();
     }
 }

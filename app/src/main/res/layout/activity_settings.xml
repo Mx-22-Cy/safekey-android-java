@@ -4,8 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootSettings"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/auth_background">
+    android:layout_height="match_parent">
 
     <!-- Scrollable Settings content -->
     <androidx.core.widget.NestedScrollView
@@ -99,18 +98,21 @@
 
                         <ImageButton
                             android:id="@+id/buttonSettingsEditName"
-                            android:layout_width="@dimen/settings_vault_edit_touch_size"
-                            android:layout_height="@dimen/settings_vault_edit_touch_size"
-                            android:src="@drawable/ic_settings_edit"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="4dp"
                             android:background="@android:color/transparent"
+                            android:src="@drawable/ic_settings_edit"
                             android:contentDescription="@string/settings_edit_display_name"
-                            android:enabled="false" />
+                            android:scaleType="centerInside"
+                            android:padding="10dp" />
 
                     </LinearLayout>
 
                     <!-- Vault protection subtitle -->
                     <TextView
                         android:id="@+id/textSettingsVaultSubtitle"
+                        android:layout_marginTop="4dp"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_vault_protected"
@@ -123,7 +125,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="start"
-                        android:layout_marginTop="@dimen/settings_section_title_bottom_margin"
+                        android:layout_marginTop="8dp"
                         android:background="@drawable/settings_offline_badge_bg"
                         android:paddingHorizontal="@dimen/alerts_filter_chip_horizontal_padding"
                         android:paddingVertical="@dimen/alerts_occurrence_badge_padding_vertical"
@@ -372,11 +374,15 @@
                     <!-- Biometric Unlock switch -->
                     <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switchSettingsBiometric"
-                        android:layout_width="@dimen/settings_vault_edit_touch_size"
-                        android:layout_height="@dimen/settings_vault_edit_touch_size"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center_vertical"
                         android:showText="false"
                         android:checked="false"
                         android:enabled="false"
+                        android:alpha="1"
+                        app:trackTint="@color/auth_text_secondary"
+                        app:thumbTint="@color/auth_text_primary"
                         android:contentDescription="@string/settings_biometric_title" />
 
                 </LinearLayout>
@@ -627,24 +633,17 @@
                 android:textStyle="bold"
                 android:textAllCaps="true" />
 
-            <!-- App settings card -->
+            <!-- About SafeKey card and row -->
             <LinearLayout
-                android:id="@+id/cardSettingsApp"
+                android:id="@+id/rowSettingsAbout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:minHeight="@dimen/settings_row_min_height"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:background="@drawable/auth_card_bg"
                 android:paddingStart="@dimen/settings_card_horizontal_padding"
                 android:paddingEnd="@dimen/settings_card_horizontal_padding">
-
-                <!-- About SafeKey row -->
-                <LinearLayout
-                    android:id="@+id/rowSettingsAbout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="@dimen/settings_row_min_height"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
 
                     <!-- App icon -->
                     <FrameLayout
@@ -679,11 +678,8 @@
                         android:src="@drawable/ic_alerts_chevron"
                         android:contentDescription="@null" />
 
-                </LinearLayout>
-                <!-- End of About SafeKey row -->
-
             </LinearLayout>
-            <!-- End of cardSettingsApp -->
+            <!-- End of About SafeKey card -->
 
         </LinearLayout>
         <!-- End of layoutSettingsSections -->
