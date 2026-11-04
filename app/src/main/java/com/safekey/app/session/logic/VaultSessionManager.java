@@ -82,6 +82,16 @@ public final class VaultSessionManager {
         return true;
     }
 
+    /** Guard a short commit without evaluating timeout or invoking cleanup. */
+    public synchronized boolean runWhileLocked(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (state != SessionState.LOCKED) {
+            return false;
+        }
+        action.run();
+        return true;
+    }
+
     public synchronized SessionState getState() {
         if (state == SessionState.UNLOCKED) {
             lockIfTimedOut(

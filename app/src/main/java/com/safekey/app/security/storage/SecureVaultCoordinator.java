@@ -16,6 +16,7 @@ import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.auth.logic.MasterPasswordPolicy;
 import com.safekey.app.auth.logic.MasterPasswordValidationResult;
 import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.session.logic.VaultSessionManager;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.breach.PasswordBreachResult;
@@ -50,6 +51,7 @@ public final class SecureVaultCoordinator {
     private final Argon2idMasterKeyDeriver keyDeriver;
     private final AesGcmCipher cipher;
     private final SecureRandom secureRandom;
+    private final RecoveryKeyProtector recoveryKeyProtector;
     private final ExecutorService securityExecutor;
     private final Handler mainHandler;
     private final VaultUnlockFlow unlockFlow;
@@ -77,6 +79,7 @@ public final class SecureVaultCoordinator {
         keyDeriver = new Argon2idMasterKeyDeriver();
         cipher = new AesGcmCipher();
         secureRandom = new SecureRandom();
+        recoveryKeyProtector = new RecoveryKeyProtector(keyDeriver, cipher, secureRandom);
         securityExecutor = Executors.newSingleThreadExecutor();
         runtimeScope.registerExecutor(securityExecutor);
         mainHandler = new Handler(Looper.getMainLooper());
@@ -542,7 +545,8 @@ public final class SecureVaultCoordinator {
     private VaultUnlockFlow.Request createVaultForEnrollmentWhileRunning(
             char[] masterPassword,
             MasterPasswordCheckStatus checkStatus,
-            VaultDataService.SimpleCallback callback
+            VaultDataService.SimpleCallback callback,
+            char[] recoveryKey
     ) {
         Objects.requireNonNull(callback, "callback");
         requireNewPassword(masterPassword);
@@ -561,7 +565,7 @@ public final class SecureVaultCoordinator {
             });
             VaultUnlockFlow.Request scheduled = request;
             executeSecurity(() -> createEnrollmentInBackground(
-                    copy, checkStatus, scheduled));
+                    copy, checkStatus, scheduled, recoveryKey));
             return request;
         } catch (RuntimeException error) {
             clear(copy);
@@ -573,7 +577,8 @@ public final class SecureVaultCoordinator {
     private void createEnrollmentInBackground(
             char[] password,
             MasterPasswordCheckStatus checkStatus,
-            VaultUnlockFlow.Request request
+            VaultUnlockFlow.Request request,
+            char[] recoveryKey
     ) {
         byte[] salt = null;
         byte[] masterKey = null;
@@ -589,12 +594,18 @@ public final class SecureVaultCoordinator {
             secureRandom.nextBytes(databaseKey);
             VaultKeyEnvelope envelope = new VaultKeyEnvelope(salt,
                     cipher.encrypt(databaseKey, masterKey, databaseKeyContext()));
+            VaultKeyEnvelope recoveryEnvelope = recoveryKey == null
+                    ? null : recoveryKeyProtector.wrap(recoveryKey, databaseKey);
             try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
                     PanicPasswordSeparation.Role.MASTER, password)) {
                 if (!request.isActive()) { return; }
                 separation.commit(() -> {
                     if (envelopeStore.hasEnvelope()) { throw new IllegalStateException("A vault has already been created."); }
-                    envelopeStore.save(envelope, checkStatus);
+                    if (recoveryEnvelope == null) {
+                        envelopeStore.save(envelope, checkStatus);
+                    } else {
+                        envelopeStore.saveForEnrollmentWithRecovery(envelope, checkStatus, recoveryEnvelope);
+                    }
                 });
             }
             // A saved envelope is retained if the UI leaves: future sign-in can
@@ -604,6 +615,7 @@ public final class SecureVaultCoordinator {
             unlockFlow.fail(request, error);
         } finally {
             clear(password);
+            clear(recoveryKey);
             clear(salt);
             clear(masterKey);
             clear(databaseKey);
@@ -1023,16 +1035,220 @@ public final class SecureVaultCoordinator {
         );
     }
 
+    public EnrollmentRecoveryKey prepareEnrollmentRecoveryKey() {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            if (envelopeStore.hasEnvelope()) {
+                throw new IllegalStateException("A vault has already been created.");
+            }
+            return new EnrollmentRecoveryKey(this, recoveryKeyProtector.generateRecoveryKey());
+        }
+    }
+
+    /** Call after the user confirms saving the displayed key. This consumes the handle. */
+    public VaultUnlockFlow.Request createVaultForEnrollmentWithRecovery(
+            char[] masterPassword,
+            MasterPasswordCheckStatus checkStatus,
+            EnrollmentRecoveryKey confirmedKey,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            char[] key = Objects.requireNonNull(confirmedKey, "confirmedKey").consume(this);
+            boolean submitted = false;
+            try {
+                VaultUnlockFlow.Request request = createVaultForEnrollmentWhileRunning(
+                        masterPassword, checkStatus, callback, key);
+                submitted = true;
+                return request;
+            } finally {
+                if (!submitted) {
+                    clear(key);
+                }
+            }
+        }
+    }
+
+    public static final class EnrollmentRecoveryKey implements AutoCloseable {
+        private final SecureVaultCoordinator owner;
+        private final PanicRuntimeScope.Registration cancellation;
+        private char[] key;
+        private boolean displayCopyTaken;
+
+        private EnrollmentRecoveryKey(SecureVaultCoordinator owner, char[] key) {
+            this.owner = owner;
+            this.key = key;
+            cancellation = owner.runtimeScope.onStop(this::close);
+        }
+
+        /** The UI owns the returned copy and must clear it when finished displaying it. */
+        public synchronized char[] takeDisplayCopy() {
+            if (key == null || displayCopyTaken || owner.runtimeScope.isStopped()) {
+                throw new IllegalStateException("Recovery key is unavailable for display.");
+            }
+            char[] copy = key.clone();
+            displayCopyTaken = true;
+            return copy;
+        }
+
+        private synchronized char[] consume(SecureVaultCoordinator expectedOwner) {
+            if (owner != expectedOwner || key == null || !displayCopyTaken
+                    || owner.runtimeScope.isStopped()) {
+                throw new IllegalStateException("Recovery key is unavailable for enrollment.");
+            }
+            char[] result = key;
+            key = null;
+            cancellation.close();
+            return result;
+        }
+
+        @Override
+        public synchronized void close() {
+            clear(key);
+            key = null;
+            if (cancellation != null) {
+                cancellation.close();
+            }
+        }
+    }
+
     public VaultUnlockFlow.Request createVaultForEnrollment(
             char[] masterPassword,
             MasterPasswordCheckStatus checkStatus,
             VaultDataService.SimpleCallback callback
     ) {
         try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
-            return createVaultForEnrollmentWhileRunning(masterPassword, checkStatus, callback);
+            return createVaultForEnrollmentWhileRunning(masterPassword, checkStatus, callback, null);
         }
     }
 
+
+    /** Call from the locked recovery screen after vault authentication readiness. */
+    public MasterPasswordChangeRequest resetMasterPasswordWithRecovery(
+            char[] recoveryKey,
+            char[] newPassword,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            Objects.requireNonNull(callback, "callback");
+            requireNewPassword(newPassword);
+            requireEnrollmentStatus(checkStatus);
+            if (recoveryKey == null || recoveryKey.length == 0) {
+                throw new IllegalArgumentException("Recovery key is required.");
+            }
+            if (SafeKeySession.getManager().getState() != SessionState.LOCKED || isVaultOpen()) {
+                throw new IllegalStateException("Lock the vault before resetting its password.");
+            }
+
+            MasterPasswordChangeRequest request =
+                    new MasterPasswordChangeRequest(recoveryKey, newPassword, runtimeScope);
+            try {
+                executeSecurity(() -> resetMasterPasswordInBackground(request, checkStatus, callback));
+                return request;
+            } catch (RuntimeException error) {
+                request.close();
+                throw error;
+            }
+        }
+    }
+
+    private void resetMasterPasswordInBackground(
+            MasterPasswordChangeRequest request,
+            MasterPasswordCheckStatus checkStatus,
+            VaultDataService.SimpleCallback callback
+    ) {
+        char[][] secrets = request.takePasswords();
+        if (secrets == null) { return; }
+
+        byte[] databaseKey = null;
+        byte[] salt = null;
+        byte[] newMasterKey = null;
+        Exception failure = null;
+        try {
+            if (request.isCancelled() || runtimeScope.isStopped()) {
+                request.close();
+                return;
+            }
+
+            VaultKeyEnvelope original = envelopeStore.load();
+            VaultKeyEnvelope recovery = envelopeStore.loadRecoveryEnvelope();
+            if (original == null || recovery == null) {
+                throw new IllegalStateException("Recovery is unavailable for this vault.");
+            }
+
+            databaseKey = recoveryKeyProtector.unwrap(secrets[0], recovery);
+            if (databaseKey.length != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES) {
+                throw new IllegalStateException("Invalid recovered database key.");
+            }
+            if (request.isCancelled() || runtimeScope.isStopped()) {
+                request.close();
+                return;
+            }
+
+            salt = keyDeriver.generateSalt();
+            newMasterKey = keyDeriver.deriveKey(secrets[1], salt);
+            VaultKeyEnvelope replacement = new VaultKeyEnvelope(salt,
+                    cipher.encrypt(databaseKey, newMasterKey, databaseKeyContext()));
+
+            try (PanicPasswordSeparation.Permit separation = passwordSeparation.prepare(
+                    PanicPasswordSeparation.Role.MASTER, secrets[1])) {
+                VaultSessionManager session = SafeKeySession.getManager();
+                boolean locked = session.runWhileLocked(() -> {
+                    // Session cleanup can enter the unlock flow while holding the session lock.
+                    if (!unlockFlow.isIdleForRecovery() || isVaultOpen()) {
+                        throw new IllegalStateException("Vault authentication is in progress.");
+                    }
+                    request.commit(() -> separation.commit(() -> {
+                        if (!envelopeStore.replaceMasterEnvelopeAfterRecovery(
+                                original, recovery, replacement, checkStatus)) {
+                            throw new IllegalStateException("Vault state changed during recovery.");
+                        }
+                    }));
+                });
+                if (!locked) {
+                    throw new IllegalStateException("Vault state changed during recovery.");
+                }
+            }
+        } catch (Exception error) {
+            failure = error;
+        } finally {
+            clear(secrets[0]);
+            clear(secrets[1]);
+            clear(databaseKey);
+            clear(salt);
+            clear(newMasterKey);
+        }
+
+        deliverRecoveryResetResult(request, callback, failure);
+    }
+
+    private void deliverRecoveryResetResult(
+            MasterPasswordChangeRequest request,
+            VaultDataService.SimpleCallback callback,
+            Exception failure
+    ) {
+        if (request.isCancelled() || runtimeScope.isStopped()) {
+            request.close();
+            return;
+        }
+
+        boolean posted = false;
+        try {
+            posted = runtimeScope.deliver(mainHandler, () -> {
+                try {
+                    if (request.isCancelled()) { return; }
+                    if (failure == null) {
+                        callback.onSuccess();
+                    } else {
+                        callback.onError(failure);
+                    }
+                } finally {
+                    request.close();
+                }
+            });
+        } finally {
+            if (!posted) { request.close(); }
+        }
+    }
 
     public MasterPasswordChangeRequest changeMasterPassword(
             char[] currentPassword,
