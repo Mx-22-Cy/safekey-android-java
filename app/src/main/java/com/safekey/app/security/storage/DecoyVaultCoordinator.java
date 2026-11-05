@@ -312,6 +312,31 @@ public final class DecoyVaultCoordinator implements VaultOperations {
         vaultDataService.setCredentialFavorite(id, favorite, callback);
     }
 
+    /**
+     * Reads the display name from the Decoy Vault database.
+     */
+    @Override
+    public void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    ) {
+        vaultDataService.getVaultDisplayName(
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
+
+    /**
+     * Updates the display name in the Decoy Vault database.
+     */
+    @Override
+    public void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateVaultDisplayName(
+                displayName,
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
     @Override
     public void getVaultCounts(VaultDataService.ResultCallback<VaultCounts> callback) {
         vaultDataService.getVaultCounts(Objects.requireNonNull(callback, "callback"));

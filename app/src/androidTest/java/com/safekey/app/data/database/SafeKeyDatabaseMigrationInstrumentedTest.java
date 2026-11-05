@@ -86,7 +86,7 @@ public class SafeKeyDatabaseMigrationInstrumentedTest {
     @Test
     public void freshDatabase_hasVersion2AndNotCheckedDefault() {
         SQLiteDatabase database = manager.open(databaseKey);
-        assertEquals(2, database.getVersion());
+        assertEquals(3, database.getVersion());
         assertBreachColumn(database);
         insertFixtureRows(database);
         assertEquals("NOT_CHECKED", readStatus(database));
@@ -97,7 +97,7 @@ public class SafeKeyDatabaseMigrationInstrumentedTest {
     public void version1Upgrade_preservesAllCredentialAndNoteFields() {
         createLegacyDatabase(1, false);
         SQLiteDatabase database = manager.open(databaseKey);
-        assertEquals(2, database.getVersion());
+        assertEquals(3, database.getVersion());
         assertBreachColumn(database);
         assertFixtureRowsPreserved(database);
         assertEquals("NOT_CHECKED", readStatus(database));
@@ -107,7 +107,7 @@ public class SafeKeyDatabaseMigrationInstrumentedTest {
     public void version0ExistingTables_areUpgradedWithoutDataLoss() {
         createLegacyDatabase(0, false);
         SQLiteDatabase database = manager.open(databaseKey);
-        assertEquals(2, database.getVersion());
+        assertEquals(3, database.getVersion());
         assertFixtureRowsPreserved(database);
         assertEquals("NOT_CHECKED", readStatus(database));
     }
@@ -123,7 +123,7 @@ public class SafeKeyDatabaseMigrationInstrumentedTest {
         manager.close();
 
         SQLiteDatabase reopened = manager.open(databaseKey);
-        assertEquals(2, reopened.getVersion());
+        assertEquals(3, reopened.getVersion());
         assertEquals("BREACHED", readStatus(reopened));
         assertFixtureRowsPreserved(reopened);
     }
