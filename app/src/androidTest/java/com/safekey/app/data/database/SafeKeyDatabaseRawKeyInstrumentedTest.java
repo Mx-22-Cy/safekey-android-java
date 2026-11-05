@@ -266,10 +266,7 @@ public class SafeKeyDatabaseRawKeyInstrumentedTest {
                     databaseManager.isOpen()
             );
 
-            assertEquals(
-                    2,
-                    database.getVersion()
-            );
+            assertEquals(3, database.getVersion());
 
             Cursor cursor =
                     database.rawQuery(

@@ -1,4 +1,3 @@
-
 package com.safekey.app.security.storage;
 
 import static org.junit.Assert.assertEquals;
@@ -29,8 +28,7 @@ public class SessionBoundVaultOperationsTest {
         SessionBoundVaultOperations operations =
                 new SessionBoundVaultOperations(fake, guard);
 
-        TestCallback<List<Credential>> callback =
-                new TestCallback<>();
+        TestCallback<List<Credential>> callback = new TestCallback<>();
 
         operations.getCredentials(callback);
 
@@ -48,8 +46,7 @@ public class SessionBoundVaultOperationsTest {
         SessionBoundVaultOperations operations =
                 new SessionBoundVaultOperations(fake, guard);
 
-        TestCallback<List<Credential>> callback =
-                new TestCallback<>();
+        TestCallback<List<Credential>> callback = new TestCallback<>();
 
         operations.getCredentials(callback);
 
@@ -73,19 +70,15 @@ public class SessionBoundVaultOperationsTest {
         SessionBoundVaultOperations operations =
                 new SessionBoundVaultOperations(fake, guard);
 
-        TestCallback<List<Credential>> callback =
-                new TestCallback<>();
+        TestCallback<List<Credential>> callback = new TestCallback<>();
 
         operations.getCredentials(callback);
 
         assertEquals(1, fake.requestCount);
 
-        // Simulate locking while the database request is pending.
         guard.current = false;
 
-        fake.pendingCallback.onSuccess(
-                Collections.emptyList()
-        );
+        fake.pendingCallback.onSuccess(Collections.emptyList());
 
         assertEquals(0, callback.successCount);
         assertNull(callback.result);
@@ -101,8 +94,7 @@ public class SessionBoundVaultOperationsTest {
         SessionBoundVaultOperations operations =
                 new SessionBoundVaultOperations(fake, guard);
 
-        TestCallback<List<Credential>> callback =
-                new TestCallback<>();
+        TestCallback<List<Credential>> callback = new TestCallback<>();
 
         operations.getCredentials(callback);
 
@@ -114,6 +106,145 @@ public class SessionBoundVaultOperationsTest {
 
         assertEquals(0, callback.successCount);
         assertNotNull(callback.error);
+        assertEquals(
+                "The authenticated vault session is no longer active.",
+                callback.error.getMessage()
+        );
+    }
+
+    @Test
+    public void activeSession_canReadVaultDisplayName() {
+        TestGuard guard = new TestGuard();
+        FakeVaultOperations fake = new FakeVaultOperations();
+
+        SessionBoundVaultOperations operations =
+                new SessionBoundVaultOperations(fake, guard);
+
+        TestCallback<String> callback = new TestCallback<>();
+
+        operations.getVaultDisplayName(callback);
+
+        assertEquals(1, fake.displayNameReadCount);
+        assertNotNull(fake.pendingNameCallback);
+
+        fake.pendingNameCallback.onSuccess("Local Vault");
+
+        assertEquals(1, callback.successCount);
+        assertEquals("Local Vault", callback.result);
+        assertNull(callback.error);
+    }
+
+    @Test
+    public void activeSession_canRequestVaultRename() {
+        TestGuard guard = new TestGuard();
+        FakeVaultOperations fake = new FakeVaultOperations();
+
+        SessionBoundVaultOperations operations =
+                new SessionBoundVaultOperations(fake, guard);
+
+        TestCallback<Integer> callback = new TestCallback<>();
+
+        operations.updateVaultDisplayName("My Vault", callback);
+
+        assertEquals(1, fake.displayNameUpdateCount);
+        assertEquals("My Vault", fake.requestedDisplayName);
+        assertNotNull(fake.pendingUpdateCallback);
+
+        fake.pendingUpdateCallback.onSuccess(1);
+
+        assertEquals(1, callback.successCount);
+        assertEquals(Integer.valueOf(1), callback.result);
+        assertNull(callback.error);
+    }
+
+    @Test
+    public void lockedSession_rejectsDisplayNameOperations() {
+        TestGuard guard = new TestGuard();
+        guard.current = false;
+
+        FakeVaultOperations fake = new FakeVaultOperations();
+
+        SessionBoundVaultOperations operations =
+                new SessionBoundVaultOperations(fake, guard);
+
+        TestCallback<String> readCallback = new TestCallback<>();
+        TestCallback<Integer> updateCallback = new TestCallback<>();
+
+        operations.getVaultDisplayName(readCallback);
+
+        operations.updateVaultDisplayName(
+                "Should Not Be Saved",
+                updateCallback
+        );
+
+        assertEquals(0, fake.displayNameReadCount);
+        assertEquals(0, fake.displayNameUpdateCount);
+
+        assertEquals(0, readCallback.successCount);
+        assertEquals(0, updateCallback.successCount);
+
+        assertNotNull(readCallback.error);
+        assertNotNull(updateCallback.error);
+
+        assertTrue(
+                readCallback.error instanceof IllegalStateException
+        );
+
+        assertTrue(
+                updateCallback.error instanceof IllegalStateException
+        );
+    }
+
+    @Test
+    public void expiredSession_rejectsDelayedDisplayNameResult() {
+        TestGuard guard = new TestGuard();
+        FakeVaultOperations fake = new FakeVaultOperations();
+
+        SessionBoundVaultOperations operations =
+                new SessionBoundVaultOperations(fake, guard);
+
+        TestCallback<String> callback = new TestCallback<>();
+
+        operations.getVaultDisplayName(callback);
+
+        assertEquals(1, fake.displayNameReadCount);
+
+        guard.current = false;
+
+        fake.pendingNameCallback.onSuccess("Private Vault");
+
+        assertEquals(0, callback.successCount);
+        assertNull(callback.result);
+        assertNotNull(callback.error);
+
+        assertEquals(
+                "The authenticated vault session is no longer active.",
+                callback.error.getMessage()
+        );
+    }
+
+    @Test
+    public void expiredSession_rejectsDelayedRenameCallback() {
+        TestGuard guard = new TestGuard();
+        FakeVaultOperations fake = new FakeVaultOperations();
+
+        SessionBoundVaultOperations operations =
+                new SessionBoundVaultOperations(fake, guard);
+
+        TestCallback<Integer> callback = new TestCallback<>();
+
+        operations.updateVaultDisplayName("Old Session Name", callback);
+
+        assertEquals(1, fake.displayNameUpdateCount);
+
+        guard.current = false;
+
+        fake.pendingUpdateCallback.onSuccess(1);
+
+        assertEquals(0, callback.successCount);
+        assertNull(callback.result);
+        assertNotNull(callback.error);
+
         assertEquals(
                 "The authenticated vault session is no longer active.",
                 callback.error.getMessage()
@@ -164,9 +295,37 @@ public class SessionBoundVaultOperationsTest {
             implements VaultOperations {
 
         int requestCount;
+        int displayNameReadCount;
+        int displayNameUpdateCount;
+
+        String requestedDisplayName;
 
         VaultDataService.ResultCallback<List<Credential>>
                 pendingCallback;
+
+        VaultDataService.ResultCallback<String>
+                pendingNameCallback;
+
+        VaultDataService.ResultCallback<Integer>
+                pendingUpdateCallback;
+
+        @Override
+        public void getVaultDisplayName(
+                VaultDataService.ResultCallback<String> callback
+        ) {
+            displayNameReadCount++;
+            pendingNameCallback = callback;
+        }
+
+        @Override
+        public void updateVaultDisplayName(
+                String displayName,
+                VaultDataService.ResultCallback<Integer> callback
+        ) {
+            displayNameUpdateCount++;
+            requestedDisplayName = displayName;
+            pendingUpdateCallback = callback;
+        }
 
         @Override
         public void getCredentials(
