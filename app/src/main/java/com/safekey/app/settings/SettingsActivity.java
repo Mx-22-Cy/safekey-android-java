@@ -3,6 +3,10 @@ package com.safekey.app.settings;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
+import android.text.Editable;
+import android.text.method.PasswordTransformationMethod;
+import android.widget.Toast;
+import java.util.Arrays;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
@@ -27,6 +31,7 @@ import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.securityui.SetupDecoyVaultActivity;
 import com.safekey.app.securityui.SetupPanicModeActivity;
 import com.safekey.app.session.ProtectedActivity;
@@ -43,6 +48,11 @@ public class SettingsActivity extends ProtectedActivity {
     private long vaultNameRequestGeneration;
     private String loadedVaultName;
     private boolean vaultNameLoaded;
+    private AlertDialog renameDialog;
+    private AlertDialog biometricDialog;
+    private boolean biometricConfigured;
+    private boolean biometricBusy;
+    private long biometricUiGeneration;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
@@ -68,6 +78,21 @@ public class SettingsActivity extends ProtectedActivity {
 
         findViewById(R.id.buttonSettingsEditName)
                 .setOnClickListener(view -> showEditVaultNameDialog());
+
+        SwitchCompat biometricSwitch = findViewById(R.id.switchSettingsBiometric);
+        biometricSwitch.setOnClickListener(view -> {
+            // A tap requests a change; it does not establish that the change succeeded.
+            biometricSwitch.setChecked(biometricConfigured);
+            if (!isAuthenticatedRealVault() || biometricBusy) {
+                refreshBiometricSwitch();
+                return;
+            }
+            if (biometricConfigured) {
+                showDisableBiometricDialog();
+            } else {
+                showEnableBiometricDialog();
+            }
+        });
 
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(R.id.rootSettings),
@@ -194,6 +219,10 @@ public class SettingsActivity extends ProtectedActivity {
 
     @Override
     protected void onRuntimeStop() {
+        dismissRenameDialog();
+        dismissBiometricDialog();
+        biometricUiGeneration++;
+        biometricBusy = false;
         invalidateVaultNameRequests();
         super.onRuntimeStop();
     }
@@ -233,19 +262,222 @@ public class SettingsActivity extends ProtectedActivity {
             decoyStatus.setText(R.string.settings_status_unavailable);
         }
 
-        SwitchCompat biometricSwitch = findViewById(R.id.switchSettingsBiometric);
-        biometricSwitch.setEnabled(false);
-        if (!real) {
-            biometricSwitch.setChecked(false);
-        } else {
-            try {
-                biometricSwitch.setChecked(application.getSecureVaultCoordinator()
-                        .isBiometricUnlockConfigured(this));
-            } catch (Exception error) {
-                biometricSwitch.setChecked(false);
-            }
-        }
+        refreshBiometricSwitch();
         return true;
+    }
+
+    private boolean isAuthenticatedRealVault() {
+        SafeKeyApplication application = (SafeKeyApplication) getApplication();
+        return !isFinishing() && !isDestroyed()
+                && SafeKeySession.getState() == SessionState.UNLOCKED
+                && application.getActiveVault() == SafeKeyApplication.ActiveVault.REAL;
+    }
+
+    private void refreshBiometricSwitch() {
+        SwitchCompat biometricSwitch = findViewById(R.id.switchSettingsBiometric);
+        if (!isAuthenticatedRealVault()) {
+            biometricConfigured = false;
+            biometricSwitch.setChecked(false);
+            biometricSwitch.setEnabled(false);
+            return;
+        }
+        try {
+            SecureVaultCoordinator coordinator = ((SafeKeyApplication) getApplication())
+                    .getSecureVaultCoordinator();
+            biometricConfigured = coordinator.isBiometricUnlockConfigured(this);
+            boolean available = "AVAILABLE".equals(coordinator.getBiometricAvailability(this).name());
+            biometricSwitch.setChecked(biometricConfigured);
+            // Disabling must remain possible even if biometrics are no longer available.
+            biometricSwitch.setEnabled(!biometricBusy && (biometricConfigured || available));
+        } catch (Exception error) {
+            biometricSwitch.setEnabled(false);
+            biometricSwitch.setChecked(false);
+        }
+    }
+
+    private boolean isCurrentBiometricOperation(long request, long authentication) {
+        return request == biometricUiGeneration && isAuthenticatedRealVault()
+                && SafeKeySession.getManager().getAuthenticationGeneration() == authentication;
+    }
+
+    private void dismissBiometricDialog() {
+        AlertDialog dialog = biometricDialog;
+        biometricDialog = null;
+        if (dialog != null) {
+            // Clear the input synchronously before the window is dismissed.
+            // AlertDialog dismissal listeners may run on a later UI message.
+            EditText input = dialog.findViewById(R.id.editSettingsBiometricPassword);
+            if (input != null && input.getText() != null) {
+                input.getText().clear();
+            }
+            dialog.dismiss();
+        }
+    }
+
+    private void showEnableBiometricDialog() {
+        if (!SafeKeySession.recordActivity() || !isAuthenticatedRealVault()) {
+            return;
+        }
+        dismissBiometricDialog();
+        EditText passwordInput = new EditText(this);
+        passwordInput.setId(R.id.editSettingsBiometricPassword);
+        passwordInput.setSingleLine(true);
+        passwordInput.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        passwordInput.setHint(R.string.t38_biometric_password_hint);
+
+        int horizontal = getResources().getDimensionPixelSize(
+                R.dimen.t38_rename_dialog_horizontal_padding);
+        int vertical = getResources().getDimensionPixelSize(
+                R.dimen.t38_rename_dialog_vertical_padding);
+        FrameLayout container = new FrameLayout(this);
+        container.setPadding(horizontal, vertical, horizontal, vertical);
+        container.addView(passwordInput);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.t38_biometric_password_title)
+                .setView(container)
+                .setNegativeButton(R.string.t38_biometric_cancel, null)
+                .setPositiveButton(R.string.t38_biometric_continue, null)
+                .create();
+        biometricDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            Editable editable = passwordInput.getText();
+            if (editable != null) {
+                editable.clear();
+            }
+            if (biometricDialog == dialog) {
+                biometricDialog = null;
+            }
+            refreshBiometricSwitch();
+        });
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    if (!SafeKeySession.recordActivity() || !isAuthenticatedRealVault()) {
+                        dialog.dismiss();
+                        return;
+                    }
+                    Editable editable = passwordInput.getText();
+                    int length = editable == null ? 0 : editable.length();
+                    if (length == 0) {
+                        passwordInput.setError(getString(R.string.t38_biometric_password_required));
+                        return;
+                    }
+                    char[] password = new char[length];
+                    try {
+                        for (int i = 0; i < length; i++) {
+                            password[i] = editable.charAt(i);
+                        }
+                        // The coordinator makes its own password copy before returning.
+                        long authentication = SafeKeySession.getManager()
+                                .getAuthenticationGeneration();
+                        long request = ++biometricUiGeneration;
+                        biometricBusy = true;
+                        dialog.dismiss();
+                        refreshBiometricSwitch();
+                        ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator()
+                                .enableBiometricUnlock(this, password,
+                                        getString(R.string.biometric_enable_title),
+                                        getString(R.string.biometric_enable_message),
+                                        new SecureVaultCoordinator.BiometricSetupCallback() {
+                                            @Override
+                                            public void onEnabled() {
+                                                finishBiometricOperation(request, authentication, true);
+                                            }
+
+                                            @Override
+                                            public void onError(String message) {
+                                                finishBiometricOperation(request, authentication, false);
+                                            }
+
+                                            @Override
+                                            public void onFailed() {
+                                                // A failed scan can be retried by the system prompt.
+                                            }
+                                        });
+                    } catch (RuntimeException error) {
+                        biometricBusy = false;
+                        refreshBiometricSwitch();
+                        Toast.makeText(this, R.string.t38_biometric_enable_error,
+                                Toast.LENGTH_LONG).show();
+                    } finally {
+                        Arrays.fill(password, '\0');
+                        if (editable != null) {
+                            editable.clear();
+                        }
+                    }
+                }));
+        dialog.show();
+    }
+
+    private void showDisableBiometricDialog() {
+        if (!SafeKeySession.recordActivity() || !isAuthenticatedRealVault()) {
+            return;
+        }
+        dismissBiometricDialog();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.t38_biometric_disable_title)
+                .setMessage(R.string.t38_biometric_disable_message)
+                .setNegativeButton(R.string.t38_biometric_cancel, null)
+                .setPositiveButton(R.string.t38_biometric_disable, (ignored, which) -> {
+                    if (!SafeKeySession.recordActivity() || !isAuthenticatedRealVault()) {
+                        return;
+                    }
+                    long authentication = SafeKeySession.getManager()
+                            .getAuthenticationGeneration();
+                    long request = ++biometricUiGeneration;
+                    biometricBusy = true;
+                    refreshBiometricSwitch();
+                    try {
+                        ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator()
+                                .disableBiometricUnlock(this, new VaultDataService.SimpleCallback() {
+                                    @Override
+                                    public void onSuccess() {
+                                        finishBiometricOperation(request, authentication, true);
+                                    }
+
+                                    @Override
+                                    public void onError(Exception error) {
+                                        finishBiometricOperation(request, authentication, false);
+                                    }
+                                });
+                    } catch (RuntimeException error) {
+                        finishBiometricOperation(request, authentication, false);
+                    }
+                })
+                .create();
+        biometricDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (biometricDialog == dialog) {
+                biometricDialog = null;
+            }
+            refreshBiometricSwitch();
+        });
+        dialog.show();
+    }
+
+    private void finishBiometricOperation(long request, long authentication,
+                                          boolean successful) {
+        runOnUiThread(() -> {
+            if (!isCurrentBiometricOperation(request, authentication)) {
+                return;
+            }
+            biometricBusy = false;
+            refreshBiometricSwitch();
+            if (!successful) {
+                Toast.makeText(this, R.string.t38_biometric_operation_error,
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void dismissRenameDialog() {
+        AlertDialog dialog = renameDialog;
+        renameDialog = null;
+        if (dialog != null) {
+            dialog.dismiss();
+        }
     }
 
     private void invalidateVaultNameRequests() {
@@ -346,6 +578,8 @@ public class SettingsActivity extends ProtectedActivity {
             return;
         }
 
+        dismissRenameDialog();
+
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
@@ -355,37 +589,46 @@ public class SettingsActivity extends ProtectedActivity {
         input.setText(loadedVaultName);
         input.setSelection(input.length());
 
-        int padding = (int) (24 * getResources().getDisplayMetrics().density);
-        int verticalPadding = (int) (8 * getResources().getDisplayMetrics().density);
+        int padding = getResources().getDimensionPixelSize(
+                R.dimen.t38_rename_dialog_horizontal_padding);
+        int verticalPadding = getResources().getDimensionPixelSize(
+                R.dimen.t38_rename_dialog_vertical_padding);
         FrameLayout container = new FrameLayout(this);
         container.setPadding(padding, verticalPadding, padding, verticalPadding);
         container.addView(input);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Edit Vault Name")
+                .setTitle(R.string.t38_rename_dialog_title)
                 .setView(container)
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(R.string.t38_rename_cancel, null)
                 // Override below to keep the dialog open on validation/save errors.
-                .setPositiveButton("Save", null)
+                .setPositiveButton(R.string.t38_rename_save, null)
                 .create();
+
+        renameDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (renameDialog == dialog) {
+                renameDialog = null;
+            }
+        });
 
         dialog.setOnShowListener(ignored -> {
             Button save = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             save.setOnClickListener(view -> {
                 if (!SafeKeySession.recordActivity()
                         || !isCurrentVaultRequest(requestGeneration,
-                        authenticationGeneration, expectedVault, operations)) {
+                                authenticationGeneration, expectedVault, operations)) {
                     dialog.dismiss();
                     return;
                 }
 
                 String name = input.getText().toString().trim();
                 if (name.isEmpty()) {
-                    input.setError("Vault name cannot be empty.");
+                    input.setError(getString(R.string.t38_rename_empty_error));
                     return;
                 }
                 if (name.length() > MAX_VAULT_NAME_LENGTH) {
-                    input.setError("Vault name cannot exceed 64 characters.");
+                    input.setError(getString(R.string.t38_rename_too_long_error));
                     return;
                 }
 
@@ -414,21 +657,21 @@ public class SettingsActivity extends ProtectedActivity {
                                 public void onError(Exception exception) {
                                     if (!dialog.isShowing()
                                             || !isCurrentVaultRequest(requestGeneration,
-                                            authenticationGeneration,
-                                            expectedVault, operations)) {
+                                                    authenticationGeneration,
+                                                    expectedVault, operations)) {
                                         dialog.dismiss();
                                         return;
                                     }
                                     input.setEnabled(true);
                                     save.setEnabled(true);
-                                    input.setError("Could not save the vault name. Try again.");
+                                    input.setError(getString(R.string.t38_rename_save_error));
                                 }
                             });
                 } catch (RuntimeException exception) {
                     if (dialog.isShowing()) {
                         input.setEnabled(true);
                         save.setEnabled(true);
-                        input.setError("Could not save the vault name. Try again.");
+                        input.setError(getString(R.string.t38_rename_save_error));
                     }
                 }
             });
