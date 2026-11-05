@@ -78,7 +78,7 @@
                     android:layout_marginStart="@dimen/settings_row_icon_gap"
                     android:orientation="vertical">
 
-                <!-- Vault name and edit button -->
+                    <!-- Vault name and edit button -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -98,21 +98,21 @@
 
                         <ImageButton
                             android:id="@+id/buttonSettingsEditName"
-                            android:layout_width="40dp"
-                            android:layout_height="40dp"
-                            android:layout_marginStart="4dp"
+                            android:layout_width="@dimen/settings_edit_button_size"
+                            android:layout_height="@dimen/settings_edit_button_size"
+                            android:layout_marginStart="@dimen/settings_small_spacing"
                             android:background="@android:color/transparent"
                             android:src="@drawable/ic_settings_edit"
                             android:contentDescription="@string/settings_edit_display_name"
                             android:scaleType="centerInside"
-                            android:padding="10dp" />
+                            android:padding="@dimen/settings_edit_button_padding" />
 
                     </LinearLayout>
 
                     <!-- Vault protection subtitle -->
                     <TextView
                         android:id="@+id/textSettingsVaultSubtitle"
-                        android:layout_marginTop="4dp"
+                        android:layout_marginTop="@dimen/settings_small_spacing"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_vault_protected"
@@ -125,7 +125,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="start"
-                        android:layout_marginTop="8dp"
+                        android:layout_marginTop="@dimen/settings_small_spacing_large"
                         android:background="@drawable/settings_offline_badge_bg"
                         android:paddingHorizontal="@dimen/alerts_filter_chip_horizontal_padding"
                         android:paddingVertical="@dimen/alerts_occurrence_badge_padding_vertical"
@@ -375,7 +375,7 @@
                     <androidx.appcompat.widget.SwitchCompat
                         android:id="@+id/switchSettingsBiometric"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
+                        android:layout_height="@dimen/settings_switch_touch_height"
                         android:layout_gravity="center_vertical"
                         android:showText="false"
                         android:checked="false"
@@ -645,38 +645,38 @@
                 android:paddingStart="@dimen/settings_card_horizontal_padding"
                 android:paddingEnd="@dimen/settings_card_horizontal_padding">
 
-                    <!-- App icon -->
-                    <FrameLayout
-                        android:layout_width="@dimen/settings_row_icon_size"
-                        android:layout_height="@dimen/settings_row_icon_size"
-                        android:layout_marginEnd="@dimen/settings_row_icon_gap"
-                        android:background="@drawable/settings_vault_icon_bg">
+                <!-- App icon -->
+                <FrameLayout
+                    android:layout_width="@dimen/settings_row_icon_size"
+                    android:layout_height="@dimen/settings_row_icon_size"
+                    android:layout_marginEnd="@dimen/settings_row_icon_gap"
+                    android:background="@drawable/settings_vault_icon_bg">
 
-                        <ImageView
-                            android:layout_width="@dimen/settings_edit_icon_size"
-                            android:layout_height="@dimen/settings_edit_icon_size"
-                            android:layout_gravity="center"
-                            android:src="@drawable/ic_safekey_logo"
-                            android:contentDescription="@null" />
-
-                    </FrameLayout>
-
-                    <!-- About label -->
-                    <TextView
-                        android:id="@+id/textSettingsAbout"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/settings_about"
-                        android:textColor="@color/auth_text_primary"
-                        android:textSize="@dimen/settings_row_text_size" />
-
-                    <!-- Chevron -->
                     <ImageView
                         android:layout_width="@dimen/settings_edit_icon_size"
                         android:layout_height="@dimen/settings_edit_icon_size"
-                        android:src="@drawable/ic_alerts_chevron"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_safekey_logo"
                         android:contentDescription="@null" />
+
+                </FrameLayout>
+
+                <!-- About label -->
+                <TextView
+                    android:id="@+id/textSettingsAbout"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings_about"
+                    android:textColor="@color/auth_text_primary"
+                    android:textSize="@dimen/settings_row_text_size" />
+
+                <!-- Chevron -->
+                <ImageView
+                    android:layout_width="@dimen/settings_edit_icon_size"
+                    android:layout_height="@dimen/settings_edit_icon_size"
+                    android:src="@drawable/ic_alerts_chevron"
+                    android:contentDescription="@null" />
 
             </LinearLayout>
             <!-- End of About SafeKey card -->
@@ -690,13 +690,13 @@
     <LinearLayout
         android:id="@+id/bottomNavigationSettings"
         android:layout_width="0dp"
-        android:layout_height="76dp"
+        android:layout_height="@dimen/settings_nav_height"
         android:background="@color/vault_panel"
         android:baselineAligned="false"
         android:gravity="center"
         android:orientation="horizontal"
-        android:paddingTop="8dp"
-        android:paddingBottom="6dp"
+        android:paddingTop="@dimen/settings_small_spacing_large"
+        android:paddingBottom="@dimen/settings_nav_padding_bottom"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
@@ -710,20 +710,16 @@
             android:gravity="center"
             android:orientation="vertical">
 
-            <ImageView
-                android:layout_width="21dp"
-                android:layout_height="21dp"
-                android:src="@drawable/ic_home"
-                android:contentDescription="@null"
-                app:tint="@color/vault_text_faint" />
-
-            <TextView
+            <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
+                android:gravity="center"
+                app:drawableTopCompat="@drawable/ic_home"
+                app:drawableTint="@color/vault_text_faint"
+                android:drawablePadding="@dimen/settings_nav_icon_label_gap"
                 android:text="@string/home_nav_home"
                 android:textColor="@color/vault_text_faint"
-                android:textSize="11sp" />
+                android:textSize="@dimen/settings_nav_label_text_size" />
         </LinearLayout>
 
         <!-- Vault -->
@@ -735,20 +731,16 @@
             android:gravity="center"
             android:orientation="vertical">
 
-            <ImageView
-                android:layout_width="21dp"
-                android:layout_height="21dp"
-                android:src="@drawable/ic_vault"
-                android:contentDescription="@null"
-                app:tint="@color/vault_text_faint" />
-
-            <TextView
+            <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
+                android:gravity="center"
+                app:drawableTopCompat="@drawable/ic_vault"
+                app:drawableTint="@color/vault_text_faint"
+                android:drawablePadding="@dimen/settings_nav_icon_label_gap"
                 android:text="@string/home_nav_vault"
                 android:textColor="@color/vault_text_faint"
-                android:textSize="11sp" />
+                android:textSize="@dimen/settings_nav_label_text_size" />
         </LinearLayout>
 
         <!-- Generator -->
@@ -760,20 +752,16 @@
             android:gravity="center"
             android:orientation="vertical">
 
-            <ImageView
-                android:layout_width="21dp"
-                android:layout_height="21dp"
-                android:src="@drawable/ic_generate_password"
-                android:contentDescription="@null"
-                app:tint="@color/vault_text_faint" />
-
-            <TextView
+            <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
+                android:gravity="center"
+                app:drawableTopCompat="@drawable/ic_generate_password"
+                app:drawableTint="@color/vault_text_faint"
+                android:drawablePadding="@dimen/settings_nav_icon_label_gap"
                 android:text="@string/generator_nav"
                 android:textColor="@color/vault_text_faint"
-                android:textSize="11sp" />
+                android:textSize="@dimen/settings_nav_label_text_size" />
         </LinearLayout>
 
         <!-- Alerts -->
@@ -785,20 +773,16 @@
             android:gravity="center"
             android:orientation="vertical">
 
-            <ImageView
-                android:layout_width="21dp"
-                android:layout_height="21dp"
-                android:src="@drawable/ic_alerts"
-                android:contentDescription="@null"
-                app:tint="@color/vault_text_faint" />
-
-            <TextView
+            <androidx.appcompat.widget.AppCompatTextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="5dp"
+                android:gravity="center"
+                app:drawableTopCompat="@drawable/ic_alerts"
+                app:drawableTint="@color/vault_text_faint"
+                android:drawablePadding="@dimen/settings_nav_icon_label_gap"
                 android:text="@string/home_nav_alerts"
                 android:textColor="@color/vault_text_faint"
-                android:textSize="11sp" />
+                android:textSize="@dimen/settings_nav_label_text_size" />
         </LinearLayout>
 
         <!-- Settings (active) -->
@@ -811,13 +795,13 @@
             android:orientation="vertical">
 
             <FrameLayout
-                android:layout_width="42dp"
-                android:layout_height="30dp"
+                android:layout_width="@dimen/settings_nav_selected_bg_width"
+                android:layout_height="@dimen/settings_nav_selected_bg_height"
                 android:background="@drawable/vault_nav_active_bg">
 
                 <ImageView
-                    android:layout_width="21dp"
-                    android:layout_height="21dp"
+                    android:layout_width="@dimen/settings_nav_icon_size"
+                    android:layout_height="@dimen/settings_nav_icon_size"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_settings"
                     android:contentDescription="@null"
@@ -827,10 +811,10 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="@dimen/settings_nav_selected_label_gap"
                 android:text="@string/home_nav_settings"
                 android:textColor="@color/vault_accent"
-                android:textSize="11sp"
+                android:textSize="@dimen/settings_nav_label_text_size"
                 android:textStyle="bold" />
         </LinearLayout>
 
