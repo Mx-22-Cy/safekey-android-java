@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- T39: TOTP Setup UI -->
+
+    <string name="t39_title">Authenticator App</string>
+
+    <string name="t39_description">Add an extra layer of security to your SafeKey vault using an authenticator app.</string>
+
+    <string name="t39_info_title">How it works</string>
+
+    <string name="t39_info_description">After setup, you will need a six-digit code from your authenticator app when signing in to SafeKey.</string>
+
+    <string name="t39_start_setup">Set Up Authenticator</string>
+
+    <string name="t39_setup_title">Connect Your Authenticator</string>
+
+    <string name="t39_setup_description">Scan the QR code using your authenticator app, or enter the setup key manually.</string>
+
+    <string name="t39_qr_title">Scan QR Code</string>
+
+    <string name="t39_qr_description">Open your authenticator app and scan this QR code.</string>
+
+    <string name="t39_manual_key_title">Manual Setup Key</string>
+
+    <string name="t39_manual_key_description">If you cannot scan the QR code, enter this key into your authenticator app.</string>
+
+    <string name="t39_manual_key_hidden">Your setup key is hidden.</string>
+
+    <string name="t39_show_key">Show Setup Key</string>
+
+    <string name="t39_hide_key">Hide Setup Key</string>
+
+    <string name="t39_verify_title">Verify Your Authenticator</string>
+
+    <string name="t39_verify_description">Enter the six-digit code currently shown in your authenticator app.</string>
+
+    <string name="t39_code_hint">6-digit code</string>
+
+    <string name="t39_verify_button">Verify and Enable</string>
+
+    <string name="t39_verifying">Verifying…</string>
+
+    <string name="t39_cancel">Cancel Setup</string>
+
+    <string name="t39_back">Go back</string>
+
+    <string name="t39_success">Authenticator app enabled successfully.</string>
+
+    <string name="t39_already_enabled">An authenticator app is already configured.</string>
+
+    <string name="t39_invalid_code">Incorrect code. Check your authenticator app and try again.</string>
+
+    <string name="t39_invalid_format">Enter a valid six-digit code.</string>
+
+    <string name="t39_attempts_remaining">%1$d attempts remaining.</string>
+
+    <string name="t39_attempt_limit">Too many incorrect attempts. Start setup again.</string>
+
+    <string name="t39_expired">Setup expired. Start again to generate a new key.</string>
+
+    <string name="t39_cancelled">Authenticator setup was cancelled.</string>
+
+    <string name="t39_setup_failed">Unable to start authenticator setup. Please try again.</string>
+
+    <string name="t39_verification_failed">Unable to verify the code. Please try again.</string>
+
+    <string name="t39_session_expired">Your vault session has ended. Sign in again to continue.</string>
+
+    <string name="t39_real_vault_required">Authenticator setup is only available in your main vault.</string>
+
+    <string name="t39_security_warning">Keep your setup key private. Anyone with this key may be able to generate authentication codes for your vault.</string>
+
+    <string name="t39_time_limit">Complete setup within five minutes.</string>
+
+    <string name="t39_not_enabled">Authenticator protection is not enabled until your code is verified.</string>
+
+    <string name="t39_qr_accessibility">Authenticator setup QR code</string>
+
+</resources>
