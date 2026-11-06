@@ -377,7 +377,7 @@ public class SettingsActivity extends ProtectedActivity {
                         dialog.dismiss();
                         refreshBiometricSwitch();
                         ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator()
-                                .enableBiometricUnlock(this, password,
+                                .enableBiometricUnlockForRealSession(this, password,
                                         getString(R.string.biometric_enable_title),
                                         getString(R.string.biometric_enable_message),
                                         new SecureVaultCoordinator.BiometricSetupCallback() {
@@ -431,7 +431,7 @@ public class SettingsActivity extends ProtectedActivity {
                     refreshBiometricSwitch();
                     try {
                         ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator()
-                                .disableBiometricUnlock(this, new VaultDataService.SimpleCallback() {
+                                .disableBiometricUnlockForRealSession(this, new VaultDataService.SimpleCallback() {
                                     @Override
                                     public void onSuccess() {
                                         finishBiometricOperation(request, authentication, true);
