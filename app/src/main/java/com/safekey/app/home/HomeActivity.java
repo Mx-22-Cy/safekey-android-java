@@ -32,6 +32,7 @@ import com.safekey.app.vault.VaultActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.alerts.AlertsActivity;
+import com.safekey.app.settings.SettingsActivity;
 
 public class HomeActivity extends ProtectedActivity {
 
@@ -260,12 +261,19 @@ public class HomeActivity extends ProtectedActivity {
                 }
         );
 
-        navSettings.setOnClickListener(
-                view ->
-                        showProtectedPlaceholder(
-                                R.string.home_settings_navigation_pending
-                        )
-        );
+        navSettings.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) {
+                return;
+            }
+
+            Intent intent = new Intent(
+                    HomeActivity.this,
+                    SettingsActivity.class
+            );
+
+            startActivity(intent);
+            finish();
+        });
 
         buttonOpenVault.setOnClickListener(
                 view ->

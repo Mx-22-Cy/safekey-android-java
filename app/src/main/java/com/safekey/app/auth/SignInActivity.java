@@ -431,6 +431,17 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         navigatingToHome = true;
 
         SafeKeySession.unlockAfterAuthentication();
+
+        // Select the REAL vault only after successful REAL-vault authentication.
+        try {
+            ((SafeKeyApplication) getApplication()).activateRealVault();
+        } catch (RuntimeException error) {
+            SafeKeySession.lock();
+            navigatingToHome = false;
+            abortSignIn(R.string.signin_vault_unlock_error);
+            return;
+        }
+
         try {
             ((SafeKeyApplication) getApplication()).getMasterPasswordHealth()
                     .recheckAfterAuthentication(pendingMasterPasswordRecheck);
