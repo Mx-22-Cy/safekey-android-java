@@ -1,7 +1,10 @@
 package com.safekey.app.securityui;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -9,6 +12,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
@@ -18,100 +22,256 @@ import androidx.core.view.WindowInsetsCompat;
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.security.totp.TotpEnrollmentCoordinator;
+import com.safekey.app.security.totp.TotpEnrollmentService;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
-/**
- * T39 verification presentation. The security coordinator must validate the
- * code against a session-owned pending enrollment before enabling protection.
- */
+import java.util.Arrays;
+import java.util.Locale;
+
+/** Verifies the SAME pending enrollment created in SetupTotpActivity. */
 public final class VerifyTotpActivity extends ProtectedActivity {
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable ticker = new Runnable() {
+        @Override public void run() {
+            if (!visible || !requireRealVault()) { return; }
+            refreshCountdown();
+            if (visible && setup != null && setup.isReady()) { main.postDelayed(this, 1000L); }
+        }
+    };
     private AppCompatEditText codeInput;
     private TextView errorText;
+    private TextView countdown;
     private Button enableButton;
+    private TotpEnrollmentCoordinator.Setup setup;
+    private boolean visible;
+    private boolean busy;
+    private int generation;
+    // Preserve the backend's terminal outcome instead of mislabeling it as a timeout.
+    private int terminalMessage;
 
-    @Override
-    protected void onRuntimeCreate(Bundle savedInstanceState) {
-        super.onRuntimeCreate(savedInstanceState);
+    @Override protected void onRuntimeCreate(Bundle state) {
+        super.onRuntimeCreate(state);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         WindowCompat.enableEdgeToEdge(getWindow());
         setContentView(R.layout.activity_verify_totp);
-
         View root = findViewById(R.id.rootVerifyTotp);
-        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
             return insets;
         });
         ViewCompat.requestApplyInsets(root);
 
         codeInput = findViewById(R.id.editVerifyTotpCode);
         errorText = findViewById(R.id.textVerifyTotpError);
+        countdown = findViewById(R.id.textVerifyTotpCountdown);
         enableButton = findViewById(R.id.buttonEnableTotpProtection);
         enableButton.setEnabled(false);
         errorText.setVisibility(View.GONE);
-        ((TextView) findViewById(R.id.textVerifyTotpCountdown))
-                .setText(R.string.t39_time_limit);
-
-        // Validate only presentation/format. A six-digit input does NOT imply
-        // a correct TOTP code or authorize an enrollment change.
         codeInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
                 errorText.setVisibility(View.GONE);
-                enableButton.setEnabled(false);
+                updateButton();
             }
-
-            @Override
-            public void afterTextChanged(Editable s) { }
+            @Override public void afterTextChanged(Editable s) { }
         });
-
-        findViewById(R.id.buttonVerifyTotpTopBack).setOnClickListener(view -> {
-            clearCode();
-            finish();
+        findViewById(R.id.buttonVerifyTotpTopBack).setOnClickListener(v -> goBack());
+        findViewById(R.id.buttonVerifyTotpBack).setOnClickListener(v -> goBack());
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() { goBack(); }
         });
-        findViewById(R.id.buttonVerifyTotpBack).setOnClickListener(view -> {
-            clearCode();
-            finish();
-        });
+        enableButton.setOnClickListener(v -> verifyCode());
         requireRealVault();
     }
 
-    @Override
-    protected void onRuntimeResume() {
+    @Override protected void onRuntimeResume() {
         super.onRuntimeResume();
-        requireRealVault();
+        visible = true;
+        if (!requireRealVault()) { return; }
+        setup = ((SafeKeyApplication) getApplication()).getTotpEnrollmentCoordinator().getPendingSetup();
+        if (!isReady()) {
+            endUnavailable();
+            return;
+        }
+        updateButton();
+        refreshCountdown();
+        main.removeCallbacks(ticker);
+        main.postDelayed(ticker, 1000L);
     }
 
-    @Override
-    protected void onRuntimeStop() {
+    @Override protected void onRuntimeStop() {
+        visible = false;
+        generation++;
+        busy = false;
+        main.removeCallbacks(ticker);
         clearCode();
+        enableButton.setEnabled(false);
         super.onRuntimeStop();
     }
 
-    @Override
-    protected void onRuntimeDestroy() {
+    @Override protected void onRuntimeDestroy() {
+        generation++;
         clearCode();
+        main.removeCallbacks(ticker);
         super.onRuntimeDestroy();
     }
 
-    private void clearCode() {
-        if (codeInput != null && codeInput.getText() != null) {
-            codeInput.getText().clear();
+    private boolean isReady() {
+        if (terminalMessage != 0 || !visible || !requireRealVault() || setup == null
+                || !setup.isSessionValid() || !setup.isReady()) { return false; }
+        try { return setup.getRemainingMillis() > 0L; }
+        catch (RuntimeException error) { return false; }
+    }
+
+    private void updateButton() {
+        Editable value = codeInput.getText();
+        enableButton.setEnabled(!busy && isReady() && value != null
+                && value.length() == 6 && onlyDigits(value));
+    }
+
+    private static boolean onlyDigits(CharSequence code) {
+        for (int i = 0; i < code.length(); i++) {
+            if (code.charAt(i) < '0' || code.charAt(i) > '9') { return false; }
+        }
+        return true;
+    }
+
+    private void verifyCode() {
+        if (busy || !isReady()) { return; }
+        Editable value = codeInput.getText();
+        if (value == null || value.length() != 6 || !onlyDigits(value)) {
+            showError(R.string.t39_invalid_format);
+            return;
+        }
+        char[] code = new char[6];
+        for (int i = 0; i < code.length; i++) { code[i] = value.charAt(i); }
+        int request = ++generation;
+        busy = true;
+        enableButton.setEnabled(false);
+        clearCode();
+        try {
+            setup.confirm(code, new TotpEnrollmentCoordinator.ConfirmationCallback() {
+                @Override public void onResult(TotpEnrollmentService.Confirmation result, int remaining) {
+                    if (request != generation || !visible || isFinishing() || !requireRealVault()) { return; }
+                    busy = false;
+                    switch (result) {
+                        case ENABLED:
+                            main.removeCallbacks(ticker);
+                            showSuccess();
+                            return;
+                        case INVALID_CODE:
+                            showError(getString(R.string.t39_invalid_with_attempts, remaining));
+                            updateButton();
+                            return;
+                        case ATTEMPT_LIMIT_REACHED: endEnrollment(R.string.t39_attempt_limit); break;
+                        case EXPIRED: endEnrollment(R.string.t39_expired); break;
+                        case ALREADY_CONFIGURED: endEnrollment(R.string.t39_already_enabled); break;
+                        case CANCELLED: endEnrollment(R.string.t39_cancelled); break;
+                    }
+                }
+                @Override public void onError(Exception error) {
+                    if (request != generation || !visible || isFinishing()) { return; }
+                    busy = false;
+                    showError(R.string.t39_verification_failed);
+                    updateButton();
+                }
+            });
+        } catch (RuntimeException error) {
+            busy = false;
+            showError(R.string.t39_verification_failed);
+            updateButton();
+        } finally { Arrays.fill(code, '\0'); }
+    }
+
+    private void showSuccess() {
+        clearCode();
+        enableButton.setEnabled(false);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.t39_success_title)
+                .setMessage(R.string.t39_success_description)
+                .setCancelable(false)
+                .setPositiveButton(R.string.t39_done, (ignored, which) -> exitToSettings())
+                .create();
+        dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         }
     }
+
+    private void exitToSettings() {
+        // Remove both enrollment screens from history after success.
+        Intent intent = new Intent(this, com.safekey.app.settings.SettingsActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
+    }
+
+    private void refreshCountdown() {
+        if (!isReady()) {
+            endUnavailable();
+            return;
+        }
+        try {
+            long millis = setup.getRemainingMillis();
+            if (millis <= 0L) {
+                endEnrollment(R.string.t39_expired);
+                return;
+            }
+            long seconds = (millis + 999L) / 1000L;
+            String clock = String.format(Locale.US, "%d:%02d", seconds / 60L, seconds % 60L);
+            countdown.setText(getString(R.string.t39_time_remaining, clock));
+        } catch (RuntimeException error) {
+            endUnavailable();
+        }
+    }
+
+    private void endUnavailable() {
+        if (terminalMessage != 0) {
+            endEnrollment(terminalMessage);
+            return;
+        }
+        // An unavailable setup may have been cancelled or invalidated, not timed out.
+        // Distinguish a genuine timeout where the backend still exposes its clock.
+        int reason = R.string.t39_cancelled;
+        if (setup != null) {
+            try {
+                if (setup.isSessionValid() && setup.isReady()
+                        && setup.getRemainingMillis() <= 0L) {
+                    reason = R.string.t39_expired;
+                }
+            } catch (RuntimeException ignored) {
+                // Keep the conservative unavailable/cancelled result.
+            }
+        }
+        endEnrollment(reason);
+    }
+
+    private void endEnrollment(int messageRes) {
+        terminalMessage = messageRes;
+        main.removeCallbacks(ticker);
+        busy = false;
+        enableButton.setEnabled(false);
+        countdown.setText(R.string.t39_time_limit);
+        clearCode();
+        showError(messageRes);
+    }
+
+    private void showError(int id) { showError(getString(id)); }
+    private void showError(String value) { errorText.setText(value); errorText.setVisibility(View.VISIBLE); }
+    private void clearCode() {
+        if (codeInput != null && codeInput.getText() != null) { codeInput.getText().clear(); }
+    }
+    private void goBack() { clearCode(); finish(); }
 
     private boolean requireRealVault() {
         SafeKeyApplication app = (SafeKeyApplication) getApplication();
         if (SafeKeySession.getState() == SessionState.UNLOCKED
                 && app.getActiveVault() == SafeKeyApplication.ActiveVault.REAL
-                && !isFinishing() && !isDestroyed()) {
-            return true;
-        }
+                && !isFinishing() && !isDestroyed()) { return true; }
         clearCode();
         if (SafeKeySession.getState() != SessionState.UNLOCKED
                 && !isFinishing() && !isDestroyed()) {
