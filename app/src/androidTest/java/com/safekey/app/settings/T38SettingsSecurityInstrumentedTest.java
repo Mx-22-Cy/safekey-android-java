@@ -472,8 +472,8 @@ public class T38SettingsSecurityInstrumentedTest {
     private void awaitName(ActivityScenario<SettingsActivity> scenario, String expected)
             throws Exception {
         awaitUiCondition(scenario, activity -> expected.equals(((TextView)
-                activity.findViewById(R.id.textSettingsVaultName)).getText().toString())
-                && activity.findViewById(R.id.buttonSettingsEditName).isEnabled(),
+                        activity.findViewById(R.id.textSettingsVaultName)).getText().toString())
+                        && activity.findViewById(R.id.buttonSettingsEditName).isEnabled(),
                 "vault name did not update to expected value");
     }
 
@@ -532,18 +532,18 @@ public class T38SettingsSecurityInstrumentedTest {
         try {
             VaultDataService.SimpleCallback callback = new VaultDataService.SimpleCallback() {
                 @Override public void onSuccess() {
-                    // requestHolder is set before the asynchronous callback fires.
                     Runnable completeOnMain = () -> {
-                        VaultUnlockFlow.Request request = requestHolder.get();
-                        if (request == null || !request.claimSession()) {
-                            openError.set(new IllegalStateException("Vault session claim failed"));
-                        } else {
-                            try {
-                                SafeKeySession.unlockAfterAuthentication();
-                                app.activateRealVault();
-                            } catch (Exception error) {
-                                openError.set(error);
+                        try {
+                            VaultUnlockFlow.Request request = requestHolder.get();
+                            if (request == null || !request.claimSession()) {
+                                throw new IllegalStateException("Vault session claim failed");
                             }
+                            SafeKeySession.unlockAfterAuthentication();
+                            app.activateRealVault();
+                        } catch (Exception error) {
+                            openError.set(error);
+                        } finally {
+                            opened.countDown();
                         }
                     };
                     if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
@@ -551,28 +551,30 @@ public class T38SettingsSecurityInstrumentedTest {
                     } else {
                         InstrumentationRegistry.getInstrumentation().runOnMainSync(completeOnMain);
                     }
-                    opened.countDown();
                 }
                 @Override public void onError(Exception error) {
                     openError.set(error);
                     opened.countDown();
                 }
             };
-            if (alreadyEnrolled) {
-                requestHolder.set(coordinator.unlockVault(master,
-                        new SecureVaultCoordinator.TotpUnlockCallback() {
-                            @Override public void onSuccess() { callback.onSuccess(); }
-                            @Override public void onError(Exception error) { callback.onError(error); }
-                            @Override public void onTotpRequired(VaultUnlockFlow.Request request) {
-                                openError.set(new IllegalStateException(
-                                        "Test vault has TOTP enabled; use a fresh test-only emulator"));
-                                opened.countDown();
-                            }
-                        }));
-            } else {
-                requestHolder.set(coordinator.createVaultForEnrollment(
-                        master, MasterPasswordCheckStatus.CHECKED, callback));
-            }
+            // Store the request on the same thread that receives success callbacks.
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                if (alreadyEnrolled) {
+                    requestHolder.set(coordinator.unlockVault(master,
+                            new SecureVaultCoordinator.TotpUnlockCallback() {
+                                @Override public void onSuccess() { callback.onSuccess(); }
+                                @Override public void onError(Exception error) { callback.onError(error); }
+                                @Override public void onTotpRequired(VaultUnlockFlow.Request request) {
+                                    openError.set(new IllegalStateException(
+                                            "Test vault has TOTP enabled; use a fresh test-only emulator"));
+                                    opened.countDown();
+                                }
+                            }));
+                } else {
+                    requestHolder.set(coordinator.createVaultForEnrollment(
+                            master, MasterPasswordCheckStatus.CHECKED, callback));
+                }
+            });
             assertTrue("Test vault authentication timed out", opened.await(25, TimeUnit.SECONDS));
             if (openError.get() != null) {
                 throw new AssertionError("Test-only REAL Vault authentication failed. "
@@ -582,6 +584,10 @@ public class T38SettingsSecurityInstrumentedTest {
             assertEquals(SafeKeyApplication.ActiveVault.REAL, app.getActiveVault());
         } finally {
             Arrays.fill(master, '\0');
+            VaultUnlockFlow.Request request = requestHolder.get();
+            if (request != null) {
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(request::close);
+            }
         }
     }
 
