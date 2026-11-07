@@ -1,254 +1,270 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootSetupTotp"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="@color/auth_background">
+    android:background="@color/auth_background"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingStart="28dp"
-        android:paddingTop="48dp"
-        android:paddingEnd="28dp"
-        android:paddingBottom="32dp">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:clipToPadding="false">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <ImageButton
-                android:id="@+id/buttonTotpBack"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/t27_outline_button_bg"
-                android:contentDescription="@string/t39_back"
-                android:padding="12dp"
-                android:src="@drawable/ic_arrow_back"
-                app:tint="@color/auth_text_secondary" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:fontFamily="@font/fraunces_semibold"
-                android:text="@string/t39_title"
-                android:textColor="@color/auth_text_primary"
-                android:textSize="24sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:lineSpacingExtra="4dp"
-            android:text="@string/t39_description"
-            android:textColor="@color/auth_text_secondary"
-            android:textSize="14sp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:background="@drawable/auth_card_bg"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:paddingStart="24dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
 
-            <TextView
+            <!-- Header -->
+
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/t39_info_title"
-                android:textColor="@color/auth_text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/buttonTotpBack"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@drawable/t27_outline_button_bg"
+                    android:contentDescription="@string/t39_back"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_arrow_back"
+                    app:tint="@color/auth_text_secondary" />
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/fraunces_semibold"
+                    android:text="@string/t39_title"
+                    android:textColor="@color/auth_text_primary"
+                    android:textSize="24sp" />
+
+            </LinearLayout>
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:lineSpacingExtra="3dp"
-                android:text="@string/t39_info_description"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/t39_security_warning"
-            android:textColor="@color/dashboard_alert_text"
-            android:textSize="13sp" />
-
-        <Button
-            android:id="@+id/buttonStartTotpSetup"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:layout_marginTop="24dp"
-            android:background="@drawable/auth_primary_button_bg"
-            android:enabled="false"
-            android:text="@string/t39_start_setup"
-            android:textAllCaps="false"
-            android:textColor="@color/auth_primary_button_text"
-            android:textSize="16sp"
-            app:backgroundTint="@null" />
-
-        <LinearLayout
-            android:id="@+id/groupTotpEnrollment"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/auth_card_bg"
-            android:orientation="vertical"
-            android:padding="20dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/t39_setup_title"
-                android:textColor="@color/auth_text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/t39_setup_description"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="13sp" />
-
-            <ImageView
-                android:id="@+id/imageTotpQrCode"
-                android:layout_width="240dp"
-                android:layout_height="240dp"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="16dp"
-                android:contentDescription="@string/t39_qr_accessibility"
-                android:visibility="gone" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/t39_manual_key_title"
-                android:textColor="@color/auth_text_primary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/t39_manual_key_description"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/textTotpManualKey"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/auth_input_bg"
-                android:padding="16dp"
-                android:saveEnabled="false"
-                android:text="@string/t39_manual_key_hidden"
-                android:textColor="@color/auth_text_primary"
-                android:textIsSelectable="false"
+                android:lineSpacingExtra="4dp"
+                android:text="@string/t39_description"
+                android:textColor="@color/auth_text_secondary"
                 android:textSize="14sp" />
+
+            <!-- QR Code Card -->
+
+            <LinearLayout
+                android:id="@+id/cardTotpQr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:background="@drawable/auth_card_bg"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:lineSpacingExtra="4dp"
+                    android:text="@string/t39_setup_description"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- Populated only after authorized enrollment starts -->
+
+                <ImageView
+                    android:id="@+id/imageTotpQrCode"
+                    android:layout_width="220dp"
+                    android:layout_height="220dp"
+                    android:layout_marginTop="16dp"
+                    android:background="@android:color/white"
+                    android:contentDescription="@string/t39_qr_accessibility"
+                    android:padding="12dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/textTotpQrPlaceholder"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:gravity="center"
+                    android:text="@string/t39_not_enabled"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="13sp" />
+
+                <!-- Five-minute enrollment countdown -->
+
+                <TextView
+                    android:id="@+id/textTotpCountdown"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:background="@drawable/t27_outline_button_bg"
+                    android:paddingStart="14dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="14dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/t39_time_limit"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- Manual Key Section -->
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:gravity="center"
+                android:text="@string/t39_manual_key_description"
+                android:textColor="@color/auth_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <Button
                 android:id="@+id/buttonToggleTotpKey"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/t27_outline_button_bg"
+                android:enabled="false"
                 android:text="@string/t39_show_key"
                 android:textAllCaps="false"
                 android:textColor="@color/auth_text_primary"
                 app:backgroundTint="@null" />
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/groupTotpManualKey"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:text="@string/t39_verify_title"
-                android:textColor="@color/auth_text_primary"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/t39_verify_description"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="13sp" />
-
-            <androidx.appcompat.widget.AppCompatEditText
-                android:id="@+id/editTotpConfirmationCode"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
                 android:layout_marginTop="12dp"
-                android:background="@drawable/auth_input_bg"
-                android:digits="0123456789"
-                android:hint="@string/t39_code_hint"
-                android:importantForAutofill="no"
-                android:inputType="numberPassword"
-                android:maxLength="6"
+                android:background="@drawable/auth_card_bg"
+                android:orientation="vertical"
                 android:padding="16dp"
-                android:saveEnabled="false"
-                android:singleLine="true"
-                android:textColor="@color/auth_text_primary"
-                android:textColorHint="@color/auth_text_secondary" />
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/t39_manual_key_title"
+                    android:textColor="@color/auth_text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/textTotpManualKey"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/auth_input_bg"
+                        android:gravity="center"
+                        android:padding="12dp"
+                        android:saveEnabled="false"
+                        android:text="@string/t39_manual_key_hidden"
+                        android:textColor="@color/auth_text_primary"
+                        android:textIsSelectable="false"
+                        android:textSize="13sp" />
+
+                    <Button
+                        android:id="@+id/buttonCopyTotpKey"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/t27_outline_button_bg"
+                        android:enabled="false"
+                        android:minWidth="76dp"
+                        android:text="@string/t39_manual_key_title"
+                        android:textAllCaps="false"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="11sp"
+                        app:backgroundTint="@null" />
+
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="@string/t39_security_warning"
+                    android:textColor="@color/dashboard_alert_text"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <!-- Error Feedback -->
 
             <TextView
-                android:id="@+id/textTotpAttempts"
+                android:id="@+id/textTotpSetupError"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/buttonConfirmTotpSetup"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
                 android:layout_marginTop="16dp"
-                android:background="@drawable/auth_primary_button_bg"
-                android:enabled="false"
-                android:text="@string/t39_verify_button"
-                android:textAllCaps="false"
-                android:textColor="@color/auth_primary_button_text"
-                android:textSize="16sp"
-                app:backgroundTint="@null" />
+                android:accessibilityLiveRegion="polite"
+                android:gravity="center"
+                android:textColor="@color/dashboard_alert_text"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
         </LinearLayout>
 
-        <TextView
-            android:id="@+id/textTotpSetupError"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:accessibilityLiveRegion="polite"
-            android:textColor="@color/dashboard_alert_text"
-            android:textSize="13sp"
-            android:visibility="gone" />
+    </ScrollView>
+
+    <!-- Bottom Actions -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingStart="24dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="20dp">
 
         <Button
             android:id="@+id/buttonCancelTotpSetup"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="52dp"
-            android:layout_marginTop="12dp"
+            android:layout_weight="1"
             android:background="@drawable/t27_outline_button_bg"
             android:text="@string/t39_cancel"
             android:textAllCaps="false"
             android:textColor="@color/auth_text_secondary"
             app:backgroundTint="@null" />
+
+        <Button
+            android:id="@+id/buttonContinueTotpSetup"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:background="@drawable/auth_primary_button_bg"
+            android:enabled="false"
+            android:text="@string/t39_verify_title"
+            android:textAllCaps="false"
+            android:textColor="@color/auth_primary_button_text"
+            app:backgroundTint="@null" />
+
     </LinearLayout>
-</ScrollView>
+
+</LinearLayout>
