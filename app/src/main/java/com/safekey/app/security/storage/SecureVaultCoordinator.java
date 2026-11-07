@@ -32,6 +32,7 @@ import com.safekey.app.security.totp.VaultUnlockFlow;
 import com.safekey.app.security.totp.VaultUnlockGate;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
@@ -153,6 +154,35 @@ public final class SecureVaultCoordinator {
 
     public boolean isVaultOpen() {
         return vaultDataService.isVaultOpen();
+    }
+
+    /** Re-verifies the master password on the enrollment coordinator's worker. */
+    public void verifyMasterPasswordForTotpEnrollment(char[] masterPassword) throws Exception {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw new IllegalStateException("Verify the master password on the enrollment worker.");
+        }
+        char[] passwordCopy = copyAndValidatePassword(masterPassword);
+        byte[] salt = null;
+        byte[] masterKey = null;
+        byte[] databaseKey = null;
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            VaultKeyEnvelope envelope = envelopeStore.load();
+            if (envelope == null) {
+                throw new IllegalStateException("No vault has been created.");
+            }
+            salt = envelope.getSalt();
+            masterKey = keyDeriver.deriveKey(passwordCopy, salt);
+            databaseKey = cipher.decrypt(
+                    envelope.getWrappedDatabaseKey(), masterKey, databaseKeyContext());
+            if (databaseKey.length != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES) {
+                throw new GeneralSecurityException("Invalid protected vault key.");
+            }
+        } finally {
+            clear(passwordCopy);
+            clear(salt);
+            clear(masterKey);
+            clear(databaseKey);
+        }
     }
 
     public BiometricAuthenticator.Availability getBiometricAvailability(
