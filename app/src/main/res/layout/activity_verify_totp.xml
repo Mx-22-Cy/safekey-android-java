@@ -47,7 +47,7 @@
                     android:fontFamily="@font/fraunces_semibold"
                     android:text="@string/t39_verify_title"
                     android:textColor="@color/auth_text_primary"
-                    android:textSize="24sp" />
+                    android:textSize="@dimen/t39_text_title" />
             </LinearLayout>
 
             <TextView
@@ -56,8 +56,8 @@
                 android:layout_marginTop="12dp"
                 android:lineSpacingExtra="4dp"
                 android:text="@string/t39_verify_description"
-                android:textColor="@color/auth_text_secondary"
-                android:textSize="14sp" />
+                android:textColor="@color/t39_secondary_text"
+                android:textSize="@dimen/t39_text_body" />
 
             <LinearLayout
                 android:id="@+id/cardVerifyTotp"
@@ -80,8 +80,8 @@
                     android:paddingEnd="14dp"
                     android:paddingBottom="8dp"
                     android:text="@string/t39_time_limit"
-                    android:textColor="@color/auth_text_secondary"
-                    android:textSize="12sp" />
+                    android:textColor="@color/t39_secondary_text"
+                    android:textSize="@dimen/t39_text_small" />
 
                 <androidx.appcompat.widget.AppCompatEditText
                     android:id="@+id/editVerifyTotpCode"
@@ -100,8 +100,8 @@
                     android:saveEnabled="false"
                     android:singleLine="true"
                     android:textColor="@color/auth_text_primary"
-                    android:textColorHint="@color/auth_text_secondary"
-                    android:textSize="26sp" />
+                    android:textColorHint="@color/t39_secondary_text"
+                    android:textSize="@dimen/t39_text_code" />
 
                 <TextView
                     android:id="@+id/textVerifyTotpError"
@@ -111,7 +111,7 @@
                     android:accessibilityLiveRegion="polite"
                     android:gravity="center"
                     android:textColor="@color/dashboard_alert_text"
-                    android:textSize="13sp"
+                    android:textSize="@dimen/t39_text_small"
                     android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
@@ -128,26 +128,28 @@
 
         <Button
             android:id="@+id/buttonVerifyTotpBack"
+            android:textSize="@dimen/t39_text_small"
             android:layout_width="0dp"
             android:layout_height="52dp"
             android:layout_weight="1"
             android:background="@drawable/t27_outline_button_bg"
             android:text="@string/t39_verification_back"
             android:textAllCaps="false"
-            android:textColor="@color/auth_text_secondary"
+            android:textColor="@color/t39_secondary_text"
             app:backgroundTint="@null" />
 
         <Button
             android:id="@+id/buttonEnableTotpProtection"
+            android:textSize="@dimen/t39_text_small"
             android:layout_width="0dp"
             android:layout_height="52dp"
             android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:background="@drawable/auth_primary_button_bg"
+            android:background="@drawable/t39_primary_button_background"
             android:enabled="false"
             android:text="@string/t39_verify_button"
             android:textAllCaps="false"
-            android:textColor="@color/auth_primary_button_text"
+            android:textColor="@color/t39_primary_button_text"
             app:backgroundTint="@null" />
     </LinearLayout>
 </LinearLayout>
