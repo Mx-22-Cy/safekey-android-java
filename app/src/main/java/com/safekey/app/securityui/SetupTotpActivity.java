@@ -20,11 +20,16 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
 /**
- * T39 presentation shell. Enrollment is intentionally unavailable until an
- * authenticated, REAL-vault TOTP coordinator is integrated by the security owner.
- * Never populate the QR/key from a sample or from an Intent extra.
+ * T39 setup presentation. Secret material must only come from an authenticated
+ * REAL-vault enrollment coordinator, never Intent extras or demonstration data.
  */
 public final class SetupTotpActivity extends ProtectedActivity {
+    private View manualKeyGroup;
+    private Button manualKeyToggle;
+    private Button copyKeyButton;
+    private Button continueButton;
+    private TextView manualKeyText;
+    private boolean manualKeyAvailable;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
@@ -41,17 +46,50 @@ public final class SetupTotpActivity extends ProtectedActivity {
         });
         ViewCompat.requestApplyInsets(root);
 
-        findViewById(R.id.buttonTotpBack).setOnClickListener(view -> finish());
-        findViewById(R.id.buttonCancelTotpSetup).setOnClickListener(view -> finish());
+        manualKeyGroup = findViewById(R.id.groupTotpManualKey);
+        manualKeyToggle = findViewById(R.id.buttonToggleTotpKey);
+        copyKeyButton = findViewById(R.id.buttonCopyTotpKey);
+        continueButton = findViewById(R.id.buttonContinueTotpSetup);
+        manualKeyText = findViewById(R.id.textTotpManualKey);
 
-        // Safe UI-only shell: no credentials, QR or enrollment token are available.
+        findViewById(R.id.buttonTotpBack).setOnClickListener(view -> {
+            hideManualKey();
+            finish();
+        });
+        findViewById(R.id.buttonCancelTotpSetup).setOnClickListener(view -> {
+            hideManualKey();
+            finish();
+        });
+
+        manualKeyToggle.setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity() || !requireRealVault()
+                    || !manualKeyAvailable) {
+                hideManualKey();
+                return;
+            }
+            if (manualKeyGroup.getVisibility() == View.VISIBLE) {
+                hideManualKey();
+            } else {
+                manualKeyGroup.setVisibility(View.VISIBLE);
+                manualKeyToggle.setText(R.string.t39_hide_key);
+                manualKeyToggle.setContentDescription(getString(R.string.t39_hide_key));
+            }
+        });
+
+        // Keep all secret-dependent actions disabled until a session-bound
+        // coordinator owns the pending enrollment and supplies its lifetime.
+        manualKeyAvailable = false;
+        hideManualKey();
+        manualKeyToggle.setEnabled(false);
+        copyKeyButton.setEnabled(false);
+        copyKeyButton.setText(R.string.t39_copy_key);
+        continueButton.setEnabled(false);
+        continueButton.setText(R.string.t39_continue);
         findViewById(R.id.imageTotpQrCode).setVisibility(View.GONE);
-        findViewById(R.id.groupTotpManualKey).setVisibility(View.GONE);
-        findViewById(R.id.buttonToggleTotpKey).setEnabled(false);
-        findViewById(R.id.buttonCopyTotpKey).setEnabled(false);
-        findViewById(R.id.buttonContinueTotpSetup).setEnabled(false);
         ((TextView) findViewById(R.id.textTotpQrPlaceholder))
                 .setText(R.string.t39_not_enabled);
+        ((TextView) findViewById(R.id.textTotpCountdown))
+                .setText(R.string.t39_time_limit);
 
         requireRealVault();
     }
@@ -62,6 +100,25 @@ public final class SetupTotpActivity extends ProtectedActivity {
         requireRealVault();
     }
 
+    @Override
+    protected void onRuntimeStop() {
+        hideManualKey();
+        super.onRuntimeStop();
+    }
+
+    private void hideManualKey() {
+        if (manualKeyGroup != null) {
+            manualKeyGroup.setVisibility(View.GONE);
+        }
+        if (manualKeyToggle != null) {
+            manualKeyToggle.setText(R.string.t39_show_key);
+            manualKeyToggle.setContentDescription(getString(R.string.t39_show_key));
+        }
+        if (manualKeyText != null) {
+            manualKeyText.setText(R.string.t39_manual_key_hidden);
+        }
+    }
+
     private boolean requireRealVault() {
         SafeKeyApplication app = (SafeKeyApplication) getApplication();
         if (SafeKeySession.getState() == SessionState.UNLOCKED
@@ -69,6 +126,7 @@ public final class SetupTotpActivity extends ProtectedActivity {
                 && !isFinishing() && !isDestroyed()) {
             return true;
         }
+        hideManualKey();
         if (SafeKeySession.getState() != SessionState.UNLOCKED
                 && !isFinishing() && !isDestroyed()) {
             Intent intent = new Intent(this, SignInActivity.class);

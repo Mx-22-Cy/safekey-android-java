@@ -2,8 +2,12 @@ package com.safekey.app.securityui;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.TextView;
 
 import androidx.appcompat.widget.AppCompatEditText;
 import androidx.core.graphics.Insets;
@@ -19,11 +23,13 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
 /**
- * T39 verification presentation shell. Confirmation stays disabled until the
- * security coordinator can supply and validate a session-owned pending setup.
+ * T39 verification presentation. The security coordinator must validate the
+ * code against a session-owned pending enrollment before enabling protection.
  */
 public final class VerifyTotpActivity extends ProtectedActivity {
     private AppCompatEditText codeInput;
+    private TextView errorText;
+    private Button enableButton;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
@@ -32,19 +38,46 @@ public final class VerifyTotpActivity extends ProtectedActivity {
         WindowCompat.enableEdgeToEdge(getWindow());
         setContentView(R.layout.activity_verify_totp);
 
-        ViewCompat.setOnApplyWindowInsetsListener(
-                findViewById(R.id.rootVerifyTotp), (view, insets) -> {
-                    Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-                    view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
-                    return insets;
-                });
-        ViewCompat.requestApplyInsets(findViewById(R.id.rootVerifyTotp));
+        View root = findViewById(R.id.rootVerifyTotp);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(root);
 
         codeInput = findViewById(R.id.editVerifyTotpCode);
-        Button enable = findViewById(R.id.buttonEnableTotpProtection);
-        enable.setEnabled(false);
-        findViewById(R.id.buttonVerifyTotpTopBack).setOnClickListener(view -> finish());
-        findViewById(R.id.buttonVerifyTotpBack).setOnClickListener(view -> finish());
+        errorText = findViewById(R.id.textVerifyTotpError);
+        enableButton = findViewById(R.id.buttonEnableTotpProtection);
+        enableButton.setEnabled(false);
+        errorText.setVisibility(View.GONE);
+        ((TextView) findViewById(R.id.textVerifyTotpCountdown))
+                .setText(R.string.t39_time_limit);
+
+        // Validate only presentation/format. A six-digit input does NOT imply
+        // a correct TOTP code or authorize an enrollment change.
+        codeInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                errorText.setVisibility(View.GONE);
+                enableButton.setEnabled(false);
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) { }
+        });
+
+        findViewById(R.id.buttonVerifyTotpTopBack).setOnClickListener(view -> {
+            clearCode();
+            finish();
+        });
+        findViewById(R.id.buttonVerifyTotpBack).setOnClickListener(view -> {
+            clearCode();
+            finish();
+        });
         requireRealVault();
     }
 
