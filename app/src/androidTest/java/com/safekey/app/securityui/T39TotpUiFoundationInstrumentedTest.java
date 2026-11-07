@@ -336,16 +336,17 @@ public class T39TotpUiFoundationInstrumentedTest {
             VaultDataService.SimpleCallback callback = new VaultDataService.SimpleCallback() {
                 @Override public void onSuccess() {
                     Runnable completeOnMain = () -> {
-                        VaultUnlockFlow.Request request = requestHolder.get();
-                        if (request == null || !request.claimSession()) {
-                            openError.set(new IllegalStateException("Vault session claim failed"));
-                        } else {
-                            try {
-                                SafeKeySession.unlockAfterAuthentication();
-                                app.activateRealVault();
-                            } catch (Exception error) {
-                                openError.set(error);
+                        try {
+                            VaultUnlockFlow.Request request = requestHolder.get();
+                            if (request == null || !request.claimSession()) {
+                                throw new IllegalStateException("Vault session claim failed");
                             }
+                            SafeKeySession.unlockAfterAuthentication();
+                            app.activateRealVault();
+                        } catch (Exception error) {
+                            openError.set(error);
+                        } finally {
+                            opened.countDown();
                         }
                     };
                     if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
@@ -353,28 +354,29 @@ public class T39TotpUiFoundationInstrumentedTest {
                     } else {
                         InstrumentationRegistry.getInstrumentation().runOnMainSync(completeOnMain);
                     }
-                    opened.countDown();
                 }
                 @Override public void onError(Exception error) {
                     openError.set(error);
                     opened.countDown();
                 }
             };
-            if (alreadyEnrolled) {
-                requestHolder.set(coordinator.unlockVault(master,
-                        new SecureVaultCoordinator.TotpUnlockCallback() {
-                            @Override public void onSuccess() { callback.onSuccess(); }
-                            @Override public void onError(Exception error) { callback.onError(error); }
-                            @Override public void onTotpRequired(VaultUnlockFlow.Request request) {
-                                openError.set(new IllegalStateException(
-                                        "Test vault has TOTP enabled; use a fresh disposable emulator"));
-                                opened.countDown();
-                            }
-                        }));
-            } else {
-                requestHolder.set(coordinator.createVaultForEnrollment(
-                        master, MasterPasswordCheckStatus.CHECKED, callback));
-            }
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                if (alreadyEnrolled) {
+                    requestHolder.set(coordinator.unlockVault(master,
+                            new SecureVaultCoordinator.TotpUnlockCallback() {
+                                @Override public void onSuccess() { callback.onSuccess(); }
+                                @Override public void onError(Exception error) { callback.onError(error); }
+                                @Override public void onTotpRequired(VaultUnlockFlow.Request request) {
+                                    openError.set(new IllegalStateException(
+                                            "Test vault has TOTP enabled; use a fresh disposable emulator"));
+                                    opened.countDown();
+                                }
+                            }));
+                } else {
+                    requestHolder.set(coordinator.createVaultForEnrollment(
+                            master, MasterPasswordCheckStatus.CHECKED, callback));
+                }
+            });
             assertTrue("Test vault authentication timed out", opened.await(25, TimeUnit.SECONDS));
             if (openError.get() != null) {
                 throw new AssertionError("Test-only REAL vault authentication failed. "
@@ -384,6 +386,10 @@ public class T39TotpUiFoundationInstrumentedTest {
             assertEquals(SafeKeyApplication.ActiveVault.REAL, app.getActiveVault());
         } finally {
             Arrays.fill(master, '\0');
+            VaultUnlockFlow.Request request = requestHolder.get();
+            if (request != null) {
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(request::close);
+            }
         }
     }
 }

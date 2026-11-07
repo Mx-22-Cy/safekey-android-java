@@ -38,6 +38,7 @@ import com.safekey.app.session.logic.SessionState;
 
 import java.util.Arrays;
 import java.util.Locale;
+import java.util.UUID;
 
 /** T39: the coordinator, not an Activity or Intent, owns the TOTP secret. */
 public final class SetupTotpActivity extends ProtectedActivity {
@@ -68,6 +69,8 @@ public final class SetupTotpActivity extends ProtectedActivity {
     private boolean busy;
     private boolean passwordPromptShown;
     private int operationGeneration;
+    private static final long CLIPBOARD_CLEAR_DELAY_MILLIS = 90_000L;
+    private static final Handler CLIPBOARD_HANDLER = new Handler(Looper.getMainLooper());
 
     @Override protected void onRuntimeCreate(Bundle state) {
         super.onRuntimeCreate(state);
@@ -246,7 +249,7 @@ public final class SetupTotpActivity extends ProtectedActivity {
     }
 
     private boolean isReady() {
-        if (!visible || !SafeKeySession.recordActivity() || !requireRealVault()
+        if (!visible || !requireRealVault()
                 || setup == null || !setup.isSessionValid() || !setup.isReady()) { return false; }
         try { return setup.getRemainingMillis() > 0L; }
         catch (RuntimeException error) { return false; }
@@ -296,7 +299,8 @@ public final class SetupTotpActivity extends ProtectedActivity {
         char[] key = null;
         try {
             key = setup.copyBase32Secret();
-            ClipData clip = ClipData.newPlainText("", new String(key));
+            String ownClipLabel = "SafeKey-TOTP-" + UUID.randomUUID();
+            ClipData clip = ClipData.newPlainText(ownClipLabel, new String(key));
             if (Build.VERSION.SDK_INT >= 33) {
                 android.os.PersistableBundle extras = new android.os.PersistableBundle();
                 extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
@@ -305,6 +309,23 @@ public final class SetupTotpActivity extends ProtectedActivity {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null) {
                 clipboard.setPrimaryClip(clip);
+                // Do not retain the seed in the scheduled cleanup callback.
+                CLIPBOARD_HANDLER.postDelayed(() -> {
+                    try {
+                        if (!clipboard.hasPrimaryClip()) { return; }
+                        android.content.ClipDescription description = clipboard.getPrimaryClipDescription();
+                        if (description == null || !ownClipLabel.contentEquals(description.getLabel())) {
+                            return; // The user or another app replaced the clipboard.
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            clipboard.clearPrimaryClip();
+                        } else {
+                            clipboard.setPrimaryClip(ClipData.newPlainText("", ""));
+                        }
+                    } catch (RuntimeException ignored) {
+                        // Clipboard ownership can change while the app is backgrounded.
+                    }
+                }, CLIPBOARD_CLEAR_DELAY_MILLIS);
                 Toast.makeText(this, R.string.t39_key_copied, Toast.LENGTH_SHORT).show();
             }
         } catch (RuntimeException error) { showError(R.string.t39_expired); }

@@ -239,8 +239,7 @@ public final class VerifyTotpActivity extends ProtectedActivity {
         int reason = R.string.t39_cancelled;
         if (setup != null) {
             try {
-                if (setup.isSessionValid() && setup.isReady()
-                        && setup.getRemainingMillis() <= 0L) {
+                if (setup.isSessionValid() && setup.getRemainingMillis() <= 0L) {
                     reason = R.string.t39_expired;
                 }
             } catch (RuntimeException ignored) {
