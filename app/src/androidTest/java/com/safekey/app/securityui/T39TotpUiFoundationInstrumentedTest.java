@@ -172,6 +172,81 @@ public class T39TotpUiFoundationInstrumentedTest {
         }
     }
 
+    /** A pending enrollment must survive Setup and Verify recreation without rotating its seed. */
+    @Test
+    public void pendingEnrollmentSurvivesSetupAndVerifyRecreation() throws Exception {
+        authenticateRealVaultForUiTest();
+        com.safekey.app.security.totp.TotpEnrollmentCoordinator coordinator =
+                app().getTotpEnrollmentCoordinator();
+        CountDownLatch prepared = new CountDownLatch(1);
+        AtomicReference<Exception> preparationError = new AtomicReference<>();
+        AtomicReference<com.safekey.app.security.totp.TotpEnrollmentCoordinator.Setup> created =
+                new AtomicReference<>();
+        char[] password = TEST_MASTER.toCharArray();
+        try {
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                created.set(coordinator.begin(password,
+                        new com.safekey.app.security.totp.TotpEnrollmentCoordinator.SetupCallback() {
+                            @Override public void onReady(
+                                    com.safekey.app.security.totp.TotpEnrollmentCoordinator.Setup setup) {
+                                prepared.countDown();
+                            }
+                            @Override public void onError(Exception error) {
+                                preparationError.set(error);
+                                prepared.countDown();
+                            }
+                        }));
+            });
+            assertTrue("TOTP preparation timed out", prepared.await(20, TimeUnit.SECONDS));
+            if (preparationError.get() != null) { throw preparationError.get(); }
+            com.safekey.app.security.totp.TotpEnrollmentCoordinator.Setup pending = created.get();
+            assertTrue("Pending enrollment should be ready", pending != null && pending.isReady());
+            String originalUri = pending.getAuthenticatorUri();
+            try (ActivityScenario<SetupTotpActivity> setupScenario =
+                         ActivityScenario.launch(SetupTotpActivity.class)) {
+                setupScenario.onActivity(activity -> {
+                    assertSecureWindow(activity.getWindow().getAttributes().flags);
+                    assertTrue("QR must be visible", activity.findViewById(R.id.imageTotpQrCode)
+                            .getVisibility() == View.VISIBLE);
+                    assertTrue("Continue must be enabled", activity.findViewById(
+                            R.id.buttonContinueTotpSetup).isEnabled());
+                });
+                setupScenario.recreate();
+                setupScenario.onActivity(activity -> {
+                    assertTrue("QR must survive Setup recreation", activity.findViewById(
+                            R.id.imageTotpQrCode).getVisibility() == View.VISIBLE);
+                    assertTrue("Continue must survive Setup recreation", activity.findViewById(
+                            R.id.buttonContinueTotpSetup).isEnabled());
+                });
+                assertEquals("Recreation must not rotate TOTP secret", originalUri,
+                        coordinator.getPendingSetup().getAuthenticatorUri());
+            }
+            try (ActivityScenario<VerifyTotpActivity> verifyScenario =
+                         ActivityScenario.launch(VerifyTotpActivity.class)) {
+                verifyScenario.onActivity(activity -> {
+                    assertSecureWindow(activity.getWindow().getAttributes().flags);
+                    EditText code = activity.findViewById(R.id.editVerifyTotpCode);
+                    code.setText("123456");
+                    assertTrue("Verify should accept formatted code with pending setup",
+                            activity.findViewById(R.id.buttonEnableTotpProtection).isEnabled());
+                });
+                verifyScenario.recreate();
+                verifyScenario.onActivity(activity -> {
+                    assertSecureWindow(activity.getWindow().getAttributes().flags);
+                    assertEquals("A recreated Verify screen must not restore the typed code", "",
+                            ((EditText) activity.findViewById(R.id.editVerifyTotpCode))
+                                    .getText().toString());
+                });
+                assertEquals("Verify recreation must not rotate TOTP secret", originalUri,
+                        coordinator.getPendingSetup().getAuthenticatorUri());
+            }
+        } finally {
+            Arrays.fill(password, '\0');
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(coordinator::cancelPending);
+            cleanupSession();
+        }
+    }
+
     private void assertUnlockedWithoutRealVaultCannotOpen(
             Class<? extends Activity> activityClass) throws Exception {
         // Begin with the REAL vault closed. An unlocked session flag alone
