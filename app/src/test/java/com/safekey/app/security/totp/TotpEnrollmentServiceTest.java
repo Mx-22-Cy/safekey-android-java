@@ -62,6 +62,65 @@ public class TotpEnrollmentServiceTest {
     }
 
     @Test
+    public void countdownAndDeadlineUseTheOriginalMonotonicClock() throws Exception {
+        try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
+            assertEquals(300_000L, pending.getRemainingMillis());
+            assertEquals(300_000L, pending.getExpiresAtMonotonicMillis());
+            wall.set(9_999_999_999L);
+            elapsed.set(123_456L);
+            assertEquals(176_544L, pending.getRemainingMillis());
+            assertEquals(300_000L, pending.getExpiresAtMonotonicMillis());
+        }
+    }
+
+    @Test
+    public void remainingTimeAtExpiryClosesTheSecret() throws Exception {
+        try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
+            elapsed.set(300_000L);
+            assertEquals(0L, pending.getRemainingMillis());
+            assertFalse(pending.isActive());
+            try {
+                pending.copyBase32Secret();
+                fail("Expired setup exposed a manual key.");
+            } catch (IllegalStateException expected) {
+                assertEquals(0L, pending.getRemainingMillis());
+            }
+        }
+    }
+
+    @Test
+    public void cancelledSetupHasZeroRemainingTime() throws Exception {
+        try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
+            pending.close();
+            assertEquals(0L, pending.getRemainingMillis());
+        }
+    }
+
+    @Test
+    public void backwardsClockProducesZeroRemainingTime() throws Exception {
+        elapsed.set(100L);
+        try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
+            elapsed.set(99L);
+            assertEquals(0L, pending.getRemainingMillis());
+            assertFalse(pending.isActive());
+        }
+    }
+
+    @Test
+    public void unrepresentableDeadlineClosesSetup() throws Exception {
+        elapsed.set(Long.MAX_VALUE - 100_000L);
+        try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
+            try {
+                pending.getExpiresAtMonotonicMillis();
+                fail("An overflowing deadline was accepted.");
+            } catch (IllegalStateException expected) {
+                assertFalse(pending.isActive());
+                assertNull(store.encoded);
+            }
+        }
+    }
+
+    @Test
     public void uri_containsMatchingIssuerAndDefaultParameters() throws Exception {
         try (TotpEnrollmentService.PendingSetup pending = service.begin()) {
             assertEquals(
