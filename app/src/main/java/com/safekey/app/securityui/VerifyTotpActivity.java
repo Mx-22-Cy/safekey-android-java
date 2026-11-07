@@ -37,7 +37,7 @@ public final class VerifyTotpActivity extends ProtectedActivity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             if (!visible || !requireRealVault()) { return; }
-            refreshCountdown();
+            if (!TotpConfirmationState.isConfirming()) { refreshCountdown(); }
             if (visible && setup != null && setup.isReady()) { main.postDelayed(this, 1000L); }
         }
     };
@@ -48,7 +48,7 @@ public final class VerifyTotpActivity extends ProtectedActivity {
     private TotpEnrollmentCoordinator.Setup setup;
     private boolean visible;
     private boolean busy;
-    private int generation;
+    private final TotpConfirmationState.Listener confirmationListener = this::onRetainedConfirmation;
     // Preserve the backend's terminal outcome instead of mislabeling it as a timeout.
     private int terminalMessage;
 
@@ -93,6 +93,17 @@ public final class VerifyTotpActivity extends ProtectedActivity {
         visible = true;
         if (!requireRealVault()) { return; }
         setup = ((SafeKeyApplication) getApplication()).getTotpEnrollmentCoordinator().getPendingSetup();
+        // Observe the application-scoped operation BEFORE interpreting a missing setup.
+        // Successful confirmation closes the backend setup, so null is expected then.
+        boolean outcomeWaiting = TotpConfirmationState.hasResult();
+        TotpConfirmationState.observe(confirmationListener);
+        if (outcomeWaiting) { return; }
+        busy = TotpConfirmationState.isConfirming();
+        if (busy) {
+            enableButton.setEnabled(false);
+            countdown.setText(R.string.t39_time_limit);
+            return;
+        }
         if (!isReady()) {
             endUnavailable();
             return;
@@ -105,8 +116,8 @@ public final class VerifyTotpActivity extends ProtectedActivity {
 
     @Override protected void onRuntimeStop() {
         visible = false;
-        generation++;
-        busy = false;
+        TotpConfirmationState.stopObserving(confirmationListener);
+        // The backend request continues and its result is retained across onStop.
         main.removeCallbacks(ticker);
         clearCode();
         enableButton.setEnabled(false);
@@ -114,7 +125,7 @@ public final class VerifyTotpActivity extends ProtectedActivity {
     }
 
     @Override protected void onRuntimeDestroy() {
-        generation++;
+        TotpConfirmationState.stopObserving(confirmationListener);
         clearCode();
         main.removeCallbacks(ticker);
         super.onRuntimeDestroy();
@@ -141,7 +152,7 @@ public final class VerifyTotpActivity extends ProtectedActivity {
     }
 
     private void verifyCode() {
-        if (busy || !isReady()) { return; }
+        if (busy || TotpConfirmationState.isConfirming() || !isReady()) { return; }
         Editable value = codeInput.getText();
         if (value == null || value.length() != 6 || !onlyDigits(value)) {
             showError(R.string.t39_invalid_format);
@@ -149,42 +160,52 @@ public final class VerifyTotpActivity extends ProtectedActivity {
         }
         char[] code = new char[6];
         for (int i = 0; i < code.length; i++) { code[i] = value.charAt(i); }
-        int request = ++generation;
         busy = true;
         enableButton.setEnabled(false);
         clearCode();
         try {
-            setup.confirm(code, new TotpEnrollmentCoordinator.ConfirmationCallback() {
-                @Override public void onResult(TotpEnrollmentService.Confirmation result, int remaining) {
-                    if (request != generation || !visible || isFinishing() || !requireRealVault()) { return; }
-                    busy = false;
-                    switch (result) {
-                        case ENABLED:
-                            main.removeCallbacks(ticker);
-                            showSuccess();
-                            return;
-                        case INVALID_CODE:
-                            showError(getString(R.string.t39_invalid_with_attempts, remaining));
-                            updateButton();
-                            return;
-                        case ATTEMPT_LIMIT_REACHED: endEnrollment(R.string.t39_attempt_limit); break;
-                        case EXPIRED: endEnrollment(R.string.t39_expired); break;
-                        case ALREADY_CONFIGURED: endEnrollment(R.string.t39_already_enabled); break;
-                        case CANCELLED: endEnrollment(R.string.t39_cancelled); break;
-                    }
-                }
-                @Override public void onError(Exception error) {
-                    if (request != generation || !visible || isFinishing()) { return; }
-                    busy = false;
-                    showError(R.string.t39_verification_failed);
-                    updateButton();
-                }
-            });
+            // No Activity callback is captured: the result lives until a resumed
+            // verifier consumes it, even if Android recreates this Activity.
+            TotpConfirmationState.submit(setup, code);
         } catch (RuntimeException error) {
             busy = false;
             showError(R.string.t39_verification_failed);
             updateButton();
         } finally { Arrays.fill(code, '\0'); }
+    }
+
+    private void onRetainedConfirmation(TotpEnrollmentService.Confirmation result,
+                                        int remaining, boolean failed) {
+        if (!visible || isFinishing() || !requireRealVault()) { return; }
+        busy = false;
+        // Prevent showing a retained result under another REAL-vault session.
+        if (!TotpConfirmationState.isSessionCurrent()) {
+            TotpConfirmationState.discard();
+            endEnrollment(R.string.t39_cancelled);
+            return;
+        }
+        TotpConfirmationState.consume();
+        if (failed || result == null) {
+            showError(R.string.t39_verification_failed);
+            updateButton();
+            return;
+        }
+        switch (result) {
+            case ENABLED:
+                main.removeCallbacks(ticker);
+                showSuccess();
+                return;
+            case INVALID_CODE:
+                setup = ((SafeKeyApplication) getApplication())
+                        .getTotpEnrollmentCoordinator().getPendingSetup();
+                showError(getString(R.string.t39_invalid_with_attempts, remaining));
+                updateButton();
+                return;
+            case ATTEMPT_LIMIT_REACHED: endEnrollment(R.string.t39_attempt_limit); break;
+            case EXPIRED: endEnrollment(R.string.t39_expired); break;
+            case ALREADY_CONFIGURED: endEnrollment(R.string.t39_already_enabled); break;
+            case CANCELLED: endEnrollment(R.string.t39_cancelled); break;
+        }
     }
 
     private void showSuccess() {
@@ -264,7 +285,12 @@ public final class VerifyTotpActivity extends ProtectedActivity {
     private void clearCode() {
         if (codeInput != null && codeInput.getText() != null) { codeInput.getText().clear(); }
     }
-    private void goBack() { clearCode(); finish(); }
+    private void goBack() {
+        // Do not navigate away mid-confirmation and misreport an enabled vault.
+        if (TotpConfirmationState.isConfirming()) { return; }
+        clearCode();
+        finish();
+    }
 
     private boolean requireRealVault() {
         SafeKeyApplication app = (SafeKeyApplication) getApplication();
