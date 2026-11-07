@@ -198,7 +198,8 @@ public final class VerifyTotpActivity extends ProtectedActivity {
             case INVALID_CODE:
                 setup = ((SafeKeyApplication) getApplication())
                         .getTotpEnrollmentCoordinator().getPendingSetup();
-                showError(getString(R.string.t39_invalid_with_attempts, remaining));
+                showError(getResources().getQuantityString(
+                        R.plurals.t39_invalid_with_attempts, remaining, remaining));
                 updateButton();
                 return;
             case ATTEMPT_LIMIT_REACHED: endEnrollment(R.string.t39_attempt_limit); break;

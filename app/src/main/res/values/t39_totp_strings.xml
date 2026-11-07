@@ -49,15 +49,17 @@
     <string name="t39_verify_description">Enter the six-digit code shown in your authenticator app.</string>
     <string name="t39_code_hint">000000</string>
     <string name="t39_verify_button">Enable Protection</string>
-    <string name="t39_verifying">Verifying...</string>
+    <string name="t39_verifying">Verifying…</string>
     <string name="t39_verification_back">Back</string>
 
     <!-- Validation and Errors -->
 
     <string name="t39_invalid_code">Invalid code. Please try again.</string>
     <string name="t39_invalid_format">Enter a valid six-digit code.</string>
-    <string name="t39_attempts_remaining">%1$d attempts remaining.</string>
-    <string name="t39_invalid_with_attempts">Invalid code. %1$d attempts remaining.</string>
+    <plurals name="t39_invalid_with_attempts">
+        <item quantity="one">Invalid code. %1$d attempt remaining.</item>
+        <item quantity="other">Invalid code. %1$d attempts remaining.</item>
+    </plurals>
 
     <string name="t39_attempt_limit">Too many incorrect attempts. Start setup again.</string>
     <string name="t39_expired">Setup expired. Start again to generate a new key.</string>

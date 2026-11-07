@@ -5,7 +5,5 @@
     <dimen name="t39_text_instruction">15sp</dimen>
     <dimen name="t39_text_small">14sp</dimen>
     <dimen name="t39_text_note">13sp</dimen>
-    <dimen name="t39_text_caption">12sp</dimen>
-    <dimen name="t39_text_copy">13sp</dimen>
     <dimen name="t39_text_code">26sp</dimen>
 </resources>
