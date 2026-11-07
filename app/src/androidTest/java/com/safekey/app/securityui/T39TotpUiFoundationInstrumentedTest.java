@@ -4,7 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Activity;
 import android.content.Intent;
+import android.widget.EditText;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.WindowManager;
@@ -18,10 +20,12 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
+import com.safekey.app.security.storage.DecoyVaultCoordinator;
 import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.security.totp.VaultUnlockFlow;
 import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,6 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class T39TotpUiFoundationInstrumentedTest {
 
     private static final String TEST_MASTER = "T27DisposableMasterPassword123!";
+    private static final String TEST_DECOY = "T27DisposableDecoyPassword456!";
 
     @Test
     public void setupRejectsLockedSession() {
@@ -121,6 +126,143 @@ public class T39TotpUiFoundationInstrumentedTest {
         } finally {
             cleanupSession();
         }
+    }
+
+
+    @Test
+    public void setupRejectsActiveDecoyVault() throws Exception {
+        assertActiveDecoyCannotOpen(SetupTotpActivity.class);
+    }
+
+    @Test
+    public void verifyRejectsActiveDecoyVault() throws Exception {
+        assertActiveDecoyCannotOpen(VerifyTotpActivity.class);
+    }
+
+    @Test
+    public void setupRejectsUnlockedWithoutActiveRealVault() throws Exception {
+        assertUnlockedWithoutRealVaultCannotOpen(SetupTotpActivity.class);
+    }
+
+    @Test
+    public void verifyRejectsUnlockedWithoutActiveRealVault() throws Exception {
+        assertUnlockedWithoutRealVaultCannotOpen(VerifyTotpActivity.class);
+    }
+
+    @Test
+    public void verifyClearsCodeWhenStopped() throws Exception {
+        authenticateRealVaultForUiTest();
+        try (ActivityScenario<VerifyTotpActivity> scenario =
+                     ActivityScenario.launch(VerifyTotpActivity.class)) {
+            AtomicReference<EditText> codeReference = new AtomicReference<>();
+            scenario.onActivity(activity -> {
+                EditText code = activity.findViewById(R.id.editVerifyTotpCode);
+                code.setText("123456");
+                codeReference.set(code);
+                assertEquals("123456", code.getText().toString());
+            });
+            // Moving to CREATED invokes onStop(). Keep the view reference because
+            // protected-session cleanup may also finish the Activity.
+            scenario.moveToState(Lifecycle.State.CREATED);
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+                    assertEquals("Verification code must be cleared on stop",
+                            "", codeReference.get().getText().toString()));
+        } finally {
+            cleanupSession();
+        }
+    }
+
+    private void assertUnlockedWithoutRealVaultCannotOpen(
+            Class<? extends Activity> activityClass) throws Exception {
+        // Begin with the REAL vault closed. An unlocked session flag alone
+        // must never be accepted as permission for REAL-only screens.
+        SafeKeySession.lock();
+        awaitAuthenticationReadiness();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+                SafeKeySession::unlockAfterAuthentication);
+        try {
+            assertEquals(SessionState.UNLOCKED, SafeKeySession.getState());
+            assertTrue("A REAL vault must not be active",
+                    app().getActiveVault() != SafeKeyApplication.ActiveVault.REAL);
+            Intent intent = new Intent(app(), activityClass);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try (ActivityScenario<? extends Activity> scenario =
+                         ActivityScenario.launch(intent)) {
+                assertEventuallyDestroyed(scenario);
+            }
+        } finally {
+            cleanupSession();
+        }
+    }
+
+    private void assertActiveDecoyCannotOpen(
+            Class<? extends Activity> activityClass) throws Exception {
+        authenticateDecoyVaultForUiTest();
+        try {
+            assertEquals(SessionState.UNLOCKED, SafeKeySession.getState());
+            assertEquals(SafeKeyApplication.ActiveVault.DECOY, app().getActiveVault());
+            Intent intent = new Intent(app(), activityClass);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try (ActivityScenario<? extends Activity> scenario =
+                         ActivityScenario.launch(intent)) {
+                assertEventuallyDestroyed(scenario);
+            }
+        } finally {
+            cleanupSession();
+        }
+    }
+
+    private interface DecoyOperation {
+        void start(VaultDataService.SimpleCallback callback);
+    }
+
+    private static void awaitDecoyOperation(DecoyOperation operation) throws Exception {
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<Exception> error = new AtomicReference<>();
+        operation.start(new VaultDataService.SimpleCallback() {
+            @Override public void onSuccess() { completed.countDown(); }
+            @Override public void onError(Exception exception) {
+                error.set(exception);
+                completed.countDown();
+            }
+        });
+        assertTrue("Decoy operation timed out", completed.await(25, TimeUnit.SECONDS));
+        if (error.get() != null) { throw error.get(); }
+    }
+
+    private void authenticateDecoyVaultForUiTest() throws Exception {
+        authenticateRealVaultForUiTest();
+        SafeKeySession.lock();
+        awaitAuthenticationReadiness();
+        DecoyVaultCoordinator coordinator = app().getDecoyVaultCoordinator();
+        char[] password = TEST_DECOY.toCharArray();
+        try {
+            if (!coordinator.hasDecoyVault()) {
+                awaitDecoyOperation(callback -> coordinator.createDecoyVault(password, callback));
+                awaitDecoyOperation(coordinator::closeDecoyVault);
+            }
+            awaitDecoyOperation(callback -> coordinator.unlockDecoyVault(password, callback));
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+                SafeKeySession.unlockAfterAuthentication();
+                app().activateDecoyVault();
+            });
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    private static void awaitAuthenticationReadiness() throws Exception {
+        CountDownLatch ready = new CountDownLatch(1);
+        AtomicReference<Exception> error = new AtomicReference<>();
+        app().prepareForVaultAuthentication(new VaultDataService.SimpleCallback() {
+            @Override public void onSuccess() { ready.countDown(); }
+            @Override public void onError(Exception exception) {
+                error.set(exception);
+                ready.countDown();
+            }
+        });
+        assertTrue("Previous vault cleanup timed out", ready.await(20, TimeUnit.SECONDS));
+        if (error.get() != null) { throw error.get(); }
     }
 
     private static void assertEventuallyDestroyed(ActivityScenario<?> scenario)
