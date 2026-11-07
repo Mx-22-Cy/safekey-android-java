@@ -46,10 +46,9 @@ public final class SetupTotpActivity extends ProtectedActivity {
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
             if (!visible || !requireRealVault()) { return; }
-            refreshCountdown();
-            if (visible && setup != null && setup.isReady()) {
-                main.postDelayed(this, 1000L);
-            }
+            // Preparation is asynchronous and may outlive an Activity instance.
+            // Poll the coordinator while the screen is visible, even before it is ready.
+            reconcileSetup();
         }
     };
 
@@ -132,11 +131,45 @@ public final class SetupTotpActivity extends ProtectedActivity {
         super.onRuntimeResume();
         visible = true;
         if (!requireRealVault()) { return; }
-        TotpEnrollmentCoordinator coordinator = coordinator();
-        setup = coordinator.getPendingSetup();
-        if (setup != null && setup.isReady()) {
-            renderReady();
-        } else if (setup == null && !busy && !passwordPromptShown) {
+        reconcileSetup();
+    }
+
+    private void reconcileSetup() {
+        if (!visible || !requireRealVault()) { return; }
+        main.removeCallbacks(ticker);
+        TotpEnrollmentCoordinator.Setup pending = coordinator().getPendingSetup();
+        setup = pending;
+        if (pending != null) {
+            // Reattachment after recreation must not restart enrollment or generate a new seed.
+            if (pending.isReady() && pending.isSessionValid()) {
+                busy = false;
+                if (qrBitmap == null) { renderReady(); }
+                else {
+                    refreshCountdown();
+                    main.postDelayed(ticker, 1000L);
+                }
+            } else if (pending.isActive() && pending.isSessionValid()) {
+                busy = true;
+                conceal();
+                showError(R.string.t39_preparing);
+                main.postDelayed(ticker, 1000L);
+            } else {
+                busy = false;
+                conceal();
+                showError(R.string.t39_expired);
+            }
+        } else if (busy) {
+            // Preparation completed with an error while the old Activity owned its callback.
+            busy = false;
+            passwordPromptShown = false;
+            showPasswordDialogIfNeeded();
+        } else {
+            showPasswordDialogIfNeeded();
+        }
+    }
+
+    private void showPasswordDialogIfNeeded() {
+        if (visible && !busy && !passwordPromptShown && passwordDialog == null) {
             passwordPromptShown = true;
             showPasswordDialog();
         }
@@ -146,6 +179,9 @@ public final class SetupTotpActivity extends ProtectedActivity {
         visible = false;
         main.removeCallbacks(ticker);
         dismissPasswordDialog();
+        // A system-initiated dismissal is not a user cancellation.
+        // Allow the white password confirmation dialog to reopen on resume.
+        if (!busy) { passwordPromptShown = false; }
         conceal();
         super.onRuntimeStop();
     }
@@ -212,7 +248,7 @@ public final class SetupTotpActivity extends ProtectedActivity {
                             if (operation != operationGeneration) { return; }
                             busy = false;
                             setup = ready;
-                            if (visible && !isFinishing() && requireRealVault()) { renderReady(); }
+                            if (visible && !isFinishing() && requireRealVault()) { reconcileSetup(); }
                         }
                         @Override public void onError(Exception error) {
                             if (operation != operationGeneration) { return; }
