@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="t38_rename_dialog_title">Edit Vault Name</string>
+    <string name="t38_rename_cancel">Cancel</string>
+    <string name="t38_rename_save">Save</string>
+    <string name="t38_rename_empty_error">Vault name cannot be empty.</string>
+    <string name="t38_rename_too_long_error">Vault name cannot exceed 64 characters.</string>
+    <string name="t38_rename_save_error">Could not save the vault name. Try again.</string>
+    <dimen name="t38_rename_dialog_horizontal_padding">24dp</dimen>
+    <dimen name="t38_rename_dialog_vertical_padding">8dp</dimen>
+</resources>

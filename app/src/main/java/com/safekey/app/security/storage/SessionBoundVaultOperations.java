@@ -112,6 +112,31 @@ public final class SessionBoundVaultOperations
     }
 
     @Override
+    public void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    ) {
+        execute(
+                (operations, result) ->
+                        operations.getVaultDisplayName(result),
+                callback
+        );
+    }
+
+    @Override
+    public void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        execute(
+                (operations, result) ->
+                        operations.updateVaultDisplayName(
+                                displayName,
+                                result
+                        ),
+                callback
+        );
+    }
+    @Override
     public void getCredential(
             long id,
             VaultDataService.ResultCallback<Credential> callback

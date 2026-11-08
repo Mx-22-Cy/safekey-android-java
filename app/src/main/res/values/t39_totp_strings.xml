@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- T39: Two-Factor Authentication Setup -->
+
+    <string name="t39_title">Set Up Two-Factor Authentication</string>
+    <string name="t39_description">Add an extra layer of protection to your vault with secure verification.</string>
+
+    <string name="t39_info_title">How it works</string>
+    <string name="t39_info_description">After setup, you will need a six-digit code from your authenticator app when signing in to SafeKey.</string>
+
+    <string name="t39_start_setup">Set Up Authenticator</string>
+
+    <!-- Screen 1: Authenticator Setup -->
+
+    <string name="t39_setup_title">Connect Your Authenticator</string>
+    <string name="t39_setup_description">Scan this QR code with an authenticator app, such as Google Authenticator or Microsoft Authenticator.</string>
+
+    <string name="t39_qr_title">Scan QR Code</string>
+    <string name="t39_qr_description">Open your authenticator app and scan this QR code.</string>
+    <string name="t39_qr_accessibility">Authenticator setup QR code</string>
+
+    <string name="t39_cannot_scan">Can\'t scan the QR code?</string>
+    <string name="t39_manual_entry">Enter Setup Key Manually</string>
+    <string name="t39_manual_key_title">Manual Setup Key</string>
+    <string name="t39_manual_key_description">Can\'t scan the QR code?</string>
+    <string name="t39_manual_key_hidden">Your setup key is hidden.</string>
+
+    <string name="t39_show_key">Enter Setup Key Manually</string>
+    <string name="t39_hide_key">Hide Setup Key</string>
+    <string name="t39_copy_key">Copy Key</string>
+    <string name="t39_key_copied">Setup key copied.</string>
+
+    <string name="t39_security_warning">Keep this key private. Anyone with it could generate your verification codes.</string>
+
+    <string name="t39_continue">Continue</string>
+    <string name="t39_cancel">Cancel</string>
+    <string name="t39_back">Go back</string>
+
+    <!-- Enrollment Countdown -->
+
+    <string name="t39_time_limit">Complete setup within five minutes.</string>
+    <string name="t39_time_remaining">Time remaining: %1$s</string>
+    <string name="t39_not_enabled">Your QR code will appear when setup starts.</string>
+
+    <!-- Screen 2: Verification -->
+
+    <string name="t39_verify_title">Verify Your Authenticator</string>
+    <string name="t39_verify_description">Enter the six-digit code shown in your authenticator app.</string>
+    <string name="t39_code_hint">000000</string>
+    <string name="t39_verify_button">Enable Protection</string>
+    <string name="t39_verifying">Verifying…</string>
+    <string name="t39_verification_back">Back</string>
+
+    <!-- Validation and Errors -->
+
+    <string name="t39_invalid_code">Invalid code. Please try again.</string>
+    <string name="t39_invalid_format">Enter a valid six-digit code.</string>
+    <plurals name="t39_invalid_with_attempts">
+        <item quantity="one">Invalid code. %1$d attempt remaining.</item>
+        <item quantity="other">Invalid code. %1$d attempts remaining.</item>
+    </plurals>
+
+    <string name="t39_attempt_limit">Too many incorrect attempts. Start setup again.</string>
+    <string name="t39_expired">Setup expired. Start again to generate a new key.</string>
+    <string name="t39_cancelled">Authenticator setup was cancelled.</string>
+    <string name="t39_already_enabled">An authenticator app is already configured.</string>
+
+    <string name="t39_setup_failed">Unable to start authenticator setup. Please try again.</string>
+    <string name="t39_verification_failed">Unable to verify the code. Please try again.</string>
+    <string name="t39_session_expired">Your vault session has ended. Sign in again to continue.</string>
+    <string name="t39_real_vault_required">Authenticator setup is only available in your main vault.</string>
+
+    <!-- Success Dialog -->
+
+    <string name="t39_success">Authenticator app enabled successfully.</string>
+    <string name="t39_success_title">Two-Factor Authentication Enabled</string>
+    <string name="t39_success_description">Your vault now has an extra layer of protection.</string>
+    <string name="t39_done">Done</string>
+
+</resources>
