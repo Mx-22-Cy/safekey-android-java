@@ -82,6 +82,16 @@ public final class VaultSessionManager {
         return true;
     }
 
+    /** Guard a short commit without evaluating timeout or invoking cleanup. */
+    public synchronized boolean runWhileLocked(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (state != SessionState.LOCKED) {
+            return false;
+        }
+        action.run();
+        return true;
+    }
+
     /**
      * Authorizes a storage commit against the current authentication and timeout.
      * The UI session checks own expiry cleanup, including vault-close callbacks.

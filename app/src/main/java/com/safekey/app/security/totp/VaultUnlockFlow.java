@@ -125,8 +125,14 @@ public final class VaultUnlockFlow {
         }
     }
 
-    private Request current;
-    private boolean closed;
+    /** Recovery and Real-password validation share the coordinator's security executor. */
+    public boolean isIdleForRecovery() {
+        return !closed && !runtimeScope.isStopped()
+                && current == null && completedAuthentication == null;
+    }
+
+    private volatile Request current;
+    private volatile boolean closed;
 
     public VaultUnlockFlow(
             VaultUnlockGate gate,
