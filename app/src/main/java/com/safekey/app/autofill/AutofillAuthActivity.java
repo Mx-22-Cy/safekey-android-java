@@ -3,6 +3,7 @@ package com.safekey.app.autofill;
 import android.app.assist.AssistStructure;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.service.autofill.Dataset;
 import android.service.autofill.FillResponse;
 import android.view.WindowManager;
@@ -16,108 +17,254 @@ import android.widget.TextView;
 
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.StartupGuardActivity;
+import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-public final class AutofillAuthActivity extends StartupGuardActivity {
+/**
+ * Handles authenticated credential selection for Android Autofill.
+ *
+ * SECURITY:
+ * - Requires an unlocked SafeKey vault.
+ * - Requires a valid one-time Autofill request token.
+ * - Preserves the original real or decoy vault session.
+ * - Verifies HTTPS website requests before loading choices.
+ * - Verifies native-app credentials using the installed
+ *   application identity and Digital Asset Links.
+ * - Rechecks native authorization before returning a dataset.
+ * - Rechecks session validity before credential delivery.
+ * - Never displays passwords in the selection interface.
+ */
+public final class AutofillAuthActivity
+        extends StartupGuardActivity {
+
+    private static final int REQUEST_UNLOCK_FOR_AUTOFILL = 451;
+    private static final long MAX_AUTHENTICATION_FLOW_MILLIS = 5 * 60_000L;
 
     private AutofillVaultSession vaultSession;
     private AutofillRequestMetadata metadata;
     private LinearLayout content;
-    private boolean completed;
 
-    // Identifies the authentication session that opened this activity.
+    private boolean completed;
+    private boolean selectionInProgress;
+    private boolean websiteAssociationVerified;
+    private boolean awaitingSignIn;
+    private long requestClaimedAtMillis = -1L;
+
+    private List<Credential> verifiedChoices =
+            Collections.emptyList();
+
     private long authenticationGeneration = -1L;
 
     @Override
     protected void onRuntimeCreate(Bundle savedInstanceState) {
         super.onRuntimeCreate(savedInstanceState);
 
-        // Prevent screenshots and screen recordings of credential selection.
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SECURE
+        );
+
+        // A recreated authentication screen must not reuse a consumed token.
+        if (savedInstanceState != null || getIntent() == null) {
+            denyAutofill();
+            return;
+        }
 
         SafeKeyApplication app =
                 (SafeKeyApplication) getApplication();
 
-        // The vault must already be unlocked.
-        if (!app.isStartupRuntimeAvailable()
-                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+        if (!app.isStartupRuntimeAvailable()) {
             denyAutofill();
             return;
         }
 
-        // Capture the current authentication generation.
-        authenticationGeneration =
-                SafeKeySession.getManager().getAuthenticationGeneration();
-
-        if (authenticationGeneration < 0 || !sessionValid()) {
-            denyAutofill();
-            return;
-        }
-
-        // Obtain the Autofill structure supplied by Android.
-        AssistStructure structure = getIntent().getParcelableExtra(
-                AutofillManager.EXTRA_ASSIST_STRUCTURE
-        );
+        AssistStructure structure =
+                getIntent().getParcelableExtra(
+                        AutofillManager.EXTRA_ASSIST_STRUCTURE
+                );
 
         metadata = AutofillRequestMetadata.extract(structure);
-
         if (metadata == null) {
             denyAutofill();
             return;
         }
 
-        // Reject missing, expired, reused, or mismatched requests.
-        String requestToken = getIntent().getStringExtra(
-                SafeKeyAutofillService.EXTRA_REQUEST_TOKEN
-        );
+        String requestToken =
+                getIntent().getStringExtra(
+                        SafeKeyAutofillService.EXTRA_REQUEST_TOKEN
+                );
 
-        if (!AutofillRequestTracker.consume(requestToken, metadata)) {
+        boolean vaultWasLocked =
+                SafeKeySession.getState() == SessionState.LOCKED;
+
+        // Each entry point consumes its original one-time token exactly once.
+        // The locked path permits authentication, not access to credentials.
+        boolean requestAccepted = vaultWasLocked
+                ? AutofillRequestTracker.takeForAuthentication(
+                requestToken, metadata)
+                : AutofillRequestTracker.consume(requestToken, metadata);
+
+        if (!requestAccepted) {
             denyAutofill();
             return;
         }
 
-        // Capture the active real or decoy vault without switching vaults.
-        vaultSession = AutofillVaultSession.capture(this);
-
-        if (vaultSession == null || !vaultSession.isCurrent()) {
-            denyAutofill();
-            return;
-        }
+        requestClaimedAtMillis = SystemClock.elapsedRealtime();
 
         ScrollView scroll = new ScrollView(this);
 
         content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
+        content.setOrientation(
+                LinearLayout.VERTICAL
+        );
         content.setPadding(40, 40, 40, 40);
 
         scroll.addView(content);
         setContentView(scroll);
 
-        showMessage("Verifying application and website...");
+        if (vaultWasLocked) {
+            awaitingSignIn = true;
+            showMessage("Unlock SafeKey to continue Autofill.");
 
-        // Verify Digital Asset Links outside the Android main thread.
+            try {
+                Intent signIn = new Intent(this, SignInActivity.class);
+                signIn.putExtra(
+                        SignInActivity.EXTRA_RETURN_TO_AUTOFILL, true);
+                startActivityForResult(
+                        signIn, REQUEST_UNLOCK_FOR_AUTOFILL);
+            } catch (RuntimeException failure) {
+                awaitingSignIn = false;
+                denyAutofill();
+            }
+            return;
+        }
+
+        if (!captureAuthenticatedVaultSession()) {
+            denyAutofill();
+            return;
+        }
+        startVerifiedCredentialFlow();
+    }
+
+    @Override
+    protected void onActivityResult(
+            int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode != REQUEST_UNLOCK_FOR_AUTOFILL) {
+            return;
+        }
+
+        if (completed || !awaitingSignIn || resultCode != RESULT_OK
+                || !requestFresh()) {
+            denyAutofill();
+            return;
+        }
+
+        awaitingSignIn = false;
+
+        // SignInActivity performs master-password/biometric + TOTP,
+        // claims the unlock session, and activates the real vault.
+        // Recheck everything here. A result alone is NOT authorization.
+        if (!captureAuthenticatedVaultSession()) {
+            denyAutofill();
+            return;
+        }
+
+        startVerifiedCredentialFlow();
+    }
+
+    private boolean requestFresh() {
+        if (requestClaimedAtMillis < 0) {
+            return false;
+        }
+
+        long elapsed = SystemClock.elapsedRealtime()
+                - requestClaimedAtMillis;
+        return elapsed >= 0
+                && elapsed < MAX_AUTHENTICATION_FLOW_MILLIS;
+    }
+
+    private boolean captureAuthenticatedVaultSession() {
+        if (!requestFresh()
+                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+            return false;
+        }
+
+        authenticationGeneration = SafeKeySession.getManager()
+                .getAuthenticationGeneration();
+        if (!sessionValid()) {
+            return false;
+        }
+
+        vaultSession = AutofillVaultSession.capture(this);
+        return vaultSession != null && vaultSession.isCurrent();
+    }
+
+    private void startVerifiedCredentialFlow() {
+        if (completed || awaitingSignIn || !sessionValid()
+                || metadata == null || vaultSession == null
+                || !vaultSession.isCurrent()) {
+            denyAutofill();
+            return;
+        }
+
+        /*
+         * Native requests do not claim a website origin.
+         *
+         * Each matching credential must be authorized
+         * separately using the installed application
+         * and its associated website.
+         */
+        if (metadata.isNativeApp()) {
+
+            showMessage(
+                    "Checking native application authorization..."
+            );
+
+            loadMatchingCredentials();
+            return;
+        }
+
+        /*
+         * Website requests require a valid HTTPS origin
+         * and the existing Digital Asset Links verification.
+         */
+        if (metadata.getClaimedWebOrigin() == null) {
+            denyAutofill();
+            return;
+        }
+
+        showMessage(
+                "Verifying application and website..."
+        );
+
+        final AutofillRequestMetadata request = metadata;
+
         new Thread(() -> {
 
             boolean verified =
                     AutofillAssociationVerifier.isAssociated(
                             getApplicationContext(),
-                            metadata
+                            request
                     );
 
             runOnUiThread(() -> {
 
-                if (isFinishing() || isDestroyed() || completed) {
+                if (isFinishing()
+                        || isDestroyed()
+                        || completed) {
                     return;
                 }
 
-                // Reject if association verification failed
-                // or the original vault session is no longer valid.
                 if (!verified
+                        || metadata != request
                         || !sessionValid()
                         || !vaultSession.isCurrent()) {
 
@@ -127,52 +274,88 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
                     return;
                 }
 
+                websiteAssociationVerified = true;
+
                 loadMatchingCredentials();
             });
 
-        }, "SafeKey-Autofill-Verification").start();
+        }, "SafeKey-Web-Autofill-Verification").start();
     }
 
+    /**
+     * Retrieves credentials only from the original
+     * authenticated real or decoy vault.
+     */
     private void loadMatchingCredentials() {
 
-        if (!sessionValid() || !vaultSession.isCurrent()) {
+        if (completed
+                || !sessionValid()
+                || vaultSession == null
+                || !vaultSession.isCurrent()) {
             denyAutofill();
             return;
         }
 
-        showMessage("Loading matching credentials...");
+        showMessage(
+                "Loading matching credentials..."
+        );
 
         vaultSession.getCredentials(
                 new VaultDataService.ResultCallback<List<Credential>>() {
 
                     @Override
-                    public void onSuccess(List<Credential> credentials) {
+                    public void onSuccess(
+                            List<Credential> credentials
+                    ) {
 
                         runOnUiThread(() -> {
 
-                            if (isFinishing() || isDestroyed() || completed) {
+                            if (isFinishing()
+                                    || isDestroyed()
+                                    || completed) {
                                 return;
                             }
 
                             if (!sessionValid()
                                     || !vaultSession.isCurrent()) {
+                                denyAutofill();
+                                return;
+                            }
 
+                            if (metadata.isNativeApp()) {
+
+                                startNativeVerification(
+                                        credentials
+                                );
+
+                                return;
+                            }
+
+                            if (!websiteAssociationVerified
+                                    || metadata.getClaimedWebOrigin()
+                                    == null) {
                                 denyAutofill();
                                 return;
                             }
 
                             List<Credential> matches =
-                                    AutofillCredentialMatcher.findMatches(
-                                            credentials,
-                                            metadata.getClaimedWebHost()
-                                    );
+                                    AutofillCredentialMatcher
+                                            .findMatches(
+                                                    credentials,
+                                                    metadata
+                                                            .getClaimedWebHost()
+                                            );
 
-                            showCredentialChoices(matches);
+                            showCredentialChoices(
+                                    matches
+                            );
                         });
                     }
 
                     @Override
-                    public void onError(Exception error) {
+                    public void onError(
+                            Exception exception
+                    ) {
 
                         runOnUiThread(() -> {
 
@@ -190,27 +373,117 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
         );
     }
 
-    private void showCredentialChoices(List<Credential> matches) {
+    /**
+     * Verifies native-app credential associations
+     * outside the Android main thread.
+     *
+     * No unverified credentials are displayed.
+     */
+    private void startNativeVerification(
+            List<Credential> credentials
+    ) {
+
+        if (completed
+                || metadata == null
+                || !metadata.isNativeApp()
+                || !sessionValid()
+                || !vaultSession.isCurrent()) {
+            denyAutofill();
+            return;
+        }
+
+        showMessage(
+                "Verifying application and associated websites..."
+        );
+
+        final AutofillRequestMetadata request = metadata;
+
+        new Thread(() -> {
+
+            List<Credential> matches =
+                    AutofillAssociationVerifier
+                            .findNativeMatches(
+                                    getApplicationContext(),
+                                    request,
+                                    credentials
+                            );
+
+            runOnUiThread(() -> {
+
+                if (isFinishing()
+                        || isDestroyed()
+                        || completed) {
+                    return;
+                }
+
+                if (metadata != request
+                        || !sessionValid()
+                        || !vaultSession.isCurrent()) {
+                    denyAutofill();
+                    return;
+                }
+
+                showCredentialChoices(matches);
+            });
+
+        }, "SafeKey-Native-Autofill-Verification").start();
+    }
+
+    /**
+     * Shows only credentials that passed the corresponding
+     * website or native-app authorization path.
+     */
+    private void showCredentialChoices(
+            List<Credential> matches
+    ) {
+
+        if (completed
+                || !sessionValid()
+                || !vaultSession.isCurrent()) {
+            denyAutofill();
+            return;
+        }
+
+        verifiedChoices = matches == null
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(
+                new ArrayList<>(matches)
+        );
 
         content.removeAllViews();
 
-        if (matches.isEmpty()) {
-            showMessage("No matching credentials found.");
+        if (verifiedChoices.isEmpty()) {
+
+            showMessage(
+                    "No verified matching credentials found."
+            );
+
             return;
         }
 
         TextView title = new TextView(this);
-        title.setText("Choose a SafeKey credential");
+        title.setText(
+                "Choose a SafeKey credential"
+        );
         title.setTextSize(20);
+
         content.addView(title);
 
-        for (Credential credential : matches) {
+        for (Credential credential : verifiedChoices) {
+
+            if (credential == null) {
+                continue;
+            }
 
             Button button = new Button(this);
 
-            // Display the username only.
-            // Never display or log the password.
-            button.setText(credential.getUsername());
+            /*
+             * Display only the username.
+             * Never expose the stored password in UI text.
+             */
+            button.setText(
+                    credential.getUsername()
+            );
 
             button.setOnClickListener(view ->
                     fillSelectedCredential(credential)
@@ -220,47 +493,177 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
         }
     }
 
-    private void fillSelectedCredential(Credential credential) {
+    /**
+     * Starts final authorization for the selected credential.
+     */
+    private void fillSelectedCredential(
+            Credential credential
+    ) {
 
-        // Recheck authentication and the original vault session.
+        if (completed || selectionInProgress) {
+            return;
+        }
+
+        if (!sessionValid()
+                || vaultSession == null
+                || !vaultSession.isCurrent()
+                || metadata == null
+                || credential == null
+                || !verifiedChoices.contains(credential)) {
+            denyAutofill();
+            return;
+        }
+
+        selectionInProgress = true;
+
+        /*
+         * A native application is authorized on a per-website
+         * basis. Recheck the selected credential just before
+         * returning it to the Android Autofill framework.
+         *
+         * The network check must not run on the UI thread.
+         */
+        if (metadata.isNativeApp()) {
+
+            showMessage(
+                    "Rechecking application authorization..."
+            );
+
+            final AutofillRequestMetadata request = metadata;
+
+            new Thread(() -> {
+
+                List<Credential> verified =
+                        AutofillAssociationVerifier
+                                .findNativeMatches(
+                                        getApplicationContext(),
+                                        request,
+                                        Collections.singletonList(
+                                                credential
+                                        )
+                                );
+
+                boolean authorized =
+                        verified.contains(credential);
+
+                runOnUiThread(() -> {
+
+                    if (isFinishing()
+                            || isDestroyed()
+                            || completed) {
+                        return;
+                    }
+
+                    if (!authorized
+                            || metadata != request
+                            || !sessionValid()
+                            || !vaultSession.isCurrent()) {
+                        denyAutofill();
+                        return;
+                    }
+
+                    completeSelection(
+                            credential,
+                            true
+                    );
+                });
+
+            }, "SafeKey-Native-Autofill-Recheck").start();
+
+            return;
+        }
+
+        completeSelection(
+                credential,
+                false
+        );
+    }
+
+    /**
+     * Creates the final Autofill response only after
+     * authorization and session checks have succeeded.
+     */
+    private void completeSelection(
+            Credential credential,
+            boolean nativeReverified
+    ) {
+
         if (completed
+                || !selectionInProgress
                 || !sessionValid()
                 || vaultSession == null
                 || !vaultSession.isCurrent()
                 || metadata == null
-                || credential == null) {
-
+                || credential == null
+                || !verifiedChoices.contains(credential)) {
             denyAutofill();
             return;
         }
 
-        AutofillLoginFields.Fields fields = metadata.getFields();
+        AutofillLoginFields.Fields fields =
+                metadata.getFields();
 
         if (fields == null
                 || fields.getUsernameId() == null
                 || fields.getPasswordId() == null
-                || !AutofillWebsiteMatcher.matches(
-                credential.getWebsite(),
-                metadata.getClaimedWebHost()
-        )) {
-
+                || fields.getUsernameId().equals(
+                fields.getPasswordId()
+        )
+                || credential.getUsername() == null
+                || credential.getUsername().trim().isEmpty()
+                || credential.getPassword() == null
+                || credential.getPassword().isEmpty()) {
             denyAutofill();
             return;
         }
 
+        if (metadata.isNativeApp()) {
+
+            /*
+             * Native requests must not claim a web origin.
+             * Their credential must have passed the final
+             * package/signature/website association check.
+             */
+            if (!nativeReverified
+                    || metadata.getClaimedWebOrigin() != null
+                    || metadata.getClaimedWebHost() != null
+                    || metadata.getClaimedWebScheme() != null) {
+                denyAutofill();
+                return;
+            }
+
+        } else {
+
+            /*
+             * Preserve strict website matching.
+             * Native verification cannot authorize a
+             * website-mode request.
+             */
+            if (nativeReverified
+                    || !websiteAssociationVerified
+                    || metadata.getClaimedWebOrigin() == null
+                    || !AutofillWebsiteMatcher.matches(
+                    credential.getWebsite(),
+                    metadata.getClaimedWebHost()
+            )) {
+                denyAutofill();
+                return;
+            }
+        }
+
         try {
 
-            RemoteViews presentation = new RemoteViews(
-                    getPackageName(),
-                    android.R.layout.simple_list_item_1
-            );
+            RemoteViews presentation =
+                    new RemoteViews(
+                            getPackageName(),
+                            android.R.layout.simple_list_item_1
+                    );
 
             presentation.setTextViewText(
                     android.R.id.text1,
                     "SafeKey"
             );
 
-            // Build a dataset containing only the selected credential.
             Dataset dataset = new Dataset.Builder()
                     .setValue(
                             fields.getUsernameId(),
@@ -278,17 +681,26 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
                     )
                     .build();
 
-            FillResponse response = new FillResponse.Builder()
-                    .addDataset(dataset)
-                    .build();
+            FillResponse response =
+                    new FillResponse.Builder()
+                            .addDataset(dataset)
+                            .build();
 
-            // Final validation before handing credentials to Android.
-            if (!sessionValid() || !vaultSession.isCurrent()) {
+            /*
+             * Final check before returning the dataset.
+             * No vault switching or reauthentication
+             * may have occurred.
+             */
+            if (!sessionValid()
+                    || !vaultSession.isCurrent()) {
                 denyAutofill();
                 return;
             }
 
             completed = true;
+
+            verifiedChoices =
+                    Collections.emptyList();
 
             Intent result = new Intent();
 
@@ -302,24 +714,23 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
 
         } catch (RuntimeException exception) {
 
-            // Fail closed if anything unexpected occurs.
             denyAutofill();
         }
     }
 
     /**
-     * Confirms that:
-     * 1. SafeKey's runtime is available.
-     * 2. The vault is unlocked.
-     * 3. The authentication generation has not changed.
+     * Confirms that the same authenticated SafeKey
+     * session is still available.
      */
     private boolean sessionValid() {
 
         SafeKeyApplication app =
                 (SafeKeyApplication) getApplication();
 
-        return app.isStartupRuntimeAvailable()
-                && SafeKeySession.getState() == SessionState.UNLOCKED
+        return requestFresh()
+                && app.isStartupRuntimeAvailable()
+                && SafeKeySession.getState()
+                == SessionState.UNLOCKED
                 && authenticationGeneration >= 0
                 && SafeKeySession.getManager()
                 .getAuthenticationGeneration()
@@ -344,6 +755,11 @@ public final class AutofillAuthActivity extends StartupGuardActivity {
         }
 
         completed = true;
+        awaitingSignIn = false;
+        authenticationGeneration = -1L;
+        vaultSession = null;
+        metadata = null;
+        verifiedChoices = Collections.emptyList();
 
         setResult(RESULT_CANCELED);
         finish();

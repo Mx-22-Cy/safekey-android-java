@@ -4,29 +4,47 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.content.pm.verify.domain.DomainVerificationManager;
+import android.content.pm.verify.domain.DomainVerificationUserState;
 import android.os.Build;
+
+import com.safekey.app.data.model.Credential;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import javax.net.ssl.HttpsURLConnection;
 
 /**
- * Verifies an Android app's association with a website.
+ * Verifies associations between Android applications and websites.
  *
- * Must run on a background thread.
+ * SECURITY:
+ * - Uses installed application signing certificates.
+ * - Requires Digital Asset Links credential-sharing permission.
+ * - Uses HTTPS with certificate validation.
+ * - Never follows HTTP redirects.
+ * - Fails closed when verification is unavailable.
+ * - Does not transmit usernames or passwords.
  *
- * No credentials are read or transmitted by this class.
- * Failed verification always returns false.
+ * Native matching additionally requires Android-verified
+ * App Links. It is currently supported on API 31+.
+ *
+ * Network verification must run on a background thread.
  */
 public final class AutofillAssociationVerifier {
 
@@ -36,14 +54,24 @@ public final class AutofillAssociationVerifier {
     private static final int MAX_RESPONSE_BYTES = 65536;
     private static final int TIMEOUT_MS = 3000;
 
+    private static final int MAX_NATIVE_HOST_CHECKS = 16;
+
     private AutofillAssociationVerifier() {
     }
 
+    /**
+     * Verifies a website Autofill request.
+     *
+     * Native requests must use findNativeMatches().
+     */
     public static boolean isAssociated(
             Context context,
             AutofillRequestMetadata metadata
     ) {
-        if (context == null || metadata == null) {
+        if (context == null
+                || metadata == null
+                || metadata.isNativeApp()
+                || metadata.getClaimedWebOrigin() == null) {
             return false;
         }
 
@@ -53,14 +81,18 @@ public final class AutofillAssociationVerifier {
 
         String packageName = metadata.getPackageName();
 
-        if (host == null || packageName == null
+        if (host == null
+                || packageName == null
                 || packageName.isEmpty()) {
             return false;
         }
 
         try {
             Set<String> installedFingerprints =
-                    getInstalledFingerprints(context, packageName);
+                    getInstalledFingerprints(
+                            context,
+                            packageName
+                    );
 
             if (installedFingerprints.isEmpty()) {
                 return false;
@@ -79,11 +111,283 @@ public final class AutofillAssociationVerifier {
             );
 
         } catch (Exception exception) {
-            // Fail closed. Never expose security details or passwords.
             return false;
         }
     }
 
+    /**
+     * Returns only credentials whose website is authorized
+     * to share login credentials with the requesting native app.
+     *
+     * Requirements:
+     * 1. Native request metadata.
+     * 2. Android-verified App Link domain.
+     * 3. Installed package signing certificate.
+     * 4. Valid website Digital Asset Links credential relation.
+     * 5. Exact credential website matching.
+     *
+     * This method must run on a background thread.
+     *
+     * It does not unlock the vault or bypass the existing
+     * authentication and real/decoy session checks.
+     *
+     * On API 26-30, native matching fails closed because this
+     * implementation has no trusted local domain candidate
+     * source for those platform versions.
+     */
+    public static List<Credential> findNativeMatches(
+            Context context,
+            AutofillRequestMetadata metadata,
+            List<Credential> credentials
+    ) {
+        if (context == null
+                || metadata == null
+                || !metadata.isNativeApp()
+                || metadata.getClaimedWebScheme() != null
+                || metadata.getClaimedWebHost() != null
+                || metadata.getClaimedWebOrigin() != null
+                || credentials == null
+                || credentials.isEmpty()
+                || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return Collections.emptyList();
+        }
+
+        String packageName = metadata.getPackageName();
+
+        if (packageName == null
+                || packageName.isEmpty()
+                || !packageName.equals(packageName.trim())) {
+            return Collections.emptyList();
+        }
+
+        try {
+            /*
+             * First identify candidate domains already verified
+             * by Android for this installed application.
+             *
+             * Do not query every website stored in the vault.
+             */
+            Set<String> verifiedHosts =
+                    getVerifiedAppLinkHosts(
+                            context,
+                            packageName
+                    );
+
+            if (verifiedHosts.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            Set<String> installedFingerprints =
+                    getInstalledFingerprints(
+                            context,
+                            packageName
+                    );
+
+            if (installedFingerprints.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            List<Credential> matches = new ArrayList<>();
+
+            /*
+             * Cache authorization outcomes only for this
+             * verification operation, not across sessions.
+             */
+            Map<String, Boolean> checkedHosts =
+                    new HashMap<>();
+
+            for (Credential credential : credentials) {
+                if (credential == null) {
+                    continue;
+                }
+
+                String username = credential.getUsername();
+                String password = credential.getPassword();
+                String website = credential.getWebsite();
+
+                if (username == null
+                        || username.trim().isEmpty()
+                        || password == null
+                        || password.isEmpty()) {
+                    continue;
+                }
+
+                String host = nativeHostForSavedWebsite(
+                        website
+                );
+
+                if (host == null
+                        || !verifiedHosts.contains(host)) {
+                    continue;
+                }
+
+                /*
+                 * Preserve the existing strict website matcher.
+                 * No automatic subdomain sharing.
+                 */
+                if (!AutofillWebsiteMatcher.matches(
+                        website,
+                        host
+                )) {
+                    continue;
+                }
+
+                Boolean authorized = checkedHosts.get(host);
+
+                if (authorized == null) {
+                    /*
+                     * Limit network checks and fail closed
+                     * rather than scanning the user's vault.
+                     */
+                    if (checkedHosts.size()
+                            >= MAX_NATIVE_HOST_CHECKS) {
+                        return Collections.emptyList();
+                    }
+
+                    String statements = fetchAssetLinks(host);
+
+                    authorized = statements != null
+                            && containsAssociation(
+                                    statements,
+                                    packageName,
+                                    installedFingerprints
+                            );
+
+                    checkedHosts.put(host, authorized);
+                }
+
+                if (authorized) {
+                    matches.add(credential);
+                }
+            }
+
+            return Collections.unmodifiableList(matches);
+
+        } catch (Exception exception) {
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Extracts a candidate HTTPS hostname from a saved
+     * credential website.
+     *
+     * This method does not establish authorization.
+     * The result must pass all native-app checks.
+     *
+     * Package-private for regression tests.
+     */
+    static String nativeHostForSavedWebsite(String website) {
+        if (website == null) {
+            return null;
+        }
+
+        String value = website.trim();
+
+        if (value.isEmpty()
+                || value.indexOf('\\') >= 0) {
+            return null;
+        }
+
+        try {
+            String candidate;
+
+            if (value.contains("://")) {
+                candidate = value;
+            } else {
+                candidate = "https://" + value;
+            }
+
+            URI uri = new URI(candidate);
+
+            if (!"https".equalsIgnoreCase(uri.getScheme())
+                    || uri.getHost() == null
+                    || uri.getRawUserInfo() != null
+                    || uri.getPort() != -1) {
+                return null;
+            }
+
+            String host =
+                    AutofillWebsiteMatcher.normalizeHost(
+                            uri.getHost()
+                    );
+
+            if (host == null
+                    || !AutofillWebsiteMatcher.matches(
+                            website,
+                            host
+                    )) {
+                return null;
+            }
+
+            return host;
+
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns only domains Android has actually verified
+     * for the requesting application's App Links.
+     *
+     * User-selected links are not treated as verified.
+     */
+    private static Set<String> getVerifiedAppLinkHosts(
+            Context context,
+            String packageName
+    ) throws PackageManager.NameNotFoundException {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return Collections.emptySet();
+        }
+
+        DomainVerificationManager manager =
+                context.getSystemService(
+                        DomainVerificationManager.class
+                );
+
+        if (manager == null) {
+            return Collections.emptySet();
+        }
+
+        DomainVerificationUserState state =
+                manager.getDomainVerificationUserState(
+                        packageName
+                );
+
+        if (state == null) {
+            return Collections.emptySet();
+        }
+
+        Set<String> verified = new HashSet<>();
+
+        for (Map.Entry<String, Integer> entry :
+                state.getHostToStateMap().entrySet()) {
+
+            if (entry.getValue() == null
+                    || entry.getValue()
+                    != DomainVerificationUserState
+                    .DOMAIN_STATE_VERIFIED) {
+                continue;
+            }
+
+            String host =
+                    AutofillWebsiteMatcher.normalizeHost(
+                            entry.getKey()
+                    );
+
+            if (host != null) {
+                verified.add(host);
+            }
+        }
+
+        return verified;
+    }
+
+    /**
+     * Gets the actual installed application's signing
+     * certificates from Android PackageManager.
+     */
     @SuppressWarnings("deprecation")
     private static Set<String> getInstalledFingerprints(
             Context context,
@@ -104,7 +408,8 @@ public final class AutofillAssociationVerifier {
                 return new HashSet<>();
             }
 
-            signatures = info.signingInfo.getApkContentsSigners();
+            signatures =
+                    info.signingInfo.getApkContentsSigners();
 
         } else {
             PackageInfo info = manager.getPackageInfo(
@@ -129,7 +434,8 @@ public final class AutofillAssociationVerifier {
             MessageDigest digest =
                     MessageDigest.getInstance("SHA-256");
 
-            byte[] hash = digest.digest(signature.toByteArray());
+            byte[] hash =
+                    digest.digest(signature.toByteArray());
 
             StringBuilder result = new StringBuilder();
 
@@ -151,15 +457,20 @@ public final class AutofillAssociationVerifier {
         return fingerprints;
     }
 
+    /**
+     * Retrieves Digital Asset Links exclusively over HTTPS.
+     */
     private static String fetchAssetLinks(String host) {
         HttpsURLConnection connection = null;
 
         try {
             URL url = new URL(
-                    "https://" + host + "/.well-known/assetlinks.json"
+                    "https://" + host
+                            + "/.well-known/assetlinks.json"
             );
 
-            connection = (HttpsURLConnection) url.openConnection();
+            connection =
+                    (HttpsURLConnection) url.openConnection();
 
             connection.setConnectTimeout(TIMEOUT_MS);
             connection.setReadTimeout(TIMEOUT_MS);
@@ -181,7 +492,8 @@ public final class AutofillAssociationVerifier {
                 return null;
             }
 
-            try (InputStream input = connection.getInputStream();
+            try (InputStream input =
+                         connection.getInputStream();
                  ByteArrayOutputStream output =
                          new ByteArrayOutputStream()) {
 
@@ -215,12 +527,18 @@ public final class AutofillAssociationVerifier {
         }
     }
 
+    /**
+     * Checks the exact application package and all current
+     * installed signing certificates against the site's
+     * credential-sharing Digital Asset Links statement.
+     */
     static boolean containsAssociation(
             String json,
             String packageName,
             Set<String> installedFingerprints
     ) {
-        if (json == null || packageName == null
+        if (json == null
+                || packageName == null
                 || installedFingerprints == null
                 || installedFingerprints.isEmpty()) {
             return false;
@@ -286,13 +604,17 @@ public final class AutofillAssociationVerifier {
         return false;
     }
 
-    private static boolean hasLoginRelation(JSONArray relations) {
+    private static boolean hasLoginRelation(
+            JSONArray relations
+    ) {
         if (relations == null) {
             return false;
         }
 
         for (int i = 0; i < relations.length(); i++) {
-            if (LOGIN_RELATION.equals(relations.optString(i))) {
+            if (LOGIN_RELATION.equals(
+                    relations.optString(i)
+            )) {
                 return true;
             }
         }

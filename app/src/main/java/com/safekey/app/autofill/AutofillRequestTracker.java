@@ -12,15 +12,25 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Tracks pending Android Autofill authentication requests.
+ * Tracks pending Autofill authentication requests.
  *
- * Security protections:
- * - Cryptographically random request tokens.
+ * Supports HTTPS website and native Android request types.
+ *
+ * Security:
+ * - Random 256-bit request tokens.
  * - One-time token consumption.
- * - Request expiration.
- * - Application and website matching.
- * - Username and password field matching.
- * - Authentication-session binding.
+ * - 60-second expiration.
+ * - Application package binding.
+ * - Request-type binding.
+ * - HTTPS origin binding for website requests.
+ * - Exact Autofill field identifier matching.
+ * - Authentication-session generation binding.
+ *
+ * IMPORTANT:
+ * Native request registration does NOT establish trust.
+ * The installed application's signing identity and its
+ * authorization for each website credential must be
+ * verified before any credentials are returned.
  *
  * No usernames or passwords are stored here.
  */
@@ -30,24 +40,41 @@ public final class AutofillRequestTracker {
 
     private static final int MAX_REQUESTS = 32;
 
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final SecureRandom RANDOM =
+            new SecureRandom();
 
     private static final Map<String, RequestRecord> REQUESTS =
             new HashMap<>();
 
     private AutofillRequestTracker() {
-        // Utility class.
     }
 
     /**
-     * Registers a new Autofill request.
-     *
-     * Returns null if the request is invalid, the vault is locked,
-     * or the request limit has been reached.
+     * Registers one pending authentication request.
      */
     public static synchronized String register(
             AutofillRequestMetadata metadata
     ) {
+        return registerInternal(metadata, false);
+    }
+
+    static synchronized String registerForAuthentication(
+            AutofillRequestMetadata metadata
+    ) {
+        return registerInternal(metadata, true);
+    }
+
+    private static String registerInternal(
+            AutofillRequestMetadata metadata,
+            boolean allowLockedAuthentication
+    ) {
+        if (SafeKeySession.getState()
+                != com.safekey.app.session.logic.SessionState.UNLOCKED
+                && (!allowLockedAuthentication
+                || SafeKeySession.getState()
+                != com.safekey.app.session.logic.SessionState.LOCKED)) {
+            return null;
+        }
         if (metadata == null || metadata.getFields() == null) {
             return null;
         }
@@ -59,26 +86,50 @@ public final class AutofillRequestTracker {
                 metadata.getFields().getPasswordId();
 
         String packageName = metadata.getPackageName();
-        String website = metadata.getClaimedWebHost();
 
         if (usernameId == null
                 || passwordId == null
+                || usernameId.equals(passwordId)
                 || packageName == null
                 || packageName.isEmpty()
-                || website == null
-                || website.isEmpty()) {
+                || !packageName.equals(packageName.trim())) {
+            return null;
+        }
+
+        boolean nativeApp = metadata.isNativeApp();
+
+        String webOrigin = metadata.getClaimedWebOrigin();
+
+        /*
+         * The native and HTTPS request modes are exclusive.
+         *
+         * Native requests have no claimed web origin.
+         * Website requests must have a valid HTTPS origin.
+         */
+        if (nativeApp) {
+            if (metadata.getClaimedWebScheme() != null
+                    || metadata.getClaimedWebHost() != null
+                    || webOrigin != null) {
+                return null;
+            }
+        } else if (webOrigin == null) {
             return null;
         }
 
         long now = SystemClock.elapsedRealtime();
 
-        // Bind the request to the current authentication session.
         long authenticationGeneration =
                 SafeKeySession.getManager()
                         .getAuthenticationGeneration();
 
-        // Never register requests for locked or expired sessions.
-        if (authenticationGeneration < 0) {
+        /*
+         * A locked vault may register a request for authentication.
+         * A negative generation never authorizes credential access.
+         * It only records that authentication is still required.
+         */
+        if (authenticationGeneration < 0
+                && SafeKeySession.getState()
+                != com.safekey.app.session.logic.SessionState.LOCKED) {
             return null;
         }
 
@@ -88,7 +139,6 @@ public final class AutofillRequestTracker {
             return null;
         }
 
-        // Generate a cryptographically random 256-bit token.
         byte[] randomBytes = new byte[32];
         RANDOM.nextBytes(randomBytes);
 
@@ -108,7 +158,8 @@ public final class AutofillRequestTracker {
                 requestToken,
                 new RequestRecord(
                         packageName,
-                        website,
+                        nativeApp,
+                        webOrigin,
                         usernameId,
                         passwordId,
                         now,
@@ -120,17 +171,39 @@ public final class AutofillRequestTracker {
     }
 
     /**
-     * Consumes a request token exactly once.
+     * Consumes an authentication request exactly once.
      *
-     * The token is removed before validation so that even a failed
-     * validation attempt cannot reuse it.
-     *
-     * Returns true only if the original request and authentication
-     * session still match.
+     * A failed validation also invalidates the token.
      */
     public static synchronized boolean consume(
             String token,
             AutofillRequestMetadata metadata
+    ) {
+        return consumeInternal(token, metadata, false);
+    }
+
+    /**
+     * Claims a request for an authentication flow.
+     *
+     * This method does NOT authorize vault access.
+     * The caller must complete authentication, verify
+     * the requesting application, and recheck the
+     * active vault before returning credentials.
+     *
+     * The request token is invalidated immediately,
+     * including when validation fails.
+     */
+    public static synchronized boolean takeForAuthentication(
+            String token,
+            AutofillRequestMetadata metadata
+    ) {
+        return consumeInternal(token, metadata, true);
+    }
+
+    private static boolean consumeInternal(
+            String token,
+            AutofillRequestMetadata metadata,
+            boolean allowLockedAuthentication
     ) {
         if (token == null
                 || metadata == null
@@ -142,45 +215,77 @@ public final class AutofillRequestTracker {
 
         removeExpired(now);
 
-        // Remove before validating to prevent replay.
+        // Remove first to prevent replay after any validation failure.
         RequestRecord record = REQUESTS.remove(token);
 
         if (record == null) {
             return false;
         }
 
-        // Verify that the original authentication session is still active.
         long currentGeneration =
                 SafeKeySession.getManager()
                         .getAuthenticationGeneration();
 
-        if (currentGeneration < 0
-                || currentGeneration != record.authenticationGeneration) {
+        /*
+         * Requests registered while unlocked must remain bound
+         * to that exact authentication generation.
+         *
+         * Requests registered while locked can be claimed
+         * before authentication, but this does not authorize
+         * access to credentials.
+         */
+        if (record.authenticationGeneration >= 0) {
+            if (currentGeneration != record.authenticationGeneration) {
+                return false;
+            }
+        } else if (!allowLockedAuthentication) {
+            // Locked-issued tokens require the authentication claim path.
             return false;
         }
 
-        // Verify the requesting application and website.
-        boolean identityMatches =
-                Objects.equals(
-                        record.packageName,
-                        metadata.getPackageName()
-                )
-                        && Objects.equals(
-                        record.website,
-                        metadata.getClaimedWebHost()
-                );
-
-        if (!identityMatches) {
+        // The original Android package must remain identical.
+        if (!Objects.equals(
+                record.packageName,
+                metadata.getPackageName()
+        )) {
             return false;
         }
 
-        // Verify the exact username and password field identifiers.
+        // A website token must never become a native token.
+        if (record.nativeApp != metadata.isNativeApp()) {
+            return false;
+        }
+
+        if (record.nativeApp) {
+
+            // Native requests must not acquire a claimed web origin.
+            if (metadata.getClaimedWebScheme() != null
+                    || metadata.getClaimedWebHost() != null
+                    || metadata.getClaimedWebOrigin() != null) {
+                return false;
+            }
+
+        } else {
+
+            String requestOrigin =
+                    metadata.getClaimedWebOrigin();
+
+            if (requestOrigin == null
+                    || !Objects.equals(
+                            record.webOrigin,
+                            requestOrigin
+                    )) {
+                return false;
+            }
+        }
+
+        // Exact username and password field IDs must match.
         boolean fieldsMatch =
                 Objects.equals(
                         record.usernameId,
                         metadata.getFields().getUsernameId()
                 )
-                        && Objects.equals(
+                && Objects.equals(
                         record.passwordId,
                         metadata.getFields().getPasswordId()
                 );
@@ -189,7 +294,7 @@ public final class AutofillRequestTracker {
     }
 
     /**
-     * Cancels a pending request.
+     * Cancels an unused request.
      */
     public static synchronized void cancel(String token) {
         if (token != null) {
@@ -198,7 +303,7 @@ public final class AutofillRequestTracker {
     }
 
     /**
-     * Removes requests that are older than the allowed lifetime.
+     * Removes expired requests.
      */
     private static void removeExpired(long now) {
         REQUESTS.entrySet().removeIf(entry ->
@@ -208,35 +313,38 @@ public final class AutofillRequestTracker {
     }
 
     /**
-     * Stores the original request context without storing credentials.
+     * Holds authentication request context only.
+     * Does not store vault credentials.
      */
     private static final class RequestRecord {
 
         final String packageName;
-        final String website;
+        final boolean nativeApp;
+        final String webOrigin;
 
         final AutofillId usernameId;
         final AutofillId passwordId;
 
         final long createdAtMillis;
-
-        // Session generation when this request was registered.
         final long authenticationGeneration;
 
         RequestRecord(
                 String packageName,
-                String website,
+                boolean nativeApp,
+                String webOrigin,
                 AutofillId usernameId,
                 AutofillId passwordId,
                 long createdAtMillis,
                 long authenticationGeneration
         ) {
             this.packageName = packageName;
-            this.website = website;
+            this.nativeApp = nativeApp;
+            this.webOrigin = webOrigin;
             this.usernameId = usernameId;
             this.passwordId = passwordId;
             this.createdAtMillis = createdAtMillis;
-            this.authenticationGeneration = authenticationGeneration;
+            this.authenticationGeneration =
+                    authenticationGeneration;
         }
     }
 }

@@ -18,6 +18,8 @@ public final class AutofillLoginFields {
 
     private static final int MAX_NODES = 4096;
 
+    private static final String HTML_CURRENT_PASSWORD_HINT = "current-password";
+
     private AutofillLoginFields() {
     }
 
@@ -94,10 +96,7 @@ public final class AutofillLoginFields {
                         View.AUTOFILL_HINT_EMAIL_ADDRESS
                 );
 
-                boolean password = hasHint(
-                        hints,
-                        View.AUTOFILL_HINT_PASSWORD
-                );
+                boolean password = isPasswordHint(hints);
 
                 if (username && password) {
                     return null;
@@ -140,6 +139,17 @@ public final class AutofillLoginFields {
         }
 
         return new Fields(usernameId, passwordId);
+    }
+
+    /**
+     * Recognizes Android password hints and the HTML autocomplete
+     * value used for an existing login password.
+     *
+     * Package-private to support focused regression tests.
+     */
+    static boolean isPasswordHint(String[] hints) {
+        return hasHint(hints, View.AUTOFILL_HINT_PASSWORD)
+                || hasHint(hints, HTML_CURRENT_PASSWORD_HINT);
     }
 
     private static boolean hasHint(String[] hints, String expected) {

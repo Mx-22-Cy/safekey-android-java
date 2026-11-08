@@ -3,7 +3,6 @@ package com.safekey.app.autofill;
 import android.app.PendingIntent;
 import android.app.assist.AssistStructure;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
 import android.os.CancellationSignal;
 import android.service.autofill.AutofillService;
 import android.service.autofill.FillCallback;
@@ -12,7 +11,6 @@ import android.service.autofill.FillRequest;
 import android.service.autofill.FillResponse;
 import android.service.autofill.SaveCallback;
 import android.service.autofill.SaveRequest;
-import android.util.Log;
 import android.view.autofill.AutofillId;
 import android.widget.RemoteViews;
 
@@ -30,7 +28,6 @@ public final class SafeKeyAutofillService extends AutofillService {
     public static final String EXTRA_REQUEST_TOKEN =
             "com.safekey.app.autofill.REQUEST_TOKEN";
 
-    private static final String TAG = "SafeKeyAutofill";
 
     private static final AtomicInteger NEXT_REQUEST_ID =
             new AtomicInteger(1);
@@ -41,18 +38,6 @@ public final class SafeKeyAutofillService extends AutofillService {
             CancellationSignal cancellationSignal,
             FillCallback callback
     ) {
-
-        // STEP 41B: Debug-only diagnostic logging.
-        // Do not log usernames, passwords, websites, or request tokens.
-        // ApplicationInfo.FLAG_DEBUGGABLE avoids the BuildConfig dependency.
-        if ((getApplicationInfo().flags
-                & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-
-            Log.i(
-                    TAG,
-                    "Autofill fill request received"
-            );
-        }
 
         if (callback == null) {
             return;
@@ -99,7 +84,7 @@ public final class SafeKeyAutofillService extends AutofillService {
         }
 
         // Register the original request before launching authentication.
-        String token = AutofillRequestTracker.register(metadata);
+        String token = AutofillRequestTracker.registerForAuthentication(metadata);
 
         if (token == null) {
             callback.onSuccess(null);
