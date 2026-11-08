@@ -19,6 +19,15 @@ import java.util.List;
  */
 public interface VaultOperations {
 
+    void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    );
+
+    void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    );
+
     void getCredential(
             long id,
             VaultDataService.ResultCallback<Credential> callback

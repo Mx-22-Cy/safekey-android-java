@@ -47,10 +47,7 @@ dependencies {
 
     implementation("net.zetetic:sqlcipher-android:4.17.0@aar")
     implementation("androidx.sqlite:sqlite:2.6.2")
-
-    // Week 6 - Android biometric authentication
     implementation("androidx.biometric:biometric:1.1.0")
-
-    // Week 7 - Credential password strength estimation
     implementation("com.nulab-inc:zxcvbn:1.9.0")
+    implementation("com.google.zxing:core:3.5.3")
 }

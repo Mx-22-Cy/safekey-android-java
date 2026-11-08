@@ -39,6 +39,7 @@ import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.alerts.AlertsActivity;
+import com.safekey.app.settings.SettingsActivity;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -977,20 +978,21 @@ public class VaultActivity extends ProtectedActivity {
                 }
         );
 
-        navSettings.setOnClickListener(
-                view -> {
 
-                    if (!requireUnlockedSession()) {
-                        return;
-                    }
+        navSettings.setOnClickListener(view -> {
+            if (!requireUnlockedSession()) {
+                return;
+            }
 
-                    Toast.makeText(
-                            VaultActivity.this,
-                            R.string.home_settings_navigation_pending,
-                            Toast.LENGTH_SHORT
-                    ).show();
-                }
-        );
+            Intent intent = new Intent(
+                    VaultActivity.this,
+                    SettingsActivity.class
+            );
+
+            startActivity(intent);
+            finish();
+        });
+
     }
 
     private void showQuickAddMenu(

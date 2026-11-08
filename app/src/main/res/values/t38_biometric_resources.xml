@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="editSettingsBiometricPassword" type="id" />
+    <string name="t38_biometric_password_title">Confirm master password</string>
+    <string name="t38_biometric_password_hint">Master password</string>
+    <string name="t38_biometric_password_required">Enter your master password.</string>
+    <string name="t38_biometric_continue">Continue</string>
+    <string name="t38_biometric_cancel">Cancel</string>
+    <string name="t38_biometric_disable_title">Disable biometric unlock?</string>
+    <string name="t38_biometric_disable_message">You will need your master password to unlock SafeKey.</string>
+    <string name="t38_biometric_disable">Disable</string>
+    <string name="t38_biometric_enable_error">Unable to start biometric enrollment.</string>
+    <string name="t38_biometric_operation_error">Biometric setting could not be changed.</string>
+</resources>

@@ -5,6 +5,7 @@ import com.safekey.app.security.panic.PanicRuntimeScope;
 import android.app.Application;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.safekey.app.auth.MasterPasswordHealth;
@@ -17,10 +18,19 @@ import com.safekey.app.security.storage.SessionBoundVaultOperations;
 import com.safekey.app.security.storage.VaultOperations;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
+import com.safekey.app.session.logic.VaultSessionManager;
+import com.safekey.app.security.totp.TotpEnrollmentCoordinator;
+import com.safekey.app.security.totp.TotpEnrollmentService;
+import com.safekey.app.security.totp.TotpSecretStore;
+import com.safekey.app.security.totp.VaultUnlockFlow;
 
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 public final class SafeKeyApplication extends Application implements PanicRuntimeScope.Owner {
 
@@ -41,6 +51,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     private DecoyVaultCoordinator decoyVaultCoordinator;
     private VaultOperations realVaultOperations;
     private MasterPasswordHealth masterPasswordHealth;
+    private TotpEnrollmentCoordinator totpEnrollmentCoordinator;
     private com.safekey.app.security.panic.PanicBackend panicBackend;
 
     private final Handler mainHandler =
@@ -110,6 +121,26 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         decoyVaultCoordinator = new DecoyVaultCoordinator(this);
         realVaultOperations = new RealVaultOperations(secureVaultCoordinator);
         masterPasswordHealth = new MasterPasswordHealth(this);
+        final PanicRuntimeScope enrollmentScope = panicRuntimeScope;
+        ScheduledExecutorService enrollmentWorker = Executors.newSingleThreadScheduledExecutor();
+        try {
+            enrollmentScope.registerExecutor(enrollmentWorker);
+            totpEnrollmentCoordinator = new TotpEnrollmentCoordinator(
+                    new TotpEnrollmentService(new TotpSecretStore(this), new SecureRandom(),
+                            System::currentTimeMillis, SystemClock::elapsedRealtime),
+                    secureVaultCoordinator::verifyMasterPasswordForTotpEnrollment,
+                    this::captureTotpEnrollmentAuthorization,
+                    enrollmentWorker,
+                    action -> {
+                        if (!enrollmentScope.deliver(mainHandler, action)) {
+                            throw new RejectedExecutionException("TOTP setup UI is unavailable.");
+                        }
+                    },
+                    enrollmentScope);
+        } catch (RuntimeException error) {
+            enrollmentWorker.shutdownNow();
+            throw error;
+        }
         panicBackend = new com.safekey.app.security.panic.PanicBackend(
                 this, secureVaultCoordinator, decoyVaultCoordinator, getPanicShutdownRuntime());
         synchronized (this) {
@@ -184,6 +215,74 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     public SecureVaultCoordinator getSecureVaultCoordinator() {
         requireRuntimeReady();
         return secureVaultCoordinator;
+    }
+
+    public TotpEnrollmentCoordinator getTotpEnrollmentCoordinator() {
+        requireRuntimeReady();
+        return totpEnrollmentCoordinator;
+    }
+
+    private TotpEnrollmentCoordinator.Authorization captureTotpEnrollmentAuthorization() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException("Start TOTP enrollment on the main thread.");
+        }
+        requireRuntimeReady();
+        VaultSessionManager session = SafeKeySession.getManager();
+        long authentication = session.getAuthenticationGeneration();
+        TotpEnrollmentCoordinator.Authorization[] captured =
+                new TotpEnrollmentCoordinator.Authorization[1];
+        session.runIfCurrentAuthenticationForStorageCommit(authentication, () -> {
+            synchronized (SafeKeyApplication.this) {
+                if (activeVaultOperations != null
+                        && matchesActiveSelection(ActiveVault.REAL, sessionGeneration)
+                        && secureVaultCoordinator.getCompletedAuthentication() != null) {
+                    captured[0] = new TotpEnrollmentAuthorization(authentication);
+                }
+            }
+        });
+        if (captured[0] == null) {
+            throw new TotpEnrollmentCoordinator.SessionInvalidException();
+        }
+        return captured[0];
+    }
+
+    private final class TotpEnrollmentAuthorization
+            implements TotpEnrollmentCoordinator.Authorization {
+        private final long authentication;
+        private final long selection = sessionGeneration;
+        private final PanicRuntimeScope runtime = panicRuntimeScope;
+        private final SecureVaultCoordinator coordinator = secureVaultCoordinator;
+        private final VaultOperations operations = activeVaultOperations;
+        private final VaultUnlockFlow.CompletedAuthentication completed =
+                secureVaultCoordinator.getCompletedAuthentication();
+
+        private TotpEnrollmentAuthorization(long authentication) {
+            this.authentication = authentication;
+        }
+
+        @Override
+        public boolean runIfCurrent(Runnable action) {
+            Objects.requireNonNull(action, "action");
+            boolean[] executed = {false};
+            SafeKeySession.getManager().runIfCurrentAuthenticationForStorageCommit(
+                    authentication, () -> {
+                        synchronized (SafeKeyApplication.this) {
+                            if (!isStartupRuntimeAvailable() || panicRuntimeScope != runtime
+                                    || secureVaultCoordinator != coordinator
+                                    || activeVault != ActiveVault.REAL
+                                    || sessionGeneration != selection
+                                    || activeVaultOperations != operations
+                                    || cleanupInProgress || cleanupFailed
+                                    || completed == null
+                                    || coordinator.getCompletedAuthentication() != completed) {
+                                return;
+                            }
+                            executed[0] = true;
+                            action.run();
+                        }
+                    });
+            return executed[0];
+        }
     }
 
     public DecoyVaultCoordinator getDecoyVaultCoordinator() {
@@ -410,6 +509,9 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     private void clearSessionAndCloseVaults() {
+        if (totpEnrollmentCoordinator != null) {
+            totpEnrollmentCoordinator.invalidateSession();
+        }
         if (!isStartupRuntimeAvailable()) {
             synchronized (this) {
                 activeVault = ActiveVault.NONE;
