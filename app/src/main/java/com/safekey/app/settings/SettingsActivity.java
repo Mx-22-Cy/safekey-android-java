@@ -34,6 +34,7 @@ import com.safekey.app.security.storage.VaultOperations;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.securityui.SetupDecoyVaultActivity;
 import com.safekey.app.securityui.SetupPanicModeActivity;
+import com.safekey.app.securityui.SetupTotpActivity;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
@@ -126,6 +127,15 @@ public class SettingsActivity extends ProtectedActivity {
                 return;
             }
             startActivity(new Intent(this, SetupPanicModeActivity.class));
+        });
+
+        // T39: Open the protected setup UI only from an unlocked REAL vault.
+        // Enrollment remains unavailable until its authorized backend is integrated.
+        findViewById(R.id.rowSettingsTotp).setOnClickListener(view -> {
+            if (!SafeKeySession.recordActivity() || !isAuthenticatedRealVault()) {
+                return;
+            }
+            startActivity(new Intent(this, SetupTotpActivity.class));
         });
 
         findViewById(R.id.rowSettingsChangePassword).setOnClickListener(view -> {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="t39_master_password_title">Confirm Master Password</string>
+    <string name="t39_master_password_message">Confirm your master password before showing your authenticator setup key.</string>
+    <string name="t39_master_password_hint">Master password</string>
+    <string name="t39_master_password_required">Enter your master password.</string>
+    <string name="t39_master_password_failed">Unable to verify your master password. Please try again.</string>
+    <string name="t39_preparing">Preparing secure authenticator setup…</string>
+</resources>
