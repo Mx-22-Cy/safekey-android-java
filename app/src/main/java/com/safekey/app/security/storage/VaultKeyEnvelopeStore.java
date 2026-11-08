@@ -41,6 +41,10 @@ public final class VaultKeyEnvelopeStore
     static final String KEY_WRAPPED_DATABASE_KEY =
             "wrapped_database_key";
 
+    private static final String KEY_RECOVERY_FORMAT_VERSION = "recovery_format_version";
+    private static final String KEY_RECOVERY_SALT = "recovery_salt";
+    private static final String KEY_RECOVERY_WRAPPED_DATABASE_KEY = "recovery_wrapped_database_key";
+
     private static final String INVALID_ENVELOPE_MESSAGE =
             "Stored vault key envelope is invalid.";
 
@@ -56,6 +60,7 @@ public final class VaultKeyEnvelopeStore
 
     private final PanicRuntimeScope runtimeScope;
     private final SharedPreferences preferences;
+    private final boolean realVaultStore;
 
     /**
      * Creates storage for the primary real-vault envelope.
@@ -95,6 +100,7 @@ public final class VaultKeyEnvelopeStore
                 "preferencesName"
         );
 
+        realVaultStore = PREFERENCES_NAME.equals(preferencesName);
         runtimeScope = PanicRuntimeScope.capture(context);
 
         preferences =
@@ -146,58 +152,49 @@ public final class VaultKeyEnvelopeStore
         }
     }
 
+    private void saveLocked(VaultKeyEnvelope envelope, MasterPasswordCheckStatus status) {
+        saveLocked(envelope, status, null);
+    }
+
     private void saveLocked(
             VaultKeyEnvelope envelope,
-            MasterPasswordCheckStatus status
+            MasterPasswordCheckStatus status,
+            VaultKeyEnvelope recoveryEnvelope
     ) {
-        Objects.requireNonNull(
-                status,
-                "status"
-        );
+        Objects.requireNonNull(status, "status");
+        Objects.requireNonNull(envelope, "envelope");
 
-        Objects.requireNonNull(
-                envelope,
-                "envelope"
-        );
-
-        String encodedSalt =
-                Base64.encodeToString(
-                        envelope.getSalt(),
-                        Base64.URL_SAFE
-                                | Base64.NO_WRAP
-                                | Base64.NO_PADDING
-                );
+        SharedPreferences.Editor editor = preferences.edit();
+        putEnvelope(editor, envelope, KEY_FORMAT_VERSION, KEY_SALT, KEY_WRAPPED_DATABASE_KEY);
+        editor.putString(KEY_PASSWORD_CHECK, status.name());
+        if (recoveryEnvelope != null) {
+            putEnvelope(editor, recoveryEnvelope, KEY_RECOVERY_FORMAT_VERSION,
+                    KEY_RECOVERY_SALT, KEY_RECOVERY_WRAPPED_DATABASE_KEY);
+        }
 
         boolean saved;
         try {
-            saved = preferences
-                        .edit()
-                        .putInt(
-                                KEY_FORMAT_VERSION,
-                                envelope.getFormatVersion()
-                        )
-                        .putString(
-                                KEY_SALT,
-                                encodedSalt
-                        )
-                        .putString(
-                                KEY_WRAPPED_DATABASE_KEY,
-                                envelope.getWrappedDatabaseKey()
-                        )
-                        .putString(
-                                KEY_PASSWORD_CHECK,
-                                status.name()
-                        )
-                        .commit();
+            saved = editor.commit();
         } finally {
             com.safekey.app.security.panic.PanicCredentialConfiguration.changed();
         }
-
         if (!saved) {
-            throw new IllegalStateException(
-                    "Unable to save vault key envelope."
-            );
+            throw new IllegalStateException("Unable to save vault key envelope.");
         }
+    }
+
+    private static void putEnvelope(
+            SharedPreferences.Editor editor,
+            VaultKeyEnvelope envelope,
+            String versionKey,
+            String saltKey,
+            String wrappedKey
+    ) {
+        String encodedSalt = Base64.encodeToString(envelope.getSalt(),
+                Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+        editor.putInt(versionKey, envelope.getFormatVersion())
+                .putString(saltKey, encodedSalt)
+                .putString(wrappedKey, envelope.getWrappedDatabaseKey());
     }
 
     private VaultKeyEnvelope loadWhileRunning() {
@@ -207,19 +204,23 @@ public final class VaultKeyEnvelopeStore
     }
 
     private VaultKeyEnvelope loadLocked() {
+        return loadEnvelopeLocked(KEY_FORMAT_VERSION, KEY_SALT, KEY_WRAPPED_DATABASE_KEY);
+    }
+
+    private VaultKeyEnvelope loadEnvelopeLocked(String versionKey, String saltKey, String wrappedKey) {
         boolean hasVersion =
                 preferences.contains(
-                        KEY_FORMAT_VERSION
+                        versionKey
                 );
 
         boolean hasSalt =
                 preferences.contains(
-                        KEY_SALT
+                        saltKey
                 );
 
         boolean hasWrappedDatabaseKey =
                 preferences.contains(
-                        KEY_WRAPPED_DATABASE_KEY
+                        wrappedKey
                 );
 
         if (!hasVersion
@@ -241,19 +242,19 @@ public final class VaultKeyEnvelopeStore
         try {
             int formatVersion =
                     preferences.getInt(
-                            KEY_FORMAT_VERSION,
+                            versionKey,
                             -1
                     );
 
             String encodedSalt =
                     preferences.getString(
-                            KEY_SALT,
+                            saltKey,
                             null
                     );
 
             String wrappedDatabaseKey =
                     preferences.getString(
-                            KEY_WRAPPED_DATABASE_KEY,
+                            wrappedKey,
                             null
                     );
 
@@ -478,6 +479,87 @@ public final class VaultKeyEnvelopeStore
         }
     }
 
+
+    void saveForEnrollmentWithRecovery(
+            VaultKeyEnvelope masterEnvelope,
+            MasterPasswordCheckStatus status,
+            VaultKeyEnvelope recoveryEnvelope
+    ) {
+        requireRealVaultStore();
+        Objects.requireNonNull(recoveryEnvelope, "recoveryEnvelope");
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            synchronized (STORE_LOCK) {
+                if (!preferences.getAll().isEmpty()) {
+                    throw new IllegalStateException("Real vault key storage is not empty.");
+                }
+                try {
+                    saveLocked(masterEnvelope, status, recoveryEnvelope);
+                } catch (RuntimeException failure) {
+                    // A failed commit may already have updated the in-memory preferences.
+                    try {
+                        clearLocked();
+                    } catch (RuntimeException rollbackFailure) {
+                        failure.addSuppressed(rollbackFailure);
+                    }
+                    throw failure;
+                }
+            }
+        }
+    }
+
+    VaultKeyEnvelope loadRecoveryEnvelope() {
+        requireRealVaultStore();
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            synchronized (STORE_LOCK) {
+                return loadRecoveryEnvelopeLocked();
+            }
+        }
+    }
+
+    private VaultKeyEnvelope loadRecoveryEnvelopeLocked() {
+        return loadEnvelopeLocked(KEY_RECOVERY_FORMAT_VERSION, KEY_RECOVERY_SALT,
+                KEY_RECOVERY_WRAPPED_DATABASE_KEY);
+    }
+
+    boolean replaceMasterEnvelopeAfterRecovery(
+            VaultKeyEnvelope expectedMaster,
+            VaultKeyEnvelope expectedRecovery,
+            VaultKeyEnvelope replacement,
+            MasterPasswordCheckStatus status
+    ) {
+        requireRealVaultStore();
+        Objects.requireNonNull(replacement, "replacement");
+        Objects.requireNonNull(status, "status");
+
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            synchronized (STORE_LOCK) {
+                if (!matches(loadLocked(), expectedMaster)
+                        || !matches(loadRecoveryEnvelopeLocked(), expectedRecovery)) {
+                    return false;
+                }
+
+                MasterPasswordCheckStatus previousStatus =
+                        getMasterPasswordCheckStatusWhileRunning();
+                try {
+                    saveLocked(replacement, status);
+                } catch (RuntimeException failure) {
+                    try {
+                        saveLocked(expectedMaster, previousStatus);
+                    } catch (RuntimeException rollbackFailure) {
+                        failure.addSuppressed(rollbackFailure);
+                    }
+                    throw failure;
+                }
+                return true;
+            }
+        }
+    }
+
+    private void requireRealVaultStore() {
+        if (!realVaultStore) {
+            throw new IllegalStateException("Recovery requires the Real vault key store.");
+        }
+    }
 
     @Override
     public void clear() {
