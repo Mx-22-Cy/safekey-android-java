@@ -620,6 +620,54 @@ public class VaultUnlockGateTest {
         );
     }
 
+    @Test
+    public void cancellationZerosPendingKeyAndTotpSecret() throws Exception {
+        assertPendingSecretsZeroed(VaultUnlockGate.Attempt::close);
+    }
+
+    @Test
+    public void expiryZerosPendingKeyAndTotpSecret() throws Exception {
+        assertPendingSecretsZeroed(attempt -> {
+            elapsed.set(VaultUnlockGate.ATTEMPT_LIFETIME_MILLIS);
+            assertFalse(gate.isActive(attempt));
+            assertEquals(VaultUnlockGate.Stage.EXPIRED, gate.getStage(attempt));
+        });
+    }
+
+    private void assertPendingSecretsZeroed(
+            java.util.function.Consumer<VaultUnlockGate.Attempt> finish
+    ) throws Exception {
+        configure(SECRET);
+        byte[] suppliedKey = new byte[VaultUnlockGate.DATABASE_KEY_LENGTH_BYTES];
+        Arrays.fill(suppliedKey, (byte) 0x5a);
+
+        try (VaultUnlockGate.Attempt attempt = gate.begin()) {
+            assertEquals(VaultUnlockGate.Stage.TOTP_REQUIRED,
+                    gate.acceptPrimary(attempt, suppliedKey));
+
+            byte[] ownedKey = readAttemptBuffer(attempt, "databaseKey");
+            byte[] ownedTotpSecret = readAttemptBuffer(attempt, "totpSecret");
+            assertArrayEquals(suppliedKey, ownedKey);
+            assertTrue("The attempt must own a copy of the database key", ownedKey != suppliedKey);
+            assertFalse("The TOTP fixture must start with nonzero bytes",
+                    Arrays.equals(new byte[ownedTotpSecret.length], ownedTotpSecret));
+
+            finish.accept(attempt);
+
+            assertArrayEquals(new byte[ownedKey.length], ownedKey);
+            assertArrayEquals(new byte[ownedTotpSecret.length], ownedTotpSecret);
+        } finally {
+            Arrays.fill(suppliedKey, (byte) 0);
+        }
+    }
+
+    private static byte[] readAttemptBuffer(VaultUnlockGate.Attempt attempt, String name)
+            throws ReflectiveOperationException {
+        java.lang.reflect.Field field = VaultUnlockGate.Attempt.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return (byte[]) field.get(attempt);
+    }
+
     private VaultUnlockGate.Attempt primary() throws Exception {
         VaultUnlockGate.Attempt attempt = gate.begin();
         gate.acceptPrimary(attempt, KEY);
