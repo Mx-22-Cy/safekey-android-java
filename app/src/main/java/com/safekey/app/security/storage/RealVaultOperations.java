@@ -30,6 +30,21 @@ public final class RealVaultOperations
     }
 
     @Override
+    public void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    ) {
+        coordinator.getVaultDisplayName(callback);
+    }
+
+    @Override
+    public void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        coordinator.updateVaultDisplayName(displayName, callback);
+    }
+
+    @Override
     public void getCredential(
             long id,
             VaultDataService.ResultCallback<Credential> callback

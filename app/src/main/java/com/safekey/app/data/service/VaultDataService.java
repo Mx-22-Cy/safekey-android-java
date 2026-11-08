@@ -15,6 +15,7 @@ import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.repository.CredentialRepository;
 import com.safekey.app.data.repository.SecureNoteRepository;
 import com.safekey.app.data.repository.VaultCountsRepository;
+import com.safekey.app.data.repository.VaultProfileRepository;
 
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
@@ -39,6 +40,7 @@ public class VaultDataService {
     private CredentialRepository credentialRepository;
     private SecureNoteRepository secureNoteRepository;
     private VaultCountsRepository vaultCountsRepository;
+    private VaultProfileRepository vaultProfileRepository;
 
     public VaultDataService(
             Context context
@@ -163,6 +165,9 @@ public class VaultDataService {
                     VaultCountsRepository openedVaultCountsRepository =
                             new VaultCountsRepository(database);
 
+                    VaultProfileRepository openedVaultProfileRepository =
+                            new VaultProfileRepository(database);
+
                     credentialRepository =
                             openedCredentialRepository;
 
@@ -171,6 +176,9 @@ public class VaultDataService {
 
                     vaultCountsRepository =
                             openedVaultCountsRepository;
+
+                    vaultProfileRepository =
+                            openedVaultProfileRepository;
 
                 } catch (Exception exception) {
 
@@ -225,6 +233,7 @@ public class VaultDataService {
                 credentialRepository = null;
                 secureNoteRepository = null;
                 vaultCountsRepository = null;
+                vaultProfileRepository = null;
             }
 
             deliverSimpleSuccess(callback);
@@ -265,6 +274,60 @@ public class VaultDataService {
         });
     }
 
+    /**
+     * Reads the display name from the currently opened vault database.
+     */
+    public void getVaultDisplayName(
+            ResultCallback<String> callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+
+        executeWork(() -> {
+            try {
+                String displayName =
+                        requireVaultProfileRepository().getDisplayName();
+
+                deliverResultSuccess(callback, displayName);
+
+            } catch (Exception exception) {
+                deliverResultError(callback, exception);
+            }
+        });
+    }
+
+    /**
+     * Saves the display name in the currently opened vault database.
+     *
+     * REAL and DECOY vaults use separate SQLCipher databases.
+     */
+    public void updateVaultDisplayName(
+            String displayName,
+            ResultCallback<Integer> callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+
+        // Bind the request to the database opening active at submission.
+        final long expectedGeneration = vaultGeneration.get();
+
+        executeWork(() -> {
+            try {
+                if (vaultGeneration.get() != expectedGeneration) {
+                    throw new IllegalStateException(
+                            "The vault opening changed before the rename."
+                    );
+                }
+
+                int updatedRows =
+                        requireVaultProfileRepository()
+                                .updateDisplayName(displayName);
+
+                deliverResultSuccess(callback, updatedRows);
+
+            } catch (Exception exception) {
+                deliverResultError(callback, exception);
+            }
+        });
+    }
     public void getVaultCounts(
             ResultCallback<VaultCounts> callback
     ) {
@@ -746,6 +809,13 @@ public class VaultDataService {
         return secureNoteRepository;
     }
 
+    private VaultProfileRepository requireVaultProfileRepository() {
+        if (vaultProfileRepository == null) {
+            throw new IllegalStateException("Vault is not open.");
+        }
+
+        return vaultProfileRepository;
+    }
     private VaultCountsRepository requireVaultCountsRepository() {
         if (vaultCountsRepository == null) {
             throw new IllegalStateException("Vault is not open.");
@@ -816,6 +886,7 @@ public class VaultDataService {
                 credentialRepository = null;
                 secureNoteRepository = null;
                 vaultCountsRepository = null;
+                vaultProfileRepository = null;
             }
         });
 
@@ -867,6 +938,7 @@ public class VaultDataService {
                         credentialRepository = null;
                         secureNoteRepository = null;
                         vaultCountsRepository = null;
+                vaultProfileRepository = null;
                     }
                     if (databaseManager.isOpen()) {
                         throw new java.io.IOException("Vault database is still open.");

@@ -73,6 +73,20 @@
             android:name=".alerts.AlertsActivity"
             android:exported="false" />
 
+        <!-- Week 10 Settings UI (T38) -->
+        <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false" />
+
+        <!-- Week 10 TOTP setup UI (T39): protected internal screens -->
+        <activity
+            android:name=".securityui.SetupTotpActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".securityui.VerifyTotpActivity"
+            android:exported="false" />
+
         <activity
             android:name=".vault.CredentialDetailsActivity"
             android:exported="false" />

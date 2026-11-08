@@ -688,6 +688,16 @@ public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
                                     editMasterPassword.setText("");
                                     editConfirmPassword.setText("");
                                     SafeKeySession.unlockAfterAuthentication();
+
+                                    try {
+                                        ((SafeKeyApplication) getApplication()).activateRealVault();
+                                    } catch (RuntimeException error) {
+                                        SafeKeySession.lock();
+                                        navigating = false;
+                                        rejectEnrollment(getString(R.string.signup_vault_creation_error));
+                                        return;
+                                    }
+
                                     try {
                                         Intent intent = new Intent(SignUpActivity.this, HomeActivity.class);
                                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);

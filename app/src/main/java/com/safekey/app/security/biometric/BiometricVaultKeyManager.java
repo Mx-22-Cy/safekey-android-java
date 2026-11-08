@@ -13,6 +13,8 @@ import com.safekey.app.security.keystore.BiometricVaultKeyProtector;
 
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 import javax.crypto.Cipher;
 
@@ -23,6 +25,14 @@ public class BiometricVaultKeyManager {
 
     private static final String RE_ENROLL_INVALIDATED_KEY_MESSAGE =
             "Biometric unlock key is no longer valid. Re-enroll biometric unlock.";
+
+    private static final String SESSION_ENDED_MESSAGE =
+            "The REAL vault session is no longer active.";
+
+    private static final ConfigurationGuard DIRECT_CONFIGURATION = action -> {
+        action.run();
+        return true;
+    };
 
     private final PanicRuntimeScope runtimeScope;
     private final BiometricAuthenticator authenticator;
@@ -76,6 +86,7 @@ public class BiometricVaultKeyManager {
             byte[] vaultKey,
             String title,
             String subtitle,
+            ConfigurationGuard guard,
             SetupCallback callback
     ) {
 
@@ -88,16 +99,6 @@ public class BiometricVaultKeyManager {
             throw new IllegalArgumentException(
                     "Setup callback cannot be null."
             );
-        }
-
-        if (authenticator.getAvailability()
-                != BiometricAuthenticator.Availability.AVAILABLE) {
-
-            callback.onError(
-                    "Strong biometric authentication is not available."
-            );
-
-            return;
         }
 
         final byte[] vaultKeyCopy =
@@ -116,77 +117,36 @@ public class BiometricVaultKeyManager {
         }
 
         try {
-            if (!pending.isCurrent()) { pending.close(); return; }
+            boolean authorized = guard.runIfCurrent(() -> {
+                if (!pending.isCurrent()) {
+                    pending.close();
+                    return;
+                }
+                if (getAvailability() != BiometricAuthenticator.Availability.AVAILABLE) {
+                    pending.close();
+                    callback.onError("Strong biometric authentication is not available.");
+                    return;
+                }
 
-            Cipher cipher =
-                    keyStore.createEncryptionCipher();
-
-            authenticator.authenticate(
-                    cipher,
-                    title,
-                    subtitle,
-                    new BiometricAuthenticator.AuthenticationCallback() {
-
-                        @Override
-                        public void onSuccess(
-                                Cipher authenticatedCipher
-                        ) {
-
-                            if (!pending.isCurrent()) { pending.close(); return; }
-                            try {
-
-                                BiometricVaultKeyProtector.WrappedKey wrappedKey =
-                                        protector.wrap(
-                                                vaultKeyCopy,
-                                                authenticatedCipher
-                                        );
-
-                                envelopeStore.save(
-                                        wrappedKey
-                                );
-
-                                callback.onEnabled();
-
-                            } catch (GeneralSecurityException
-                                     | IllegalStateException exception) {
-
-                                callback.onError(
-                                        "Unable to enable biometric unlock."
-                                );
-
-                            } finally {
-
-                                pending.close();
-                            }
-                        }
-
-                        @Override
-                        public void onError(
-                                String message
-                        ) {
-
+                authenticateForEnrollment(
+                        title,
+                        subtitle,
+                        authenticatedCipher -> completeEnrollment(
+                                vaultKeyCopy, authenticatedCipher, guard, pending, callback),
+                        message -> {
                             boolean current = pending.isCurrent();
                             pending.close();
-                            if (!current) { return; }
-
-                            callback.onError(
-                                    message
-                            );
-                        }
-
-                        @Override
-                        public void onFailed() {
-
-                            /*
-                             * Do not clear vaultKeyCopy here.
-                             *
-                             * BiometricPrompt can report a failed scan
-                             * while keeping the prompt open for another try.
-                             */
+                            if (current) { callback.onError(message); }
+                        },
+                        () -> {
+                            // A failed scan can be retried in the same prompt.
                             if (pending.isCurrent()) { callback.onFailed(); }
-                        }
-                    }
-            );
+                        });
+            });
+            if (!authorized) {
+                pending.close();
+                callback.onError(SESSION_ENDED_MESSAGE);
+            }
 
         } catch (KeyPermanentlyInvalidatedException exception) {
 
@@ -203,6 +163,68 @@ public class BiometricVaultKeyManager {
             callback.onError(
                     "Unable to prepare biometric unlock."
             );
+        }
+    }
+
+    /** Starts the system prompt with the Keystore cipher for enrollment. */
+    protected void authenticateForEnrollment(
+            String title,
+            String subtitle,
+            Consumer<Cipher> onSuccess,
+            Consumer<String> onError,
+            Runnable onFailed
+    ) throws Exception {
+        authenticator.authenticate(
+                keyStore.createEncryptionCipher(),
+                title,
+                subtitle,
+                new BiometricAuthenticator.AuthenticationCallback() {
+                    @Override public void onSuccess(Cipher authenticatedCipher) {
+                        onSuccess.accept(authenticatedCipher);
+                    }
+
+                    @Override public void onError(String message) {
+                        onError.accept(message);
+                    }
+
+                    @Override public void onFailed() {
+                        onFailed.run();
+                    }
+                });
+    }
+
+    private void completeEnrollment(
+            byte[] vaultKey,
+            Cipher authenticatedCipher,
+            ConfigurationGuard guard,
+            PanicRuntimeScope.PendingOperation pending,
+            SetupCallback callback
+    ) {
+        if (!pending.isCurrent()) {
+            pending.close();
+            return;
+        }
+        try {
+            final boolean saved;
+            try {
+                saved = guard.runIfCurrent(() -> {
+                    if (!pending.isCurrent()) {
+                        throw new IllegalStateException("Biometric enrollment was cancelled.");
+                    }
+                    envelopeStore.save(protector.wrap(vaultKey, authenticatedCipher));
+                });
+            } catch (Exception error) {
+                callback.onError("Unable to enable biometric unlock.");
+                return;
+            }
+
+            if (saved) {
+                callback.onEnabled();
+            } else {
+                callback.onError(SESSION_ENDED_MESSAGE);
+            }
+        } finally {
+            pending.close();
         }
     }
 
@@ -354,6 +376,17 @@ public class BiometricVaultKeyManager {
         keyStore.deleteKey();
     }
 
+    /** Runs one synchronous action while its initiating session is still authorized. */
+    @FunctionalInterface
+    public interface ConfigurationGuard {
+        boolean runIfCurrent(ConfigurationAction action) throws Exception;
+    }
+
+    @FunctionalInterface
+    public interface ConfigurationAction {
+        void run() throws Exception;
+    }
+
     public interface SetupCallback {
 
         void onEnabled();
@@ -384,8 +417,15 @@ public class BiometricVaultKeyManager {
 
     public void disableBiometricUnlock()
             throws Exception {
+        disableBiometricUnlock(DIRECT_CONFIGURATION);
+    }
+
+    public void disableBiometricUnlock(ConfigurationGuard guard) throws Exception {
+        Objects.requireNonNull(guard, "guard");
         try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
-            disableBiometricUnlockWhileRunning();
+            if (!guard.runIfCurrent(this::disableBiometricUnlockWhileRunning)) {
+                throw new IllegalStateException(SESSION_ENDED_MESSAGE);
+            }
         }
     }
 
@@ -396,8 +436,19 @@ public class BiometricVaultKeyManager {
             String subtitle,
             SetupCallback callback
     ) {
+        enableBiometricUnlock(vaultKey, title, subtitle, DIRECT_CONFIGURATION, callback);
+    }
+
+    public void enableBiometricUnlock(
+            byte[] vaultKey,
+            String title,
+            String subtitle,
+            ConfigurationGuard guard,
+            SetupCallback callback
+    ) {
+        Objects.requireNonNull(guard, "guard");
         try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
-            enableBiometricUnlockWhileRunning(vaultKey, title, subtitle, callback);
+            enableBiometricUnlockWhileRunning(vaultKey, title, subtitle, guard, callback);
         }
     }
 

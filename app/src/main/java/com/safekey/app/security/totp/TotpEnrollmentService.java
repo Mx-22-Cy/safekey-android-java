@@ -109,6 +109,30 @@ public final class TotpEnrollmentService {
                     : 0;
         }
 
+        /** Remaining lifetime on this setup's monotonic clock. Expired setup returns zero. */
+        public synchronized long getRemainingMillis() {
+            if (closed) {
+                return 0L;
+            }
+            long age = monotonicMillis.getAsLong() - createdAtMillis;
+            if (age < 0L || age >= SETUP_LIFETIME_MILLIS) {
+                close();
+                return 0L;
+            }
+            return SETUP_LIFETIME_MILLIS - age;
+        }
+
+        /** Absolute deadline on the same monotonic clock supplied to enrollment. */
+        public synchronized long getExpiresAtMonotonicMillis() {
+            requireActive();
+            try {
+                return Math.addExact(createdAtMillis, SETUP_LIFETIME_MILLIS);
+            } catch (ArithmeticException invalidClock) {
+                close();
+                throw new IllegalStateException("TOTP setup clock is out of range.", invalidClock);
+            }
+        }
+
         @Override
         public synchronized void close() { pendingWork.close(); }
 
@@ -129,14 +153,7 @@ public final class TotpEnrollmentService {
                 return false;
             }
 
-            long age = monotonicMillis.getAsLong() - createdAtMillis;
-
-            if (age < 0L || age >= SETUP_LIFETIME_MILLIS) {
-                close();
-                return true;
-            }
-
-            return false;
+            return getRemainingMillis() == 0L;
         }
     }
 

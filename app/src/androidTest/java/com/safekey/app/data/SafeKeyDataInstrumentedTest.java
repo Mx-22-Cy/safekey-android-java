@@ -518,7 +518,7 @@ public class SafeKeyDataInstrumentedTest {
             assertEquals(
                     "Database version "
                             + FUTURE_DATABASE_VERSION
-                            + " is newer than supported version 2.",
+                            + " is newer than supported version 3.",
                     expected.getMessage()
             );
 

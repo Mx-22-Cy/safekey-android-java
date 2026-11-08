@@ -27,6 +27,7 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.vault.CredentialDetailsActivity;
 import com.safekey.app.vault.VaultActivity;
+import com.safekey.app.settings.SettingsActivity;
 
 public class AlertsActivity extends ProtectedActivity {
     private enum AlertFilter { ALL, BREACHED, ATTENTION, PASSED }
@@ -325,16 +326,17 @@ public class AlertsActivity extends ProtectedActivity {
         View navSettings = findViewById(R.id.navSettings);
 
         navSettings.setOnClickListener(view -> {
-
             if (!SafeKeySession.recordActivity()) {
                 return;
             }
 
-            Toast.makeText(
+            Intent intent = new Intent(
                     AlertsActivity.this,
-                    R.string.home_settings_navigation_pending,
-                    Toast.LENGTH_SHORT
-            ).show();
+                    SettingsActivity.class
+            );
+
+            startActivity(intent);
+            finish();
         });
     }
 }

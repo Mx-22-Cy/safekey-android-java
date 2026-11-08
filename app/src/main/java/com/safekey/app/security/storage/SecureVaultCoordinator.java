@@ -12,6 +12,7 @@ import android.os.SystemClock;
 
 import androidx.fragment.app.FragmentActivity;
 
+import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.database.SafeKeyDatabase;
 import com.safekey.app.auth.logic.MasterPasswordPolicy;
 import com.safekey.app.auth.logic.MasterPasswordValidationResult;
@@ -32,12 +33,14 @@ import com.safekey.app.security.totp.VaultUnlockFlow;
 import com.safekey.app.security.totp.VaultUnlockGate;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 
 public final class SecureVaultCoordinator {
 
@@ -56,6 +59,7 @@ public final class SecureVaultCoordinator {
     private final Handler mainHandler;
     private final VaultUnlockFlow unlockFlow;
     private final BiometricUnlockSource biometricUnlockSource;
+    private final Function<FragmentActivity, BiometricVaultKeyManager> biometricManagerFactory;
 
     public SecureVaultCoordinator(Context context) {
         this(context, null, null);
@@ -68,7 +72,19 @@ public final class SecureVaultCoordinator {
             VaultUnlockGate suppliedGate,
             BiometricUnlockSource suppliedBiometricSource
     ) {
+        this(context, suppliedGate, suppliedBiometricSource, BiometricVaultKeyManager::new);
+    }
+
+    // Configuration tests control the prompt while using real password and envelope storage.
+    SecureVaultCoordinator(
+            Context context,
+            VaultUnlockGate suppliedGate,
+            BiometricUnlockSource suppliedBiometricSource,
+            Function<FragmentActivity, BiometricVaultKeyManager> biometricManagerFactory
+    ) {
         Objects.requireNonNull(context, "context");
+        this.biometricManagerFactory = Objects.requireNonNull(
+                biometricManagerFactory, "biometricManagerFactory");
 
         Context applicationContext = context.getApplicationContext();
         runtimeScope = PanicRuntimeScope.capture(applicationContext);
@@ -143,6 +159,35 @@ public final class SecureVaultCoordinator {
         return vaultDataService.isVaultOpen();
     }
 
+    /** Re-verifies the master password on the enrollment coordinator's worker. */
+    public void verifyMasterPasswordForTotpEnrollment(char[] masterPassword) throws Exception {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw new IllegalStateException("Verify the master password on the enrollment worker.");
+        }
+        char[] passwordCopy = copyAndValidatePassword(masterPassword);
+        byte[] salt = null;
+        byte[] masterKey = null;
+        byte[] databaseKey = null;
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            VaultKeyEnvelope envelope = envelopeStore.load();
+            if (envelope == null) {
+                throw new IllegalStateException("No vault has been created.");
+            }
+            salt = envelope.getSalt();
+            masterKey = keyDeriver.deriveKey(passwordCopy, salt);
+            databaseKey = cipher.decrypt(
+                    envelope.getWrappedDatabaseKey(), masterKey, databaseKeyContext());
+            if (databaseKey.length != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES) {
+                throw new GeneralSecurityException("Invalid protected vault key.");
+            }
+        } finally {
+            clear(passwordCopy);
+            clear(salt);
+            clear(masterKey);
+            clear(databaseKey);
+        }
+    }
+
     public BiometricAuthenticator.Availability getBiometricAvailability(
             FragmentActivity activity
     ) {
@@ -157,11 +202,69 @@ public final class SecureVaultCoordinator {
         return new BiometricVaultKeyManager(activity).isConfigured();
     }
 
+    private BiometricVaultKeyManager.ConfigurationGuard captureRealBiometricSession(
+            FragmentActivity activity
+    ) {
+        requireActivity(activity);
+        if (!(activity.getApplication() instanceof SafeKeyApplication)) {
+            throw new IllegalStateException("An authenticated REAL vault session is required.");
+        }
+        SafeKeyApplication application = (SafeKeyApplication) activity.getApplication();
+        VaultSessionManager session = SafeKeySession.getManager();
+        long authentication = session.getAuthenticationGeneration();
+        VaultOperations[] activeVault = new VaultOperations[1];
+        session.runIfCurrentAuthentication(authentication,
+                () -> activeVault[0] = currentRealVaultOperations(application, activity));
+        VaultOperations initiatingVault = activeVault[0];
+        if (initiatingVault == null) {
+            throw new IllegalStateException("An authenticated REAL vault session is required.");
+        }
+
+        return action -> {
+            boolean[] executed = {false};
+            Exception[] failure = new Exception[1];
+            session.runIfCurrentAuthentication(authentication, () -> {
+                // A new vault activation gets a new operations object. A vault switch
+                // first locks the initiating session, which uses this same session lock.
+                if (currentRealVaultOperations(application, activity) != initiatingVault) {
+                    return;
+                }
+                executed[0] = true;
+                try {
+                    action.run();
+                } catch (Exception error) {
+                    failure[0] = error;
+                }
+            });
+            if (failure[0] != null) {
+                throw failure[0];
+            }
+            return executed[0];
+        };
+    }
+
+    private VaultOperations currentRealVaultOperations(
+            SafeKeyApplication application,
+            FragmentActivity activity
+    ) {
+        if (activity.isFinishing() || activity.isDestroyed()
+                || application.getPanicRuntimeScope() != runtimeScope
+                || application.getActiveVault() != SafeKeyApplication.ActiveVault.REAL) {
+            return null;
+        }
+        try {
+            return application.getActiveVaultOperations();
+        } catch (IllegalStateException noActiveVault) {
+            return null;
+        }
+    }
+
     private void enableBiometricUnlockWhileRunning(
             FragmentActivity activity,
             char[] masterPassword,
             String title,
             String subtitle,
+            BiometricVaultKeyManager.ConfigurationGuard guard,
             BiometricSetupCallback callback
     ) {
         requireActivity(activity);
@@ -176,6 +279,7 @@ public final class SecureVaultCoordinator {
                             passwordCopy,
                             title,
                             subtitle,
+                            guard,
                             callback
                     )
             );
@@ -190,6 +294,7 @@ public final class SecureVaultCoordinator {
             char[] masterPassword,
             String title,
             String subtitle,
+            BiometricVaultKeyManager.ConfigurationGuard guard,
             BiometricSetupCallback callback
     ) {
         byte[] salt = null;
@@ -224,16 +329,21 @@ public final class SecureVaultCoordinator {
                 clear(keyForBiometric);
                 throw stopped;
             }
-            boolean posted = runtimeScope.deliver(mainHandler, () -> {
-                try {
-                    if (handoff.isCurrent()) {
-                        startBiometricEnrollment(activity, keyForBiometric, title, subtitle, callback);
-                    }
-                } finally { handoff.close(); }
-            });
+            boolean posted = false;
+            try {
+                posted = runtimeScope.deliver(mainHandler, () -> {
+                    try {
+                        if (handoff.isCurrent()) {
+                            startBiometricEnrollment(
+                                    activity, keyForBiometric, title, subtitle, guard, callback);
+                        }
+                    } finally { handoff.close(); }
+                });
+            } finally {
+                if (!posted) { handoff.close(); }
+            }
 
             if (!posted) {
-                handoff.close();
                 throw new IllegalStateException(
                         "Unable to start biometric enrollment."
                 );
@@ -256,16 +366,13 @@ public final class SecureVaultCoordinator {
             byte[] databaseKey,
             String title,
             String subtitle,
+            BiometricVaultKeyManager.ConfigurationGuard guard,
             BiometricSetupCallback callback
     ) {
         try {
             BiometricVaultKeyManager biometricManager =
-                    new BiometricVaultKeyManager(activity);
-
-            biometricManager.enableBiometricUnlock(
-                    databaseKey,
-                    title,
-                    subtitle,
+                    biometricManagerFactory.apply(activity);
+            BiometricVaultKeyManager.SetupCallback setupCallback =
                     new BiometricVaultKeyManager.SetupCallback() {
                         @Override
                         public void onEnabled() {
@@ -281,8 +388,14 @@ public final class SecureVaultCoordinator {
                         public void onFailed() {
                             callback.onFailed();
                         }
-                    }
-            );
+                    };
+
+            if (guard == null) {
+                biometricManager.enableBiometricUnlock(databaseKey, title, subtitle, setupCallback);
+            } else {
+                biometricManager.enableBiometricUnlock(
+                        databaseKey, title, subtitle, guard, setupCallback);
+            }
         } catch (RuntimeException exception) {
             callback.onError("Unable to prepare biometric unlock.");
         } finally {
@@ -396,6 +509,23 @@ public final class SecureVaultCoordinator {
             FragmentActivity activity,
             VaultDataService.SimpleCallback callback
     ) {
+        disableBiometricUnlock(activity, null, callback);
+    }
+
+    /** Disables biometrics only while the REAL vault session that requested it remains active. */
+    public void disableBiometricUnlockForRealSession(
+            FragmentActivity activity,
+            VaultDataService.SimpleCallback callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+        disableBiometricUnlock(activity, captureRealBiometricSession(activity), callback);
+    }
+
+    private void disableBiometricUnlock(
+            FragmentActivity activity,
+            BiometricVaultKeyManager.ConfigurationGuard guard,
+            VaultDataService.SimpleCallback callback
+    ) {
         requireActivity(activity);
         Objects.requireNonNull(callback, "callback");
 
@@ -403,9 +533,13 @@ public final class SecureVaultCoordinator {
             if (runtimeScope.isStopped()) { return; }
             try {
                 BiometricVaultKeyManager biometricManager =
-                        new BiometricVaultKeyManager(activity);
+                        biometricManagerFactory.apply(activity);
 
-                biometricManager.disableBiometricUnlock();
+                if (guard == null) {
+                    biometricManager.disableBiometricUnlock();
+                } else {
+                    biometricManager.disableBiometricUnlock(guard);
+                }
                 callback.onSuccess();
             } catch (Exception exception) {
                 callback.onError(exception);
@@ -457,6 +591,29 @@ public final class SecureVaultCoordinator {
         vaultDataService.setCredentialFavorite(id, favorite, callback);
     }
 
+    /**
+     * Reads the display name from the real encrypted vault.
+     */
+    public void getVaultDisplayName(
+            VaultDataService.ResultCallback<String> callback
+    ) {
+        vaultDataService.getVaultDisplayName(
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
+
+    /**
+     * Updates the display name in the real encrypted vault.
+     */
+    public void updateVaultDisplayName(
+            String displayName,
+            VaultDataService.ResultCallback<Integer> callback
+    ) {
+        vaultDataService.updateVaultDisplayName(
+                displayName,
+                Objects.requireNonNull(callback, "callback")
+        );
+    }
     public void getVaultCounts(
             VaultDataService.ResultCallback<VaultCounts> callback
     ) {
@@ -1290,7 +1447,24 @@ public final class SecureVaultCoordinator {
             BiometricSetupCallback callback
     ) {
         try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
-            enableBiometricUnlockWhileRunning(activity, masterPassword, title, subtitle, callback);
+            enableBiometricUnlockWhileRunning(
+                    activity, masterPassword, title, subtitle, null, callback);
+        }
+    }
+
+    /** Starts biometric enrollment from Settings with the current REAL vault session. */
+    public void enableBiometricUnlockForRealSession(
+            FragmentActivity activity,
+            char[] masterPassword,
+            String title,
+            String subtitle,
+            BiometricSetupCallback callback
+    ) {
+        Objects.requireNonNull(callback, "callback");
+        try (PanicWorkGate.Operation ignored = runtimeScope.begin()) {
+            BiometricVaultKeyManager.ConfigurationGuard guard = captureRealBiometricSession(activity);
+            enableBiometricUnlockWhileRunning(
+                    activity, masterPassword, title, subtitle, guard, callback);
         }
     }
 

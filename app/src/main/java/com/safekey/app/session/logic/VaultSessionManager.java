@@ -92,6 +92,30 @@ public final class VaultSessionManager {
         return true;
     }
 
+    /**
+     * Authorizes a storage commit against the current authentication and timeout.
+     * The UI session checks own expiry cleanup, including vault-close callbacks.
+     * Storage workers only reject expired authentication in this critical section.
+     */
+    public synchronized boolean runIfCurrentAuthenticationForStorageCommit(
+            long generation,
+            Runnable action
+    ) {
+        Objects.requireNonNull(action, "action");
+        if (generation < 0L || state != SessionState.UNLOCKED
+                || authenticationGeneration != generation) {
+            return false;
+        }
+
+        long elapsedMillis = monotonicTimeMillis.getAsLong() - lastActivityMillis;
+        if (elapsedMillis < 0L || elapsedMillis >= inactivityTimeoutMillis) {
+            return false;
+        }
+
+        action.run();
+        return true;
+    }
+
     public synchronized SessionState getState() {
         if (state == SessionState.UNLOCKED) {
             lockIfTimedOut(

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Header -->
+    <string name="settings_title">Settings</string>
+
+    <!-- Vault information -->
+    <string name="settings_local_vault">Local Vault</string>
+    <string name="settings_vault_protected">Protected on this device</string>
+    <string name="settings_offline_first">Offline-first</string>
+    <string name="settings_edit_display_name">Edit display name</string>
+
+    <!-- Account -->
+    <string name="settings_account_section">Account</string>
+    <string name="settings_change_master_password">Change Master Password</string>
+    <string name="settings_lock_vault">Lock Vault</string>
+    <string name="settings_delete_vault">Delete Vault</string>
+
+    <!-- Security -->
+    <string name="settings_security_section">Security</string>
+    <string name="settings_biometric_title">Biometric Unlock</string>
+    <string name="settings_auto_lock_title">Auto-lock Timeout</string>
+
+    <!-- TOTP -->
+    <string name="settings_totp_title">Authenticator App (TOTP)</string>
+
+    <!-- Emergency protection -->
+    <string name="settings_emergency_section">Emergency Protection</string>
+    <string name="settings_panic_title">Panic Mode</string>
+    <string name="settings_decoy_title">Decoy Vault</string>
+
+    <!-- App -->
+    <string name="settings_app_section">App</string>
+    <string name="settings_about">About SafeKey</string>
+    <string name="settings_about_message">SafeKey is an offline-first password manager for Android that helps protect passwords and secure notes using encrypted local storage.</string>
+    <string name="settings_about_dialog_close">Close</string>
+
+    <!-- Status -->
+    <string name="settings_status_on">On</string>
+    <string name="settings_status_unavailable">Unavailable</string>
+    <string name="settings_status_not_configured">Not configured</string>
+
+    <string name="settings_auto_lock_five_minutes">5 minutes</string>
+</resources>
