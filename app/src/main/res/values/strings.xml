@@ -298,4 +298,51 @@
     <string name="alerts_empty_attention">Nothing needs attention.</string>
     <string name="alerts_empty_passed">No credentials in this category.</string>
 
+
+    <!-- T43 Recovery user-facing text and accessibility labels -->
+    <string name="t43_back_symbol">‹</string>
+    <string name="t43_back_to_signup">Back to Sign Up</string>
+    <string name="t43_back_to_signin">Back to Sign In</string>
+    <string name="t43_save_recovery_title">Save Your Recovery Key</string>
+    <string name="t43_save_recovery_intro">Keep this key somewhere safe. You’ll need it if you forget your Master Password.</string>
+    <string name="t43_recovery_key_label">Your Recovery Key</string>
+    <string name="t43_recovery_instructions">• This key is shown only once.\n• SafeKey cannot retrieve it for you later.\n• Write this key down and keep it somewhere safe. Avoid unprotected screenshots or notes.</string>
+    <string name="t43_important">Important</string>
+    <string name="t43_recovery_loss_warning">If you lose both your Master Password and Recovery Key, you may permanently lose access to your vault.</string>
+    <string name="t43_recovery_saved_confirmation">I have securely saved my Recovery Key and understand it cannot be shown again.</string>
+    <string name="t43_continue_create_vault">Continue &amp; Create Vault</string>
+    <string name="t43_cancel_setup">Cancel Setup</string>
+    <string name="t43_recover_title">Recover Your Vault</string>
+    <string name="t43_recover_intro">Enter your Recovery Key to create a new Master Password.</string>
+    <string name="t43_recovery_input_label">Recovery Key</string>
+    <string name="t43_recovery_key_hint">XXXX XXXX XXXX XXXX\nXXXX XXXX XXXX XXXX</string>
+    <string name="t43_toggle_recovery_key">Show or hide Recovery Key</string>
+    <string name="t43_show_recovery_key">Show Recovery Key</string>
+    <string name="t43_new_master_password">New Master Password</string>
+    <string name="t43_new_master_password_hint">Enter new master password</string>
+    <string name="t43_toggle_new_password">Show or hide new Master Password</string>
+    <string name="t43_password_length_hint">Use at least 15 characters for your Master Password.</string>
+    <string name="t43_confirm_master_password">Confirm New Master Password</string>
+    <string name="t43_confirm_password_hint">Re-enter new master password</string>
+    <string name="t43_toggle_confirm_password">Show or hide confirmation password</string>
+    <string name="t43_show_passwords">Show passwords</string>
+    <string name="t43_secure_vault">Secure vault</string>
+    <string name="t43_vault_preserved">Your saved passwords and notes will remain encrypted and preserved. After the reset, you’ll return to Sign In.</string>
+    <string name="t43_reset_master_password">Reset Master Password</string>
+    <string name="t43_success_checkmark">✓</string>
+    <string name="t43_success_title">Master Password Updated</string>
+    <string name="t43_success_message">Your Master Password has been reset successfully. Sign in with your new password to access your vault.</string>
+    <string name="t43_go_to_signin">Go to Sign In</string>
+    <string name="t43_recovery_unavailable">Recovery is unavailable for this vault.</string>
+    <string name="t43_recovery_key_invalid">Recovery Key must contain exactly 32 characters (0–9 and A–F).</string>
+    <string name="t43_recovery_key_invalid_short">Recovery Key must be 32 characters (0–9 and A–F).</string>
+    <string name="t43_password_mismatch">Passwords do not match.</string>
+    <string name="t43_password_policy_met">Meets Master Password requirements</string>
+    <string name="t43_password_policy_not_met">Master Password requirements not met</string>
+    <string name="t43_password_checking">Checking new Master Password…</string>
+    <string name="t43_password_check_failed">Password check failed. Please try again.</string>
+    <string name="t43_password_check_cancelled">Password check cancelled.</string>
+    <string name="t43_recovery_invalid_or_failed">Incorrect Recovery Key or recovery could not be completed.</string>
+    <string name="t43_recovery_failed">Recovery could not be completed. Please try again.</string>
+    <string name="t43_forgot_master_password">Forgot Master Password?</string>
 </resources>

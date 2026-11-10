@@ -65,6 +65,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private ImageButton buttonTogglePassword;
     private Button buttonUnlockVault;
     private Button buttonGoToSignUp;
+    private TextView linkForgotMasterPassword;
     private TextView biometricUnlockArea;
     private TextView textValidationMessage;
     private LinearLayout biometricUnlockSection;
@@ -116,6 +117,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         biometricUnlockArea = findViewById(R.id.biometricUnlockArea);
         buttonUnlockVault = findViewById(R.id.buttonUnlockVault);
         buttonGoToSignUp = findViewById(R.id.buttonGoToSignUp);
+        linkForgotMasterPassword = findViewById(R.id.linkForgotMasterPassword);
 
         editMasterPassword.setSaveEnabled(false);
 
@@ -135,6 +137,15 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
         buttonUnlockVault.setOnClickListener(view -> validateSignInForm());
         biometricUnlockArea.setOnClickListener(view -> unlockVaultWithBiometrics());
+
+        linkForgotMasterPassword.setVisibility(isVerifiedAutofillResultCaller()
+                ? View.GONE : View.VISIBLE);
+        linkForgotMasterPassword.setOnClickListener(view -> {
+            if (!busy && !authenticated && !isVerifiedAutofillResultCaller()) {
+                editMasterPassword.setText(null);
+                startActivity(new Intent(this, RecoverVaultActivity.class));
+            }
+        });
 
         buttonGoToSignUp.setOnClickListener(view -> {
             if (!busy) {
@@ -569,6 +580,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
             buttonUnlockVault.setEnabled(!value);
             buttonTogglePassword.setEnabled(!value);
             buttonGoToSignUp.setEnabled(!value);
+            linkForgotMasterPassword.setEnabled(!value);
             editMasterPassword.setEnabled(!value);
             biometricUnlockArea.setEnabled(!value);
         }
