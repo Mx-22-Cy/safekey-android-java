@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="@color/auth_background" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:paddingStart="24dp"
+        android:paddingEnd="24dp" android:paddingTop="52dp" android:paddingBottom="30dp">
+        <TextView android:id="@+id/buttonBackRecovery"
+            android:layout_width="wrap_content" android:layout_height="48dp"
+            android:gravity="center_vertical" android:clickable="true" android:focusable="true"
+            android:text="‹  Back" android:textSize="16sp" android:textColor="@color/auth_text_secondary" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" android:fontFamily="@font/fraunces_semibold"
+            android:text="Save Your Recovery Key" android:textSize="27sp"
+            android:textColor="@color/auth_text_primary" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" android:layout_marginBottom="20dp"
+            android:text="Keep this key somewhere safe. You'll need it if you forget your Master Password."
+            android:textSize="14sp" android:textColor="@color/auth_text_secondary" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/auth_card_bg" android:orientation="vertical"
+            android:padding="20dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Your Recovery Key" android:textColor="@color/auth_text_primary"
+                android:textSize="14sp" android:textStyle="bold" />
+            <TextView android:id="@+id/textRecoveryKey"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:padding="12dp"
+                android:background="@drawable/auth_input_bg" android:gravity="center"
+                android:fontFamily="monospace" android:textSize="18sp"
+                android:letterSpacing="0.05" android:lineSpacingExtra="8dp"
+                android:textColor="@color/auth_text_primary"
+                android:textIsSelectable="false" android:importantForAccessibility="no" />
+        </LinearLayout>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:lineSpacingExtra="7dp"
+            android:text="• This key is shown only once.&#10;• SafeKey cannot retrieve it for you later.&#10;• Write this key down and keep it somewhere safe. Avoid unprotected screenshots or notes."
+            android:textSize="14sp" android:textColor="@color/auth_text_secondary" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="20dp" android:background="@drawable/auth_card_bg"
+            android:orientation="vertical" android:padding="16dp">
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Important" android:textStyle="bold"
+                android:textSize="14sp" android:textColor="#E5848A" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:textSize="13sp"
+                android:text="If you lose both your Master Password and Recovery Key, you may permanently lose access to your vault."
+                android:textColor="@color/auth_text_secondary" />
+        </LinearLayout>
+        <CheckBox android:id="@+id/checkRecoverySaved"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="18dp" android:minHeight="54dp"
+            android:text="I have securely saved my Recovery Key and understand it cannot be shown again."
+            android:buttonTint="@color/auth_checkbox_tint"
+            android:textColor="@color/auth_text_primary" android:textSize="14sp" />
+        <Button android:id="@+id/buttonConfirmRecovery"
+            android:layout_width="match_parent" android:layout_height="56dp"
+            android:layout_marginTop="24dp" android:enabled="false"
+            android:background="@drawable/auth_primary_button_bg" app:backgroundTint="@null"
+            android:text="Continue &amp; Create Vault" android:textAllCaps="false"
+            android:textColor="@color/auth_primary_button_text" android:textSize="16sp" />
+        <Button android:id="@+id/buttonCancelRecovery"
+            android:layout_width="match_parent" android:layout_height="52dp"
+            android:layout_marginTop="12dp" android:background="@drawable/auth_secondary_button_bg"
+            app:backgroundTint="@null" android:text="Cancel Setup" android:textAllCaps="false"
+            android:textColor="@color/auth_accent" android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>
