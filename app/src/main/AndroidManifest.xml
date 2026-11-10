@@ -106,6 +106,22 @@
             android:name=".MainActivity"
             android:exported="false" />
 
+        <!-- Week 11: Android Autofill -->
+        <service
+            android:name=".autofill.SafeKeyAutofillService"
+            android:exported="true"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/safekey_autofill_service" />
+
+        </service>
+
         <!-- Week 10 Decoy Vault Setup -->
         <activity
             android:name=".securityui.SetupDecoyVaultActivity"
@@ -115,7 +131,10 @@
         <activity
             android:name=".securityui.SetupPanicModeActivity"
             android:exported="false" />
-
+        <!-- Week 11: Autofill Authentication -->
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:exported="false" />
     </application>
 
 </manifest>

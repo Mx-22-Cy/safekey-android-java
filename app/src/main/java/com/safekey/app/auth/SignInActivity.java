@@ -53,6 +53,10 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     public static final String REQUIRE_MASTER_PASSWORD =
             "com.safekey.app.auth.REQUIRE_MASTER_PASSWORD";
 
+    /** Internal request to return to the Autofill authentication Activity. */
+    public static final String EXTRA_RETURN_TO_AUTOFILL =
+            "com.safekey.app.auth.RETURN_TO_AUTOFILL";
+
     private char[] pendingMasterPasswordRecheck;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -409,6 +413,26 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         }
     }
 
+    /**
+     * Only the internal Autofill authentication Activity may
+     * request an authentication result instead of Home navigation.
+     * The Intent flag alone is not sufficient authorization.
+     */
+    private boolean isVerifiedAutofillResultCaller() {
+        if (getIntent() == null
+                || !getIntent().getBooleanExtra(
+                        EXTRA_RETURN_TO_AUTOFILL, false)) {
+            return false;
+        }
+
+        android.content.ComponentName caller = getCallingActivity();
+
+        return caller != null
+                && getPackageName().equals(caller.getPackageName())
+                && com.safekey.app.autofill.AutofillAuthActivity.class
+                        .getName().equals(caller.getClassName());
+    }
+
     private void continueToHome(long token) {
         if (!resumed || !isCurrent(token)
                 || !authenticated || pendingUnlock == null) {
@@ -452,6 +476,17 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         }
 
         try {
+            /*
+             * The existing vault unlock, TOTP challenge,
+             * session claim, and real-vault activation
+             * have already completed successfully.
+             */
+            if (isVerifiedAutofillResultCaller()) {
+                setResult(RESULT_OK);
+                finish();
+                return;
+            }
+
             Intent intent = new Intent(this, HomeActivity.class);
             intent.addFlags(
                     Intent.FLAG_ACTIVITY_NEW_TASK
