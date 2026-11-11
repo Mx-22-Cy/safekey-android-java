@@ -406,6 +406,9 @@ public final class RecoverVaultActivity extends com.safekey.app.StartupGuardActi
         findViewById(R.id.buttonEyeRecoveryKey).setEnabled(false);
         findViewById(R.id.buttonEyeNewRecoveryPassword).setEnabled(false);
         findViewById(R.id.buttonEyeConfirmRecoveryPassword).setEnabled(false);
+        // Recovery is unavailable, but the user must still be able to leave.
+        cancel.setEnabled(true);
+        findViewById(R.id.buttonBackRecovery).setEnabled(true);
         setResetEnabled(false);
     }
 
