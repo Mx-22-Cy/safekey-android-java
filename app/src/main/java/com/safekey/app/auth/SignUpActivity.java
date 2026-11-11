@@ -9,6 +9,9 @@ import android.text.TextWatcher;
 import android.text.method.HideReturnsTransformationMethod;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ScrollView;
+import com.safekey.app.security.storage.SecureVaultCoordinator;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -48,6 +51,10 @@ public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
     private VaultUnlockFlow.Request pendingCreation;
     private AlertDialog offlineDialog;
     private char[] pendingPassword;
+    private SecureVaultCoordinator.EnrollmentRecoveryKey pendingRecoveryKey;
+    private View recoveryScreen;
+    private TextView recoveryKeyText;
+
     private long enrollmentGeneration;
     private boolean resumed;
     private boolean busy;
@@ -671,10 +678,83 @@ public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
 
     private void createScreenedVault(long token, MasterPasswordCheckStatus status) {
         if (!isCurrentEnrollment(token) || pendingPassword == null) { return; }
+        showRecoveryConfirmation(token, status);
+    }
+
+    /** Show the one-time recovery key without pausing the pending Sign Up activity. */
+    private void showRecoveryConfirmation(long token, MasterPasswordCheckStatus status) {
+        try {
+            SecureVaultCoordinator coordinator =
+                    ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator();
+            pendingRecoveryKey = coordinator.prepareEnrollmentRecoveryKey();
+            char[] displayCopy = pendingRecoveryKey.takeDisplayCopy();
+            ViewGroup content = findViewById(android.R.id.content);
+            try {
+                recoveryScreen = getLayoutInflater().inflate(
+                        R.layout.activity_recovery_key_confirmation, content, false);
+                recoveryKeyText = recoveryScreen.findViewById(R.id.textRecoveryKey);
+                // The TextView is the only short-lived display owner of this String.
+                // Clear it as soon as enrollment is confirmed, cancelled or paused.
+                StringBuilder grouped = new StringBuilder(39);
+                for (int i = 0; i < displayCopy.length; i++) {
+                    if (i != 0 && i % 4 == 0) { grouped.append(' '); }
+                    grouped.append(displayCopy[i]);
+                }
+                recoveryKeyText.setText(grouped.toString());
+                for (int i = 0; i < grouped.length(); i++) { grouped.setCharAt(i, '\0'); }
+            } finally {
+                Arrays.fill(displayCopy, '\0');
+            }
+
+            CheckBox confirmed = recoveryScreen.findViewById(R.id.checkRecoverySaved);
+            Button continueButton = recoveryScreen.findViewById(R.id.buttonConfirmRecovery);
+            continueButton.setEnabled(false);
+            confirmed.setOnCheckedChangeListener((button, checked) -> continueButton.setEnabled(checked));
+            continueButton.setOnClickListener(view -> {
+                if (!confirmed.isChecked() || !isCurrentEnrollment(token)
+                        || pendingRecoveryKey == null || pendingPassword == null) { return; }
+                SecureVaultCoordinator.EnrollmentRecoveryKey acceptedKey = pendingRecoveryKey;
+                pendingRecoveryKey = null;
+                hideRecoveryConfirmation();
+                createConfirmedRecoveryVault(token, status, acceptedKey);
+            });
+            View.OnClickListener cancel = view -> cancelEnrollment();
+            recoveryScreen.findViewById(R.id.buttonCancelRecovery).setOnClickListener(cancel);
+            recoveryScreen.findViewById(R.id.buttonBackRecovery).setOnClickListener(cancel);
+
+            content.addView(recoveryScreen, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            findViewById(R.id.rootSignUp).setVisibility(View.GONE);
+        } catch (RuntimeException error) {
+            rejectEnrollment(getString(R.string.signup_vault_creation_error));
+        }
+    }
+
+    private void hideRecoveryConfirmation() {
+        if (recoveryKeyText != null) {
+            recoveryKeyText.setText("");
+            recoveryKeyText = null;
+        }
+        if (recoveryScreen != null) {
+            ViewGroup parent = (ViewGroup) recoveryScreen.getParent();
+            if (parent != null) { parent.removeView(recoveryScreen); }
+            recoveryScreen = null;
+        }
+        View signup = findViewById(R.id.rootSignUp);
+        if (signup != null) { signup.setVisibility(View.VISIBLE); }
+    }
+
+    private void createConfirmedRecoveryVault(long token,
+            MasterPasswordCheckStatus status,
+            SecureVaultCoordinator.EnrollmentRecoveryKey confirmedKey) {
+        if (!isCurrentEnrollment(token) || pendingPassword == null) {
+            confirmedKey.close();
+            return;
+        }
         textValidationMessage.setText(R.string.master_password_creating);
         try {
             pendingCreation = ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator()
-                    .createVaultForEnrollment(pendingPassword, status,
+                    .createVaultForEnrollmentWithRecovery(pendingPassword, status, confirmedKey,
                             new VaultDataService.SimpleCallback() {
                                 @Override public void onSuccess() {
                                     if (!isCurrentEnrollment(token) || pendingCreation == null) { return; }
@@ -718,6 +798,7 @@ public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
         } catch (RuntimeException error) {
             rejectEnrollment(getString(R.string.signup_vault_creation_error));
         } finally {
+            confirmedKey.close();
             clearPendingPassword();
         }
     }
@@ -738,6 +819,8 @@ public class SignUpActivity extends com.safekey.app.StartupGuardActivity {
         if (pendingCheck != null) { pendingCheck.close(); pendingCheck = null; }
         if (pendingCreation != null) { pendingCreation.close(); pendingCreation = null; }
         if (offlineDialog != null) { offlineDialog.dismiss(); offlineDialog = null; }
+        hideRecoveryConfirmation();
+        if (pendingRecoveryKey != null) { pendingRecoveryKey.close(); pendingRecoveryKey = null; }
         clearPendingPassword();
         if (editMasterPassword != null && !resumed) {
             editMasterPassword.setText("");

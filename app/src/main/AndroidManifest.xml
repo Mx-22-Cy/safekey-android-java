@@ -43,6 +43,12 @@
             android:name=".auth.SignInActivity"
             android:exported="false" />
 
+        <!-- T43: Recovery remains private to SafeKey -->
+        <activity
+            android:name=".auth.RecoverVaultActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <activity
             android:name=".auth.ChangeMasterPasswordActivity"
             android:exported="false" />
