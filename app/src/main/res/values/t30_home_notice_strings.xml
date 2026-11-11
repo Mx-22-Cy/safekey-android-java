@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="master_password_pending_title">Password security check pending</string>
+    <string name="master_password_breached_title">Master password needs attention</string>
+    <string name="t30_master_password_pending_description">Online breach check not finished. Sign in while online to complete it.</string>
+</resources>
