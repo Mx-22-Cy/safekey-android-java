@@ -1,6 +1,10 @@
 package com.safekey.app.auth;
 
 
+import android.widget.EditText;
+
+import com.safekey.app.R;
+
 import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -84,10 +88,15 @@ public final class RecoverVaultLifecycleInstrumentedTest {
             final char[] password = "DisposableTestPassword!1234".toCharArray();
             scenario.onActivity(activity -> {
                 set(activity, "generation", TOKEN);
-                set(activity, "busy", true);
+                set(activity, "recoveryUnavailable", false);
+                setBusy(activity, true);
                 set(activity, "pendingKey", key);
                 set(activity, "pendingPassword", password);
                 assertTrue(current(activity));
+                assertFalse("Busy recovery key should be disabled",
+                        activity.findViewById(R.id.editRecoveryKey).isEnabled());
+                assertFalse("Busy Back control should be disabled",
+                        activity.findViewById(R.id.buttonBackRecovery).isEnabled());
             });
 
             // RESUMED -> CREATED invokes onStop, which must cancel and clear secrets.
@@ -100,6 +109,59 @@ public final class RecoverVaultLifecycleInstrumentedTest {
             });
             assertTrue("Recovery key characters were not cleared", allZero(key));
             assertTrue("Master password characters were not cleared", allZero(password));
+
+            // A canceled request must not leave the form disabled on return.
+            scenario.moveToState(Lifecycle.State.RESUMED);
+            scenario.onActivity(activity -> {
+                assertFalse("Canceled request unexpectedly restarted", (boolean) get(activity, "busy"));
+                assertFalse("Canceled callback became current again", current(activity));
+                int[] controls = {
+                        R.id.editRecoveryKey,
+                        R.id.editNewRecoveryPassword,
+                        R.id.editConfirmRecoveryPassword,
+                        R.id.checkShowRecoveryKey,
+                        R.id.checkShowRecoveryPasswords,
+                        R.id.buttonEyeRecoveryKey,
+                        R.id.buttonEyeNewRecoveryPassword,
+                        R.id.buttonEyeConfirmRecoveryPassword,
+                        R.id.buttonCancelRecovery,
+                        R.id.buttonBackRecovery
+                };
+                for (int id : controls) {
+                    assertTrue("Control stayed disabled after resume: " + id,
+                            activity.findViewById(id).isEnabled());
+                }
+                EditText keyField = activity.findViewById(R.id.editRecoveryKey);
+                EditText passwordField = activity.findViewById(R.id.editNewRecoveryPassword);
+                EditText confirmField = activity.findViewById(R.id.editConfirmRecoveryPassword);
+                assertEquals("", keyField.getText().toString());
+                assertEquals("", passwordField.getText().toString());
+                assertEquals("", confirmField.getText().toString());
+                assertFalse("Reset should stay disabled for cleared inputs",
+                        activity.findViewById(R.id.buttonResetMasterPassword).isEnabled());
+
+                // Typing again after return must work without restarting Activity.
+                keyField.setText("ABCDEF0123456789ABCDEF0123456789");
+                passwordField.setText("DisposableTestPassword!1234");
+                confirmField.setText("DisposableTestPassword!1234");
+                assertEquals(32, keyField.length());
+                assertTrue(passwordField.length() > 0);
+                assertEquals(passwordField.getText().toString(),
+                        confirmField.getText().toString());
+                keyField.setText(null);
+                passwordField.setText(null);
+                confirmField.setText(null);
+            });
+        }
+    }
+
+    private static void setBusy(RecoverVaultActivity activity, boolean value) {
+        try {
+            Method method = RecoverVaultActivity.class.getDeclaredMethod("setBusy", boolean.class);
+            method.setAccessible(true);
+            method.invoke(activity, value);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Could not set up a genuinely disabled busy form", failure);
         }
     }
 
