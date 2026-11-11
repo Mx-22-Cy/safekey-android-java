@@ -127,8 +127,11 @@ public final class RecoverVaultActivity extends com.safekey.app.StartupGuardActi
     @Override protected void onRuntimeResume() {
         super.onRuntimeResume();
         resumed = true;
-        if (!recoveryUnavailable && !completed) setBusy(false);
-        updateValid();
+        // A pause/resume without onStop must not clear an in-flight request.
+        // current(token) depends on busy remaining true until its callback completes.
+        if (!busy && !recoveryUnavailable && !completed) {
+            updateValid();
+        }
     }
 
     @Override protected void onRuntimeStop() {
