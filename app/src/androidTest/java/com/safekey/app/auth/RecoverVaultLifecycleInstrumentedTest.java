@@ -155,6 +155,79 @@ public final class RecoverVaultLifecycleInstrumentedTest {
         }
     }
 
+    @Test
+    public void unavailableDuringResetRestoresNavigationButKeepsRecoveryDisabled() {
+        try (ActivityScenario<RecoverVaultActivity> scenario =
+                     ActivityScenario.launch(RecoverVaultActivity.class)) {
+            final char[] key = "ABCDEF0123456789ABCDEF0123456789".toCharArray();
+            final char[] password = "DisposableTestPassword!1234".toCharArray();
+            scenario.onActivity(activity -> {
+                set(activity, "recoveryUnavailable", false);
+                set(activity, "generation", TOKEN);
+                setBusy(activity, true);
+                set(activity, "pendingKey", key);
+                set(activity, "pendingPassword", password);
+                assertTrue("Reset should be active before backend error", current(activity));
+                assertFalse(activity.findViewById(R.id.buttonBackRecovery).isEnabled());
+                assertFalse(activity.findViewById(R.id.buttonCancelRecovery).isEnabled());
+
+                setDisabled(activity, "Recovery is unavailable");
+
+                assertTrue("Recovery should be marked unavailable",
+                        (boolean) get(activity, "recoveryUnavailable"));
+                assertFalse("Canceled request must not remain busy", (boolean) get(activity, "busy"));
+                assertFalse("Canceled callback must remain invalid", current(activity));
+                assertTrue("Pending key reference retained", get(activity, "pendingKey") == null);
+                assertTrue("Pending password reference retained", get(activity, "pendingPassword") == null);
+                assertTrue("Back must be available", activity.findViewById(R.id.buttonBackRecovery).isEnabled());
+                assertTrue("Cancel must be available", activity.findViewById(R.id.buttonCancelRecovery).isEnabled());
+                int[] disabledControls = {
+                        R.id.editRecoveryKey,
+                        R.id.editNewRecoveryPassword,
+                        R.id.editConfirmRecoveryPassword,
+                        R.id.checkShowRecoveryKey,
+                        R.id.checkShowRecoveryPasswords,
+                        R.id.buttonEyeRecoveryKey,
+                        R.id.buttonEyeNewRecoveryPassword,
+                        R.id.buttonEyeConfirmRecoveryPassword,
+                        R.id.buttonResetMasterPassword
+                };
+                for (int id : disabledControls) {
+                    assertFalse("Unavailable control became enabled: " + id,
+                            activity.findViewById(id).isEnabled());
+                }
+                assertEquals("", ((EditText) activity.findViewById(R.id.editRecoveryKey))
+                        .getText().toString());
+                assertEquals("", ((EditText) activity.findViewById(R.id.editNewRecoveryPassword))
+                        .getText().toString());
+                assertEquals("", ((EditText) activity.findViewById(R.id.editConfirmRecoveryPassword))
+                        .getText().toString());
+            });
+            assertTrue("Pending Recovery Key was not zeroized", allZero(key));
+            assertTrue("Pending password was not zeroized", allZero(password));
+            // The same unavailable state must keep navigation available after resume.
+            scenario.moveToState(Lifecycle.State.STARTED);
+            scenario.moveToState(Lifecycle.State.RESUMED);
+            scenario.onActivity(activity -> {
+                assertTrue(activity.findViewById(R.id.buttonBackRecovery).isEnabled());
+                assertTrue(activity.findViewById(R.id.buttonCancelRecovery).isEnabled());
+                assertFalse(activity.findViewById(R.id.editRecoveryKey).isEnabled());
+                assertFalse(activity.findViewById(R.id.buttonResetMasterPassword).isEnabled());
+                assertFalse(current(activity));
+            });
+        }
+    }
+
+    private static void setDisabled(RecoverVaultActivity activity, String message) {
+        try {
+            Method method = RecoverVaultActivity.class.getDeclaredMethod("setDisabled", String.class);
+            method.setAccessible(true);
+            method.invoke(activity, message);
+        } catch (ReflectiveOperationException failure) {
+            throw new AssertionError("Could not simulate unavailable recovery error", failure);
+        }
+    }
+
     private static void setBusy(RecoverVaultActivity activity, boolean value) {
         try {
             Method method = RecoverVaultActivity.class.getDeclaredMethod("setBusy", boolean.class);

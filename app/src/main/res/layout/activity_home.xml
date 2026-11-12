@@ -50,39 +50,6 @@
 
             </LinearLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:background="@drawable/dashboard_card_bg"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/textMasterPasswordHealth"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:accessibilityLiveRegion="polite"
-                    android:textColor="@color/auth_text_primary"
-                    android:textSize="16sp"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/buttonCheckMasterPassword"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/master_password_check_now"
-                    android:visibility="gone" />
-
-                <Button
-                    android:id="@+id/buttonChangeMasterPassword"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/master_password_change_title" />
-            </LinearLayout>
-
             <!-- Security score card -->
             <LinearLayout
                 android:layout_width="match_parent"
@@ -209,6 +176,70 @@
                     android:textColor="@color/auth_text_secondary"
                     android:textSize="12sp" />
 
+            </LinearLayout>
+
+            <!-- Password health notice: aligned icon, title, description, and action. -->
+            <LinearLayout
+                android:id="@+id/layoutMasterPasswordHealth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:background="@drawable/dashboard_card_bg"
+                android:baselineAligned="false"
+                android:gravity="top"
+                android:orientation="horizontal"
+                android:padding="16dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginTop="1dp"
+                    android:layout_marginEnd="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_alerts_security"
+                    app:tint="@color/auth_accent" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/textMasterPasswordHealthTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/master_password_pending_title"
+                        android:textColor="@color/auth_text_primary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/textMasterPasswordHealth"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:accessibilityLiveRegion="polite"
+                        android:textColor="@color/auth_text_secondary"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/buttonCheckMasterPassword"
+                        style="?android:attr/borderlessButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginStart="-12dp"
+                        android:minHeight="48dp"
+                        android:minWidth="48dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="@string/master_password_check_now"
+                        android:textAllCaps="false"
+                        android:textColor="@color/auth_accent"
+                        android:visibility="gone" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Quick actions -->

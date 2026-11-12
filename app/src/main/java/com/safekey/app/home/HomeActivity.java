@@ -25,7 +25,6 @@ import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.auth.SignInActivity;
-import com.safekey.app.auth.ChangeMasterPasswordActivity;
 import com.safekey.app.auth.MasterPasswordHealth;
 import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.vault.VaultActivity;
@@ -44,6 +43,8 @@ public class HomeActivity extends ProtectedActivity {
 
     private final Runnable masterPasswordHealthChanged = this::refreshMasterPasswordHealth;
     private MasterPasswordHealth masterPasswordHealth;
+    private View layoutMasterPasswordHealth;
+    private TextView textMasterPasswordHealthTitle;
     private TextView textMasterPasswordHealth;
     private Button buttonCheckMasterPassword;
 
@@ -183,6 +184,8 @@ public class HomeActivity extends ProtectedActivity {
                 );
 
         masterPasswordHealth = ((SafeKeyApplication) getApplication()).getMasterPasswordHealth();
+        layoutMasterPasswordHealth = findViewById(R.id.layoutMasterPasswordHealth);
+        textMasterPasswordHealthTitle = findViewById(R.id.textMasterPasswordHealthTitle);
         textMasterPasswordHealth = findViewById(R.id.textMasterPasswordHealth);
         buttonCheckMasterPassword = findViewById(R.id.buttonCheckMasterPassword);
         buttonCheckMasterPassword.setOnClickListener(view -> {
@@ -193,11 +196,6 @@ public class HomeActivity extends ProtectedActivity {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
-        });
-        findViewById(R.id.buttonChangeMasterPassword).setOnClickListener(view -> {
-            if (requireUnlockedSession()) {
-                startActivity(new Intent(this, ChangeMasterPasswordActivity.class));
-            }
         });
 
         securityController = AndroidCredentialSecurity.create(
@@ -330,11 +328,14 @@ public class HomeActivity extends ProtectedActivity {
                 || SafeKeySession.getManager().getRemainingInactivityMillis() <= 0L) { return; }
         MasterPasswordCheckStatus status = masterPasswordHealth.getStatus();
         boolean pending = status == MasterPasswordCheckStatus.PENDING;
-        textMasterPasswordHealth.setVisibility(status == MasterPasswordCheckStatus.CHECKED
-                ? View.GONE : View.VISIBLE);
-        textMasterPasswordHealth.setText(status == MasterPasswordCheckStatus.CHECKED ? null
-                : getString(pending ? R.string.master_password_pending_notice
+        boolean checked = status == MasterPasswordCheckStatus.CHECKED;
+        layoutMasterPasswordHealth.setVisibility(checked ? View.GONE : View.VISIBLE);
+        textMasterPasswordHealth.setText(checked ? null
+                : getString(pending ? R.string.t30_master_password_pending_description
                             : R.string.master_password_breached_notice));
+        textMasterPasswordHealthTitle.setText(pending
+                ? R.string.master_password_pending_title
+                : R.string.master_password_breached_title);
         buttonCheckMasterPassword.setVisibility(pending ? View.VISIBLE : View.GONE);
     }
 
