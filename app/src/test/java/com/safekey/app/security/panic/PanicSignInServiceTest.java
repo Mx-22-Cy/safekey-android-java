@@ -81,15 +81,22 @@ public class PanicSignInServiceTest {
         char[] taken;
         boolean closed;
         boolean used;
+        boolean panicCommitted;
         @Override public char[] takePassword() {
             if (closed || used) { throw new CancellationException("Closed/reused input."); }
             used = true; taken = caller == null ? null : caller.clone(); return taken;
         }
-        @Override public void commitIfCurrent(PanicPasswordService.Commit action) throws Exception {
+        @Override public synchronized void commitIfCurrent(PanicPasswordService.Commit action) throws Exception {
             if (closed) { throw new CancellationException("Cancelled input."); }
             action.run();
         }
-        @Override public void close() { closed = true; }
+        @Override public synchronized void commitPanicIfCurrent(PanicPasswordService.Commit action) throws Exception {
+            commitIfCurrent(() -> {
+                action.run();
+                panicCommitted = true;
+            });
+        }
+        @Override public synchronized void close() { closed = true; }
     }
 
     private static void rejects(PanicPasswordService.Commit action) throws Exception {
@@ -101,37 +108,44 @@ public class PanicSignInServiceTest {
         Fixture f = new Fixture();
         assertEquals(PanicSignInService.Result.NO_MATCH, f.run());
         f.assertAllChecks(); f.assertCleared(); assertEquals(0, f.erases); assertFalse(f.pending);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void masterMatchStillChecksEveryRoleWithoutWiping() throws Exception {
         Fixture f = new Fixture(); f.matches[0] = true;
         assertEquals(PanicSignInService.Result.MASTER, f.run()); f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void decoyMatchStillChecksEveryRoleWithoutWiping() throws Exception {
         Fixture f = new Fixture(); f.matches[1] = true;
         assertEquals(PanicSignInService.Result.DECOY, f.run()); f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void panicWipesOnlyAfterChecksInputClearingAndClosure() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true;
         assertEquals(PanicSignInService.Result.PANIC_WIPED, f.run());
         assertEquals(1, f.erases); assertFalse(f.pending); rejects(() -> f.gate.begin());
+        assertTrue(f.input.panicCommitted); assertTrue(f.input.closed);
     }
 
     @Test public void masterStorageErrorDoesNotSkipLaterChecksOrAuthorizePanic() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.errors[0] = new IOException();
         rejects(f::run); f.assertAllChecks(); f.assertCleared(); assertEquals(0, f.erases); assertFalse(f.pending);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void decoyCryptoErrorDoesNotSkipPanicCheck() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.errors[1] = new GeneralSecurityException();
         rejects(f::run); f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void corruptPanicProofPreventsMasterRouteAsWellAsWipe() throws Exception {
         Fixture f = new Fixture(); f.matches[0] = true; f.errors[2] = new IOException();
         rejects(f::run); f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void allRoleErrorsAreCollectedBeforeRejecting() throws Exception {
@@ -139,6 +153,7 @@ public class PanicSignInServiceTest {
         try { f.run(); fail("Role errors were ignored."); }
         catch (GeneralSecurityException error) { assertEquals(3, error.getSuppressed().length); }
         f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void everyAmbiguousCombinationIsRejectedWithoutWipe() throws Exception {
@@ -146,53 +161,81 @@ public class PanicSignInServiceTest {
             Fixture f = new Fixture();
             for (int i = 0; i < 3; i++) { f.matches[i] = (mask & (1 << i)) != 0; }
             rejects(f::run); f.assertAllChecks(); assertEquals(0, f.erases); assertFalse(f.pending);
+            assertFalse(f.input.panicCommitted);
         }
     }
 
     @Test public void changedCredentialConfigurationRejectsVerifiedPanic() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.afterCheck = () -> f.version++;
         rejects(f::run); f.assertAllChecks(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void stoppedRuntimeDuringChecksRejectsVerifiedPanic() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.afterCheck = f.gate::blockNewWork;
         rejects(f::run); f.assertAllChecks(); f.assertCleared(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void cancellationDuringChecksRejectsVerifiedPanic() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.afterCheck = f.input::close;
         rejects(f::run); f.assertAllChecks(); f.assertCleared(); assertEquals(0, f.erases);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void cancelledUnstartedSubmissionCannotWipe() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.input.close();
         rejects(f::run); assertEquals(0, f.erases); assertArrayEquals(new int[3], f.checks);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void inputIsSingleUseAndCallerOwnedArrayIsUntouched() throws Exception {
         Fixture f = new Fixture(); char[] expected = f.input.caller.clone();
         f.run(); rejects(f::run); assertArrayEquals(expected, f.input.caller); f.assertCleared();
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void pendingRecoveryIsNotFreshPasswordAuthorization() throws Exception {
         Fixture f = new Fixture(); f.pending = true; f.matches[2] = true;
         rejects(f::run); assertTrue(f.input.closed); assertEquals(0, f.erases);
         assertArrayEquals(new int[3], f.checks); assertTrue(f.pending);
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void unreadableRecoveryMarkerBlocksRoutingWithoutDeleting() throws Exception {
         Fixture f = new Fixture(); f.failMarkerRead = true;
         rejects(f::run); assertTrue(f.input.closed); assertEquals(0, f.erases); rejects(() -> f.gate.begin());
+        assertFalse(f.input.panicCommitted);
     }
 
     @Test public void failedWipeNeverReturnsPanicWipedAndRetainsMarker() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.failErase = true;
         rejects(f::run); assertTrue(f.pending); f.assertCleared(); rejects(() -> f.gate.begin());
+        assertTrue(f.input.panicCommitted); assertTrue(f.input.closed);
     }
 
     @Test public void failedMarkerWriteDoesNotDeleteTargets() throws Exception {
         Fixture f = new Fixture(); f.matches[2] = true; f.failMarkerWrite = true;
         rejects(f::run); assertEquals(0, f.erases); rejects(() -> f.gate.begin());
+        assertTrue(f.input.panicCommitted); assertFalse(f.pending); assertTrue(f.input.closed);
+        f.assertCleared();
+    }
+
+    @Test public void anotherSubmissionCannotInheritTheCommittedPanicSignal() throws Exception {
+        Fixture f = new Fixture(); f.matches[2] = true; f.failMarkerWrite = true;
+        Input other = new Input();
+        rejects(f::run);
+        assertTrue(f.input.panicCommitted);
+        rejects(() -> f.service.run(other));
+        assertFalse(other.panicCommitted); assertTrue(other.closed);
+        assertEquals(0, f.erases);
+    }
+
+    @Test public void closingAfterCommittedFailureDoesNotClearTheSignal() throws Exception {
+        Fixture f = new Fixture(); f.matches[2] = true; f.failMarkerWrite = true;
+        rejects(f::run);
+        f.input.close(); f.input.close();
+        assertTrue(f.input.panicCommitted); assertEquals(0, f.erases);
     }
 
     @Test public void invalidInputNeverChecksRolesOrDeletes() throws Exception {
@@ -200,6 +243,7 @@ public class PanicSignInServiceTest {
             Fixture f = new Fixture(); f.input.caller = candidate;
             rejects(f::run); assertEquals(0, f.erases); assertTrue(f.input.closed);
             assertArrayEquals(new int[3], f.checks);
+            assertFalse(f.input.panicCommitted);
         }
     }
 

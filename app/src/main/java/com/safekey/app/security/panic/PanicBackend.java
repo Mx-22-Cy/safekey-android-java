@@ -78,6 +78,7 @@ public final class PanicBackend {
         private PanicRuntimeScope.Registration registration;
         private boolean started;
         private boolean closed;
+        private boolean panicCommitted;
 
         private SignInRequest(char[] candidate) {
             // Count construction until its private input is either registered for clearing or erased.
@@ -100,11 +101,25 @@ public final class PanicBackend {
                 @Override public void commitIfCurrent(PanicPasswordService.Commit action) throws Exception {
                     SignInRequest.this.commitIfCurrent(action);
                 }
+                @Override public void commitPanicIfCurrent(PanicPasswordService.Commit action) throws Exception {
+                    SignInRequest.this.commitIfCurrent(() -> {
+                        action.run();
+                        panicCommitted = true;
+                    });
+                }
                 @Override public void close() { SignInRequest.this.close(); }
             });
             if (result == PanicSignInService.Result.PANIC_WIPED) { wipeCompleted = true; }
             return result;
         }
+
+        /**
+         * True once this request verified and committed the Panic trigger. Remains true
+         * after close(), including marker-write or cleanup failure. This does not mean
+         * that a recovery marker was saved or that the wipe completed successfully.
+         * A different request's commitment or an unrelated runtime stop never sets it.
+         */
+        public synchronized boolean isPanicCommitted() { return panicCommitted; }
 
         private synchronized char[] takePassword() {
             requireCurrent();
