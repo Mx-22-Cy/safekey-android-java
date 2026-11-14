@@ -9,7 +9,7 @@ public final class VaultSessionManager {
             5 * 60 * 1000L;
 
     private final LongSupplier monotonicTimeMillis;
-    private final long inactivityTimeoutMillis;
+    private long inactivityTimeoutMillis;
     private final SessionLockHandler lockHandler;
 
     private SessionState state =
@@ -164,6 +164,49 @@ public final class VaultSessionManager {
 
         return inactivityTimeoutMillis
                 - (nowMillis - lastActivityMillis);
+    }
+
+    /** Returns the configured policy; this getter does not authorize access. */
+    public synchronized long getInactivityTimeoutMillis() {
+        return inactivityTimeoutMillis;
+    }
+
+    /**
+     * Applies a policy change without recording activity or authenticating.
+     * An expired old policy cannot be extended to revive a session. A shorter
+     * policy takes effect against the existing last-activity time immediately.
+     */
+    public synchronized void setInactivityTimeoutMillis(long timeoutMillis) {
+        if (timeoutMillis <= 0L) {
+            throw new IllegalArgumentException(
+                    "inactivityTimeoutMillis must be greater than zero");
+        }
+
+        boolean mustLock = false;
+        if (state == SessionState.UNLOCKED) {
+            long elapsedMillis =
+                    monotonicTimeMillis.getAsLong() - lastActivityMillis;
+            mustLock = elapsedMillis < 0L
+                    || elapsedMillis >= inactivityTimeoutMillis
+                    || elapsedMillis >= timeoutMillis;
+        }
+
+        inactivityTimeoutMillis = timeoutMillis;
+        if (mustLock) {
+            transitionToLocked();
+        }
+    }
+
+    /**
+     * Revokes authentication and runs cleanup even when already locked.
+     * Backgrounding uses this to cancel pending unlock work as well as an
+     * established session. Ordinary lock() remains idempotent.
+     */
+    public synchronized void invalidateAuthentication() {
+        authenticationGeneration++;
+        state = SessionState.LOCKED;
+        lastActivityMillis = -1L;
+        lockHandler.onSessionLocked();
     }
 
     public synchronized void lock() {
