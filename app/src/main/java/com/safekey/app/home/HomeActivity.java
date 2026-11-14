@@ -28,6 +28,7 @@ import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.auth.MasterPasswordHealth;
 import com.safekey.app.security.storage.MasterPasswordCheckStatus;
 import com.safekey.app.vault.VaultActivity;
+import com.safekey.app.vault.AddCredentialActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.alerts.AlertsActivity;
@@ -279,10 +280,7 @@ public class HomeActivity extends ProtectedActivity {
         );
 
         buttonAddCredential.setOnClickListener(
-                view ->
-                        showProtectedPlaceholder(
-                                R.string.home_credential_creation_pending
-                        )
+                view -> navigateToAddCredential()
         );
     }
 
@@ -357,19 +355,18 @@ public class HomeActivity extends ProtectedActivity {
         return true;
     }
 
-    private void showProtectedPlaceholder(
-            int messageResource
-    ) {
+    private void navigateToAddCredential() {
 
         if (!requireUnlockedSession()) {
             return;
         }
 
-        Toast.makeText(
-                this,
-                messageResource,
-                Toast.LENGTH_SHORT
-        ).show();
+        Intent intent = new Intent(
+                HomeActivity.this,
+                AddCredentialActivity.class
+        );
+
+        startActivity(intent);
     }
 
     private void navigateToVault() {
