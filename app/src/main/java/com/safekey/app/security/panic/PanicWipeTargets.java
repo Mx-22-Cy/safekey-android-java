@@ -3,6 +3,8 @@ package com.safekey.app.security.panic;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.safekey.app.session.AutoLockPreferences;
+
 import java.io.File;
 import java.io.IOException;
 import java.security.KeyStore;
@@ -129,7 +131,7 @@ public final class PanicWipeTargets {
         static Names production() {
             return new Names(new String[]{"safekey.db", "safekey_secondary.db"},
                     new String[]{"safekey_vault_key_envelope", "safekey_decoy_vault_key_envelope",
-                            "safekey_biometric_key_envelope"},
+                            "safekey_biometric_key_envelope", AutoLockPreferences.PREFERENCES_NAME},
                     new String[]{"safekey_biometric_vault_key", "safekey_totp_state_key_v1"},
                     "safekey_totp_state.enc", PanicPasswordStore.FILE_NAME, PanicWipeJournal.FILE_NAME);
         }
@@ -140,7 +142,7 @@ public final class PanicWipeTargets {
             }
             return new Names(new String[]{prefix + "real.db", prefix + "decoy.db"},
                     new String[]{prefix + "real_envelope", prefix + "decoy_envelope",
-                            prefix + "biometric_envelope"},
+                            prefix + "biometric_envelope", prefix + "auto_lock"},
                     new String[]{prefix + "biometric_key", prefix + "totp_key"},
                     prefix + "totp.enc", prefix + "panic.enc", prefix + "wipe.pending");
         }

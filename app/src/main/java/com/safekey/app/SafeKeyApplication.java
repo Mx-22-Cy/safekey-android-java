@@ -9,6 +9,10 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleEventObserver;
+import androidx.lifecycle.ProcessLifecycleOwner;
+
 import com.safekey.app.auth.MasterPasswordHealth;
 import com.safekey.app.auth.SignInController;
 import com.safekey.app.security.panic.PanicBackend;
@@ -21,6 +25,8 @@ import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.security.storage.SessionBoundVaultOperations;
 import com.safekey.app.security.storage.VaultOperations;
 import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.AutoLockPreferences;
+import com.safekey.app.session.logic.AppVisibilityTracker;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.session.logic.VaultSessionManager;
 import com.safekey.app.security.totp.TotpEnrollmentCoordinator;
@@ -58,6 +64,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     private MasterPasswordHealth masterPasswordHealth;
     private TotpEnrollmentCoordinator totpEnrollmentCoordinator;
     private com.safekey.app.security.panic.PanicBackend panicBackend;
+    private AutoLockPreferences autoLockPreferences;
 
     // Process-owned control worker: never register it with PanicRuntimeScope.
     // The Panic request running on this worker must not wait for its own drain.
@@ -87,6 +94,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         super.onCreate();
         registerSessionCleanup();
         registerPanicScreenCancellation();
+        registerAutoLockLifecycle();
         beginStartup();
     }
 
@@ -130,6 +138,9 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
             panicRuntimeScope = new PanicRuntimeScope();
             startupNavigationRequired = true;
         }
+        autoLockPreferences = new AutoLockPreferences(this);
+        SafeKeySession.setInactivityTimeoutMillis(
+                autoLockPreferences.getTimeoutMillis());
         DecoyVaultStorage.ensureDatabaseFile(this);
         secureVaultCoordinator = new SecureVaultCoordinator(this);
         decoyVaultCoordinator = new DecoyVaultCoordinator(this);
@@ -330,6 +341,27 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     public MasterPasswordHealth getMasterPasswordHealth() {
         requireRuntimeReady();
         return masterPasswordHealth;
+    }
+
+    /** Current inactivity policy. Background locking is independent of it. */
+    public long getAutoLockTimeoutMillis() {
+        requireRuntimeReady();
+        return SafeKeySession.getInactivityTimeoutMillis();
+    }
+
+    /** Settings calls this on main from an authenticated Real or Decoy session. */
+    public void setAutoLockTimeoutMillis(long timeoutMillis) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException("Change auto-lock settings on the main thread.");
+        }
+        requireRuntimeReady();
+        try (com.safekey.app.security.panic.PanicWorkGate.Operation ignored =
+                     panicRuntimeScope.begin()) {
+            // Require a current active vault before persisting a UI change.
+            getActiveVaultOperations();
+            autoLockPreferences.setTimeoutMillis(timeoutMillis);
+            SafeKeySession.setInactivityTimeoutMillis(timeoutMillis);
+        }
     }
 
     public SecureVaultCoordinator getSecureVaultCoordinator() {
@@ -870,6 +902,37 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
             @Override public void onActivityStopped(android.app.Activity activity) { }
             @Override public void onActivitySaveInstanceState(android.app.Activity activity, android.os.Bundle state) { }
         });
+    }
+
+    private void registerAutoLockLifecycle() {
+        AppVisibilityTracker visibility = new AppVisibilityTracker(() -> {
+            if (isStartupRuntimeAvailable()) {
+                SafeKeySession.invalidateAuthentication();
+            }
+        });
+        registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(
+                    android.app.Activity activity, android.os.Bundle state) { }
+            @Override public void onActivityStarted(android.app.Activity activity) {
+                visibility.onActivityStarted(activity);
+            }
+            @Override public void onActivityResumed(android.app.Activity activity) { }
+            @Override public void onActivityPaused(android.app.Activity activity) { }
+            @Override public void onActivityStopped(android.app.Activity activity) {
+                visibility.onActivityStopped(activity, activity.isChangingConfigurations());
+            }
+            @Override public void onActivitySaveInstanceState(
+                    android.app.Activity activity, android.os.Bundle state) { }
+            @Override public void onActivityDestroyed(android.app.Activity activity) {
+                visibility.onActivityDestroyed(activity, activity.isChangingConfigurations());
+            }
+        });
+        ProcessLifecycleOwner.get().getLifecycle().addObserver(
+                (LifecycleEventObserver) (source, event) -> {
+                    if (event == Lifecycle.Event.ON_STOP) {
+                        visibility.onProcessStopped();
+                    }
+                });
     }
 
 }

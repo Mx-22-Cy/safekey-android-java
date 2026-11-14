@@ -1,15 +1,12 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <application>
-
-        <!--
-            DEBUG BUILD ONLY.
-            Allows direct launching of the Vault UI for testing
-            before real authentication integration is complete.
-        -->
+        <!-- Existing debug-only vault launcher and Autofill test client. -->
         <activity android:name=".debug.DebugVaultLauncherActivity" android:exported="true" />
+        <activity android:name=".autofill.AutofillTestLoginActivity" android:exported="false" />
 
-    <activity android:name=".autofill.AutofillTestLoginActivity" android:exported="false" /></application>
-
+        <!-- Private debug-only screens for background-lock lifecycle tests. -->
+        <activity android:name=".session.BackgroundLockTestActivity" android:exported="false" />
+        <activity android:name=".session.BackgroundLockTestActivity$Second" android:exported="false" />
+    </application>
 </manifest>
