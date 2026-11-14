@@ -398,7 +398,8 @@ public final class AutofillAuthActivity
                 "Loading matching credentials..."
         );
 
-        vaultSession.getCredentials(
+        submitLookupOrCancel(
+                callback -> vaultSession.getCredentials(callback),
                 new VaultDataService.ResultCallback<List<Credential>>() {
 
                     @Override
@@ -463,8 +464,7 @@ public final class AutofillAuthActivity
                             }
                         });
                     }
-                }
-        );
+                }, this::denyAutofill);
     }
 
     /**
@@ -692,7 +692,8 @@ public final class AutofillAuthActivity
         // Retrieve the record again from the *captured* vault, not the current
         // application selection. Reject updates made after the choices were shown.
         final AutofillVaultSession originalSession = vaultSession;
-        originalSession.getCredential(selected.getId(),
+        submitLookupOrCancel(
+                callback -> originalSession.getCredential(selected.getId(), callback),
                 new VaultDataService.ResultCallback<Credential>() {
                     @Override
                     public void onSuccess(Credential fresh) {
@@ -721,7 +722,26 @@ public final class AutofillAuthActivity
                             }
                         });
                     }
-                });
+                }, this::denyAutofill);
+    }
+
+    /**
+     * Last-resort Activity boundary: even an unexpected synchronous failure
+     * must cancel Autofill instead of allowing a credential dataset.
+     */
+    static <T> void submitLookupOrCancel(
+            AutofillVaultSession.LookupSubmission<T> request,
+            VaultDataService.ResultCallback<T> callback,
+            Runnable cancel
+    ) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(callback, "callback");
+        Objects.requireNonNull(cancel, "cancel");
+        try {
+            request.submit(callback);
+        } catch (RuntimeException rejected) {
+            cancel.run();
+        }
     }
 
     private void deliverSelectedCredential(
