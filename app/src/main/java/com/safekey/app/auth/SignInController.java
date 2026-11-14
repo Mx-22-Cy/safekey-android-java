@@ -153,12 +153,10 @@ public final class SignInController implements AutoCloseable {
                 deliverError(attempt, new IllegalStateException("Unknown Sign In result."));
             }
         } catch (Exception error) {
-            // The work gate is blocked once the Panic role is committed. Keep
-            // terminal delivery independent of Activity ownership and stale
-            // normal callbacks, even when the screen has already been closed.
-            // Other runtime shutdowns are also blocked: the application-owned
-            // handler must verify the pending wipe marker before recovery.
-            if (backend != null && application.getPanicRuntimeScope().isStopped()) {
+            // A failed destructive Panic remains terminal only when THIS request
+            // committed Panic. Other shutdowns and ordinary Sign In errors must
+            // never be misclassified as a committed wipe.
+            if (backend != null && request != null && request.isPanicCommitted()) {
                 PanicBackend failedBackend = backend;
                 mainHandler.post(() -> terminalHandler.onPanicFailed(failedBackend, error));
             } else {
