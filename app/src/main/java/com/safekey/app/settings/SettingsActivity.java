@@ -35,6 +35,7 @@ import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.securityui.SetupDecoyVaultActivity;
 import com.safekey.app.securityui.SetupPanicModeActivity;
 import com.safekey.app.securityui.SetupTotpActivity;
+import com.safekey.app.session.AutoLockPreferences;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
@@ -51,6 +52,7 @@ public class SettingsActivity extends ProtectedActivity {
     private boolean vaultNameLoaded;
     private AlertDialog renameDialog;
     private AlertDialog biometricDialog;
+    private AlertDialog autoLockDialog;
     private boolean biometricConfigured;
     private boolean biometricBusy;
     private long biometricUiGeneration;
@@ -116,6 +118,9 @@ public class SettingsActivity extends ProtectedActivity {
             }
             startActivity(new Intent(this, SetupDecoyVaultActivity.class));
         });
+
+        findViewById(R.id.rowSettingsAutoLock).setOnClickListener(view ->
+                showAutoLockDialog());
 
         findViewById(R.id.rowSettingsPanic).setOnClickListener(view -> {
             if (!SafeKeySession.recordActivity()) {
@@ -231,6 +236,7 @@ public class SettingsActivity extends ProtectedActivity {
     protected void onRuntimeStop() {
         dismissRenameDialog();
         dismissBiometricDialog();
+        dismissAutoLockDialog();
         biometricUiGeneration++;
         biometricBusy = false;
         invalidateVaultNameRequests();
@@ -273,7 +279,103 @@ public class SettingsActivity extends ProtectedActivity {
         }
 
         refreshBiometricSwitch();
+        refreshAutoLockValue();
         return true;
+    }
+
+    private boolean isAuthenticatedVault() {
+        if (isFinishing() || isDestroyed()
+                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+            return false;
+        }
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+        return app.getActiveVault() != SafeKeyApplication.ActiveVault.NONE;
+    }
+
+    private void refreshAutoLockValue() {
+        TextView value = findViewById(R.id.textSettingsAutoLockValue);
+        try {
+            long current = ((SafeKeyApplication) getApplication())
+                    .getAutoLockTimeoutMillis();
+            if (current == 60_000L) {
+                value.setText(R.string.settings_auto_lock_one_minute);
+            } else if (current == 900_000L) {
+                value.setText(R.string.settings_auto_lock_fifteen_minutes);
+            } else {
+                value.setText(R.string.settings_auto_lock_five_minutes);
+            }
+        } catch (RuntimeException error) {
+            // A stopped runtime must not display a stale, selectable policy.
+            value.setText(R.string.settings_status_unavailable);
+        }
+    }
+
+    private void dismissAutoLockDialog() {
+        AlertDialog dialog = autoLockDialog;
+        autoLockDialog = null;
+        if (dialog != null) {
+            dialog.dismiss();
+        }
+    }
+
+    private void showAutoLockDialog() {
+        if (!SafeKeySession.recordActivity() || !isAuthenticatedVault()) {
+            return;
+        }
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+        long[] supported = AutoLockPreferences.getSupportedTimeoutsMillis();
+        long selected;
+        try {
+            selected = app.getAutoLockTimeoutMillis();
+        } catch (RuntimeException error) {
+            refreshAutoLockValue();
+            return;
+        }
+
+        int checked = 1;
+        for (int index = 0; index < supported.length; index++) {
+            if (supported[index] == selected) {
+                checked = index;
+                break;
+            }
+        }
+
+        final int originalSelection = checked;
+        CharSequence[] labels = {
+                getString(R.string.settings_auto_lock_one_minute),
+                getString(R.string.settings_auto_lock_five_minutes),
+                getString(R.string.settings_auto_lock_fifteen_minutes)
+        };
+        dismissAutoLockDialog();
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(R.string.settings_auto_lock_title)
+                .setSingleChoiceItems(labels, checked, (choiceDialog, which) -> {
+                    if (!SafeKeySession.recordActivity() || !isAuthenticatedVault()) {
+                        choiceDialog.dismiss();
+                        return;
+                    }
+                    try {
+                        app.setAutoLockTimeoutMillis(supported[which]);
+                        refreshAutoLockValue();
+                        choiceDialog.dismiss();
+                    } catch (RuntimeException error) {
+                        refreshAutoLockValue();
+                        Toast.makeText(this, R.string.settings_auto_lock_save_error,
+                                Toast.LENGTH_LONG).show();
+                        // Keep the dialog open to allow retry; display the saved value.
+                        ((AlertDialog) choiceDialog).getListView()
+                                .setItemChecked(originalSelection, true);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        autoLockDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (autoLockDialog == dialog) {
+                autoLockDialog = null;
+            }
+        });
+        dialog.show();
     }
 
     private boolean isAuthenticatedRealVault() {
