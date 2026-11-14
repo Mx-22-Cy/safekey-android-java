@@ -3,6 +3,8 @@ package com.safekey.app.autofill;
 import android.app.assist.AssistStructure;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.service.autofill.Dataset;
 import android.service.autofill.FillResponse;
@@ -26,6 +28,7 @@ import com.safekey.app.session.logic.SessionState;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Handles authenticated credential selection for Android Autofill.
@@ -46,6 +49,9 @@ public final class AutofillAuthActivity
 
     private static final int REQUEST_UNLOCK_FOR_AUTOFILL = 451;
     private static final long MAX_AUTHENTICATION_FLOW_MILLIS = 5 * 60_000L;
+
+    private final Handler validityHandler = new Handler(Looper.getMainLooper());
+    private final Runnable validityCheck = this::checkFlowValidity;
 
     private AutofillVaultSession vaultSession;
     private AutofillRequestMetadata metadata;
@@ -127,6 +133,7 @@ public final class AutofillAuthActivity
 
         scroll.addView(content);
         setContentView(scroll);
+        scheduleValidityCheck();
 
         if (vaultWasLocked) {
             awaitingSignIn = true;
@@ -150,6 +157,93 @@ public final class AutofillAuthActivity
             return;
         }
         startVerifiedCredentialFlow();
+    }
+
+    /** Internal Sign-In is a valid transition; ordinary backgrounding is not. */
+    @Override
+    protected void onRuntimeStop() {
+        if (mustCancelOnStop(completed, awaitingSignIn)) {
+            denyAutofill();
+        }
+        super.onRuntimeStop();
+    }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (completed) {
+            return;
+        }
+        if (!requestFresh()
+                || (!awaitingSignIn && vaultSession != null
+                && (!sessionValid() || !vaultSession.isCurrent()))) {
+            denyAutofill();
+            return;
+        }
+        scheduleValidityCheck();
+    }
+
+    @Override
+    protected void onRuntimeUserInteraction() {
+        super.onRuntimeUserInteraction();
+        if (!completed && !awaitingSignIn && vaultSession != null) {
+            if (!sessionValid() || !vaultSession.isCurrent()
+                    || !SafeKeySession.recordActivity()) {
+                denyAutofill();
+                return;
+            }
+            scheduleValidityCheck();
+        }
+    }
+
+    @Override
+    protected void onRuntimeDestroy() {
+        validityHandler.removeCallbacks(validityCheck);
+        if (!completed) {
+            denyAutofill();
+        }
+        verifiedChoices = Collections.emptyList();
+        vaultSession = null;
+        metadata = null;
+        super.onRuntimeDestroy();
+    }
+
+    static boolean mustCancelOnStop(boolean isCompleted, boolean isAwaitingSignIn) {
+        return !isCompleted && !isAwaitingSignIn;
+    }
+
+    private void checkFlowValidity() {
+        if (completed) {
+            return;
+        }
+        if (!requestFresh() || (!awaitingSignIn && vaultSession != null
+                && (!sessionValid() || !vaultSession.isCurrent()))) {
+            denyAutofill();
+        } else {
+            scheduleValidityCheck();
+        }
+    }
+
+    private void scheduleValidityCheck() {
+        validityHandler.removeCallbacks(validityCheck);
+        if (completed || requestClaimedAtMillis < 0L) {
+            return;
+        }
+        long age = SystemClock.elapsedRealtime() - requestClaimedAtMillis;
+        long delay = MAX_AUTHENTICATION_FLOW_MILLIS - age;
+        if (delay <= 0L) {
+            denyAutofill();
+            return;
+        }
+        if (!awaitingSignIn && vaultSession != null) {
+            long inactivity = SafeKeySession.getManager().getRemainingInactivityMillis();
+            if (inactivity <= 0L) {
+                denyAutofill();
+                return;
+            }
+            delay = Math.min(delay, inactivity);
+        }
+        validityHandler.postDelayed(validityCheck, delay);
     }
 
     @Override
@@ -204,7 +298,11 @@ public final class AutofillAuthActivity
         }
 
         vaultSession = AutofillVaultSession.capture(this);
-        return vaultSession != null && vaultSession.isCurrent();
+        boolean valid = vaultSession != null && vaultSession.isCurrent();
+        if (valid) {
+            scheduleValidityCheck();
+        }
+        return valid;
     }
 
     private void startVerifiedCredentialFlow() {
@@ -359,13 +457,9 @@ public final class AutofillAuthActivity
 
                         runOnUiThread(() -> {
 
-                            if (!isFinishing()
-                                    && !isDestroyed()
-                                    && !completed) {
-
-                                showMessage(
-                                        "Matching credentials unavailable."
-                                );
+                            if (!isFinishing() && !isDestroyed() && !completed) {
+                                // Error callbacks must never leave stale choices available.
+                                denyAutofill();
                             }
                         });
                     }
@@ -584,6 +678,54 @@ public final class AutofillAuthActivity
      * authorization and session checks have succeeded.
      */
     private void completeSelection(
+            Credential selected,
+            boolean nativeReverified
+    ) {
+        if (completed || !selectionInProgress || !sessionValid()
+                || vaultSession == null || !vaultSession.isCurrent()
+                || selected == null || selected.getId() <= 0L
+                || !verifiedChoices.contains(selected)) {
+            denyAutofill();
+            return;
+        }
+
+        // Retrieve the record again from the *captured* vault, not the current
+        // application selection. Reject updates made after the choices were shown.
+        final AutofillVaultSession originalSession = vaultSession;
+        originalSession.getCredential(selected.getId(),
+                new VaultDataService.ResultCallback<Credential>() {
+                    @Override
+                    public void onSuccess(Credential fresh) {
+                        runOnUiThread(() -> {
+                            if (completed || isFinishing() || isDestroyed()) {
+                                return;
+                            }
+                            if (originalSession != vaultSession
+                                    || !sessionValid() || !originalSession.isCurrent()
+                                    || fresh == null || fresh.getId() != selected.getId()
+                                    || !Objects.equals(fresh.getUsername(), selected.getUsername())
+                                    || !Objects.equals(fresh.getWebsite(), selected.getWebsite())
+                                    || !Objects.equals(fresh.getPassword(), selected.getPassword())) {
+                                denyAutofill();
+                                return;
+                            }
+                            deliverSelectedCredential(selected, fresh, nativeReverified);
+                        });
+                    }
+
+                    @Override
+                    public void onError(Exception error) {
+                        runOnUiThread(() -> {
+                            if (!completed && !isFinishing() && !isDestroyed()) {
+                                denyAutofill();
+                            }
+                        });
+                    }
+                });
+    }
+
+    private void deliverSelectedCredential(
+            Credential selected,
             Credential credential,
             boolean nativeReverified
     ) {
@@ -595,7 +737,7 @@ public final class AutofillAuthActivity
                 || !vaultSession.isCurrent()
                 || metadata == null
                 || credential == null
-                || !verifiedChoices.contains(credential)) {
+                || !verifiedChoices.contains(selected)) {
             denyAutofill();
             return;
         }
@@ -698,9 +840,10 @@ public final class AutofillAuthActivity
             }
 
             completed = true;
+            validityHandler.removeCallbacks(validityCheck);
 
-            verifiedChoices =
-                    Collections.emptyList();
+            verifiedChoices = Collections.emptyList();
+            selectionInProgress = false;
 
             Intent result = new Intent();
 
@@ -755,7 +898,11 @@ public final class AutofillAuthActivity
         }
 
         completed = true;
+        validityHandler.removeCallbacks(validityCheck);
         awaitingSignIn = false;
+        selectionInProgress = false;
+        websiteAssociationVerified = false;
+        requestClaimedAtMillis = -1L;
         authenticationGeneration = -1L;
         vaultSession = null;
         metadata = null;
