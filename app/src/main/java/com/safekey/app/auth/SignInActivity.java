@@ -1,6 +1,8 @@
 package com.safekey.app.auth;
 
 import com.safekey.app.security.panic.PanicRuntimeScope;
+import com.safekey.app.security.panic.PanicSignInService;
+import com.safekey.app.security.storage.DecoyVaultCoordinator;
 
 import android.content.Intent;
 import android.graphics.Color;
@@ -71,6 +73,9 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
     private LinearLayout biometricUnlockSection;
 
     private SecureVaultCoordinator secureVaultCoordinator;
+    private DecoyVaultCoordinator decoyVaultCoordinator;
+    private SignInController signInController;
+    private SignInController.SignInCallback signInCallback;
     private VaultUnlockFlow.Request pendingUnlock;
     private AlertDialog biometricEnrollmentDialog;
     private char[] pendingBiometricEnrollmentPassword;
@@ -121,8 +126,11 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
         editMasterPassword.setSaveEnabled(false);
 
-        secureVaultCoordinator = ((SafeKeyApplication) getApplication())
-                .getSecureVaultCoordinator();
+        SafeKeyApplication app = (SafeKeyApplication) getApplication();
+        secureVaultCoordinator = app.getSecureVaultCoordinator();
+        decoyVaultCoordinator = app.getDecoyVaultCoordinator();
+        // Application owns the controller, its worker, and terminal Panic delivery.
+        signInController = app.getSignInController();
 
         SafeKeySession.lock();
 
@@ -202,6 +210,11 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
 
     @Override
     protected void onRuntimeDestroy() {
+        if (!navigatingToHome) {
+            cancelOwnedSignInAttempt();
+        } else {
+            detachSignInCallback();
+        }
         if (panicCancellation != null) { panicCancellation.close(); }
 
         if (!navigatingToHome) {
@@ -218,63 +231,161 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         if (!resumed || busy) {
             return;
         }
-
         Editable editable = editMasterPassword.getText();
-
         if (editable == null || editable.length() == 0) {
-            editMasterPassword.setError(
-                    getString(R.string.error_master_password_required));
+            editMasterPassword.setError(getString(R.string.error_master_password_required));
             editMasterPassword.requestFocus();
             return;
         }
 
         char[] password = new char[editable.length()];
         editable.getChars(0, editable.length(), password, 0);
-
         long token = ++generation;
         authenticated = false;
         textValidationMessage.setText(null);
         setBusy(true);
         hideKeyboard();
+        clearPendingMasterPasswordRecheck();
         clearPendingBiometricEnrollmentPassword();
 
+        // The Activity keeps only this callback; the controller owns the password
+        // copy and will clear it after invoking the callback on the main thread.
+        final SignInController.SignInCallback callback = new SignInController.SignInCallback() {
+            @Override
+            public void onRoleIdentified(PanicSignInService.Result role, char[] candidate) {
+                if (!isCurrent(token) || !resumed) {
+                    return;
+                }
+                switch (role) {
+                    case MASTER:
+                        beginRealPasswordUnlock(token, candidate);
+                        break;
+                    case DECOY:
+                        if (getIntent().getBooleanExtra(REQUIRE_MASTER_PASSWORD, false)
+                                || isVerifiedAutofillResultCaller()) {
+                            abortSignIn(R.string.signin_vault_unlock_error);
+                        } else {
+                            beginDecoyPasswordUnlock(token, candidate);
+                        }
+                        break;
+                    case NO_MATCH:
+                        abortSignIn(R.string.signin_vault_unlock_error);
+                        break;
+                    case PANIC_WIPED:
+                    default:
+                        // PANIC_WIPED is terminal and owned by SafeKeyApplication.
+                        // Never complete a vault unlock on this callback.
+                        abortSignIn(R.string.signin_vault_unlock_error);
+                        break;
+                }
+            }
+
+            @Override
+            public void onError(Exception error) {
+                dispatchUi(token, () -> abortSignIn(R.string.signin_vault_unlock_error));
+            }
+        };
+        signInCallback = callback;
+        try {
+            signInController.startPasswordSignIn(password, callback);
+        } catch (RuntimeException error) {
+            abortSignIn(R.string.signin_vault_unlock_error);
+        } finally {
+            Arrays.fill(password, '\0');
+            // Do not retain the password in the text widget during classification.
+            editMasterPassword.setText("");
+        }
+    }
+
+    private void beginRealPasswordUnlock(long token, char[] password) {
+        if (!isCurrent(token)) {
+            return;
+        }
+        // Role classification is not authentication: the real vault must still
+        // authenticate its key envelope, and TOTP must still be satisfied.
         if (shouldOfferBiometricEnrollment()) {
             pendingBiometricEnrollmentPassword = password.clone();
         }
-        clearPendingMasterPasswordRecheck();
         try {
             if (((SafeKeyApplication) getApplication()).getMasterPasswordHealth().getStatus()
                     != com.safekey.app.security.storage.MasterPasswordCheckStatus.CHECKED) {
                 pendingMasterPasswordRecheck = password.clone();
             }
-            pendingUnlock = secureVaultCoordinator.unlockVault(
-                    password,
+            pendingUnlock = secureVaultCoordinator.unlockVault(password,
                     new SecureVaultCoordinator.TotpUnlockCallback() {
                         @Override
                         public void onSuccess() {
-                            dispatchUi(token,
-                                    () -> authenticationCompleted(token));
+                            dispatchUi(token, () -> authenticationCompleted(token));
                         }
 
                         @Override
                         public void onError(Exception error) {
-                            dispatchUi(token, () -> abortSignIn(
-                                    totpDialog() != null
-                                            ? R.string.totp_signin_failed
-                                            : R.string.signin_vault_unlock_error));
+                            dispatchUi(token, () -> abortSignIn(totpDialog() != null
+                                    ? R.string.totp_signin_failed
+                                    : R.string.signin_vault_unlock_error));
                         }
 
                         @Override
-                        public void onTotpRequired(
-                                VaultUnlockFlow.Request request
-                        ) {
+                        public void onTotpRequired(VaultUnlockFlow.Request request) {
                             showTotpChallenge(token, request);
                         }
                     });
         } catch (RuntimeException error) {
             abortSignIn(R.string.signin_vault_unlock_error);
-        } finally {
-            Arrays.fill(password, '\0');
+        }
+    }
+
+    private void beginDecoyPasswordUnlock(long token, char[] password) {
+        if (!isCurrent(token)) {
+            return;
+        }
+        // Never reuse the real vault's TOTP/session claim or biometric setup.
+        clearPendingMasterPasswordRecheck();
+        clearPendingBiometricEnrollmentPassword();
+        try {
+            decoyVaultCoordinator.unlockDecoyVault(password,
+                    new VaultDataService.SimpleCallback() {
+                        @Override
+                        public void onSuccess() {
+                            dispatchUi(token, () -> continueToDecoyHome(token));
+                        }
+
+                        @Override
+                        public void onError(Exception error) {
+                            dispatchUi(token, () -> abortSignIn(
+                                    R.string.signin_vault_unlock_error));
+                        }
+                    });
+        } catch (RuntimeException error) {
+            abortSignIn(R.string.signin_vault_unlock_error);
+        }
+    }
+
+    private void continueToDecoyHome(long token) {
+        if (!resumed || !isCurrent(token) || !busy || pendingUnlock != null
+                || !decoyVaultCoordinator.isDecoyVaultOpen()) {
+            abortSignIn(R.string.signin_vault_unlock_error);
+            return;
+        }
+        try {
+            SafeKeySession.unlockAfterAuthentication();
+            ((SafeKeyApplication) getApplication()).activateDecoyVault();
+            authenticated = false;
+            navigatingToHome = true;
+            detachSignInCallback();
+            generation++;
+            pendingUiAction = null;
+            clearPendingMasterPasswordRecheck();
+            clearPendingBiometricEnrollmentPassword();
+            // A Decoy session must never grant an Autofill authorization result.
+            Intent intent = new Intent(this, HomeActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        } catch (RuntimeException error) {
+            SafeKeySession.lock();
+            navigatingToHome = false;
+            abortSignIn(R.string.signin_vault_unlock_error);
         }
     }
 
@@ -464,6 +575,7 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         pendingUiAction = null;
         generation++;
         navigatingToHome = true;
+        detachSignInCallback();
 
         SafeKeySession.unlockAfterAuthentication();
 
@@ -511,7 +623,27 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         }
     }
 
+    private void detachSignInCallback() {
+        // Owner-aware: an old Activity cannot cancel a replacement's attempt.
+        SignInController.SignInCallback callback = signInCallback;
+        signInCallback = null;
+        if (callback != null && signInController != null) {
+            signInController.detachCallback(callback);
+        }
+    }
+
+    private void cancelOwnedSignInAttempt() {
+        SignInController.SignInCallback callback = signInCallback;
+        signInCallback = null;
+        if (callback != null && signInController != null) {
+            // Cancel only this Activity's attempt, not a newer Activity's attempt.
+            signInController.cancelCurrentAttempt(callback);
+            signInController.detachCallback(callback);
+        }
+    }
+
     private void abortSignIn(int messageId) {
+        cancelOwnedSignInAttempt();
         clearPendingMasterPasswordRecheck();
         generation++;
         pendingUiAction = null;
