@@ -34,6 +34,15 @@ public final class PanicWorkGate {
         }
     }
 
+    /** Commit one current verified trigger, without attributing another stop to this ticket. */
+    synchronized void blockNewWorkIfCurrent(Ticket ticket) {
+        Objects.requireNonNull(ticket, "ticket");
+        if (ticket.gate != this || !isCurrent(ticket.generation)) {
+            throw new CancellationException("Sign In was invalidated.");
+        }
+        blockNewWork();
+    }
+
     public synchronized boolean isBlocked() {
         return blocked;
     }
