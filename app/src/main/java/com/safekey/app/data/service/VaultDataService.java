@@ -16,6 +16,7 @@ import com.safekey.app.data.repository.CredentialRepository;
 import com.safekey.app.data.repository.SecureNoteRepository;
 import com.safekey.app.data.repository.VaultCountsRepository;
 import com.safekey.app.data.repository.VaultProfileRepository;
+import com.safekey.app.security.crypto.VaultItemCipher;
 
 import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
@@ -41,6 +42,9 @@ public class VaultDataService {
     private SecureNoteRepository secureNoteRepository;
     private VaultCountsRepository vaultCountsRepository;
     private VaultProfileRepository vaultProfileRepository;
+
+    // One owned, purpose-separated field-encryption key per opened vault.
+    private volatile VaultItemCipher itemCipher;
 
     public VaultDataService(
             Context context
@@ -97,152 +101,122 @@ public class VaultDataService {
                 closeForPanic(deadline);
             }
             @Override public boolean isClosed() {
-                return executorService.isTerminated() && !databaseManager.isOpen();
+                return executorService.isTerminated() && !databaseManager.isOpen()
+                        && (itemCipher == null || itemCipher.isClosed());
             }
         });
     }
 
+    /**
+     * Open only after v3->v4 migration and repository initialization succeed.
+     * The worker owns the copied database key and all cipher state. No repository
+     * or callback is published until the migration commits.
+     */
     private void openVaultWhileRunning(
             byte[] databaseKey,
             SimpleCallback callback
     ) {
-
-        if (databaseKey == null) {
-
-            throw new IllegalArgumentException(
-                    "Database key cannot be null."
-            );
+        Objects.requireNonNull(callback, "callback");
+        if (databaseKey == null
+                || databaseKey.length != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES) {
+            throw new IllegalArgumentException("Database key must contain exactly "
+                    + SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES + " bytes.");
         }
 
-        if (
-                databaseKey.length
-                        != SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
-        ) {
-
-            throw new IllegalArgumentException(
-                    "Database key must contain exactly "
-                            + SafeKeyDatabase.DATABASE_KEY_LENGTH_BYTES
-                            + " bytes."
-            );
-        }
-
-        /*
-         * Copy before scheduling asynchronous work.
-         * The caller may clear its original array as
-         * soon as this method returns.
-         */
-        final byte[] databaseKeyCopy =
-                Arrays.copyOf(
-                        databaseKey,
-                        databaseKey.length
-                );
-
+        final byte[] databaseKeyCopy = Arrays.copyOf(databaseKey, databaseKey.length);
         vaultGeneration.incrementAndGet();
         try {
-
             executeWork(() -> {
-
-                Exception openingError =
-                        null;
-
+                VaultItemCipher pendingCipher = null;
+                Exception openingError = null;
                 try {
+                    // Always retire the old connection and field key first.
+                    // This prevents reuse with a different Real/Decoy database key.
+                    closeVaultResources();
 
-                    SQLiteDatabase database =
-                            databaseManager.open(
-                                    databaseKeyCopy
-                            );
+                    pendingCipher = new VaultItemCipher(databaseKeyCopy);
+                    SQLiteDatabase openedDatabase = databaseManager.openForItemEncryption(
+                            databaseKeyCopy, pendingCipher);
 
                     CredentialRepository openedCredentialRepository =
-                            new CredentialRepository(
-                                    database
-                            );
-
+                            new CredentialRepository(openedDatabase, pendingCipher);
                     SecureNoteRepository openedSecureNoteRepository =
-                            new SecureNoteRepository(
-                                    database
-                            );
+                            new SecureNoteRepository(openedDatabase, pendingCipher);
+                    VaultCountsRepository openedCountsRepository =
+                            new VaultCountsRepository(openedDatabase);
+                    VaultProfileRepository openedProfileRepository =
+                            new VaultProfileRepository(openedDatabase);
 
-                    VaultCountsRepository openedVaultCountsRepository =
-                            new VaultCountsRepository(database);
-
-                    VaultProfileRepository openedVaultProfileRepository =
-                            new VaultProfileRepository(database);
-
-                    credentialRepository =
-                            openedCredentialRepository;
-
-                    secureNoteRepository =
-                            openedSecureNoteRepository;
-
-                    vaultCountsRepository =
-                            openedVaultCountsRepository;
-
-                    vaultProfileRepository =
-                            openedVaultProfileRepository;
-
-                } catch (Exception exception) {
-
-                    openingError =
-                            exception;
-
+                    // Publish the entire new generation only after validation.
+                    credentialRepository = openedCredentialRepository;
+                    secureNoteRepository = openedSecureNoteRepository;
+                    vaultCountsRepository = openedCountsRepository;
+                    vaultProfileRepository = openedProfileRepository;
+                    itemCipher = pendingCipher;
+                    pendingCipher = null;
+                } catch (Exception | Error failure) {
+                    try {
+                        closeVaultResources();
+                    } catch (Exception | Error cleanupError) {
+                        failure.addSuppressed(cleanupError);
+                    }
+                    if (failure instanceof Error) {
+                        throw (Error) failure;
+                    }
+                    openingError = (Exception) failure;
                 } finally {
-
-                    Arrays.fill(
-                            databaseKeyCopy,
-                            (byte) 0
-                    );
+                    if (pendingCipher != null) {
+                        pendingCipher.close();
+                    }
+                    Arrays.fill(databaseKeyCopy, (byte) 0);
                 }
 
                 if (openingError != null) {
-
-                    deliverSimpleError(
-                            callback,
-                            openingError
-                    );
-
-                    return;
+                    deliverSimpleError(callback, openingError);
+                } else {
+                    deliverSimpleSuccess(callback);
                 }
-
-                deliverSimpleSuccess(
-                        callback
-                );
             });
-
         } catch (RuntimeException schedulingError) {
-
-            Arrays.fill(
-                    databaseKeyCopy,
-                    (byte) 0
-            );
-
+            Arrays.fill(databaseKeyCopy, (byte) 0);
             throw schedulingError;
         }
     }
 
-    public void closeVault(
-            SimpleCallback callback
-    ) {
+    /** Close database and the owned cipher, even if SQLCipher closure throws. */
+    private void closeVaultResources() {
+        try {
+            databaseManager.close();
+        } finally {
+            credentialRepository = null;
+            secureNoteRepository = null;
+            vaultCountsRepository = null;
+            vaultProfileRepository = null;
+            VaultItemCipher previousCipher = itemCipher;
+            itemCipher = null;
+            if (previousCipher != null) {
+                previousCipher.close();
+            }
+        }
+    }
+
+    public void closeVault(SimpleCallback callback) {
+        Objects.requireNonNull(callback, "callback");
         vaultGeneration.incrementAndGet();
         executeWork(() -> {
             try {
-                databaseManager.close();
-            } catch (Exception exception) {
-                deliverSimpleError(callback, exception);
-                return;
-            } finally {
-                credentialRepository = null;
-                secureNoteRepository = null;
-                vaultCountsRepository = null;
-                vaultProfileRepository = null;
+                closeVaultResources();
+                deliverSimpleSuccess(callback);
+            } catch (Exception failure) {
+                deliverSimpleError(callback, failure);
             }
-
-            deliverSimpleSuccess(callback);
         });
     }
 
     public boolean isVaultOpen() {
-
-        return databaseManager.isOpen();
+        VaultItemCipher currentCipher = itemCipher;
+        return databaseManager.isOpen() && currentCipher != null
+                && !currentCipher.isClosed();
     }
 
     /** Cache work belongs to this database opening, not a replacement session. */
@@ -875,20 +849,7 @@ public class VaultDataService {
             return;
         }
 
-        executeWork(() -> {
-
-            try {
-
-                databaseManager.close();
-
-            } finally {
-
-                credentialRepository = null;
-                secureNoteRepository = null;
-                vaultCountsRepository = null;
-                vaultProfileRepository = null;
-            }
-        });
+        executeWork(this::closeVaultResources);
 
         executorService.shutdown();
     }
@@ -932,13 +893,10 @@ public class VaultDataService {
         synchronized (this) {
             if (panicCloseTask == null && !executorService.isShutdown()) {
                 panicCloseTask = new java.util.concurrent.FutureTask<>(() -> {
-                    try { databaseManager.close(); }
-                    finally {
+                    try {
+                        closeVaultResources();
+                    } finally {
                         vaultGeneration.incrementAndGet();
-                        credentialRepository = null;
-                        secureNoteRepository = null;
-                        vaultCountsRepository = null;
-                vaultProfileRepository = null;
                     }
                     if (databaseManager.isOpen()) {
                         throw new java.io.IOException("Vault database is still open.");
@@ -955,7 +913,8 @@ public class VaultDataService {
                     java.util.concurrent.TimeUnit.MILLISECONDS);
         }
         if (!executorService.awaitTermination(PanicRuntimeScope.remainingMillis(deadline),
-                java.util.concurrent.TimeUnit.MILLISECONDS) || databaseManager.isOpen()) {
+                java.util.concurrent.TimeUnit.MILLISECONDS) || databaseManager.isOpen()
+                || (itemCipher != null && !itemCipher.isClosed())) {
             throw new java.io.IOException("Vault database worker did not close.");
         }
     }
