@@ -253,7 +253,15 @@ public class SignInActivity extends com.safekey.app.StartupGuardActivity
         final SignInController.SignInCallback callback = new SignInController.SignInCallback() {
             @Override
             public void onRoleIdentified(PanicSignInService.Result role, char[] candidate) {
-                if (!isCurrent(token) || !resumed) {
+                if (!isCurrent(token)) {
+                    return;
+                }
+                if (!resumed) {
+                    // The controller erases candidate after this callback returns.
+                    // A paused-only Activity has no safe deferred password owner.
+                    // Cancel this Activity's attempt and enable a fresh retry.
+                    // Do not queue or retain the controller-owned candidate.
+                    abortSignIn(0);
                     return;
                 }
                 switch (role) {

@@ -12,6 +12,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.lifecycle.Lifecycle;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -38,7 +39,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.lang.reflect.Field;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -141,6 +146,126 @@ public final class SignInDecoyRoutingInstrumentedTest {
             assertFalse(decoy.isDecoyVaultOpen());
             assertFalse(isHomeResumed());
         }
+    }
+
+    /**
+     * Deterministically exercises callback delivery after onPause, without onStop.
+     * The app-owned classification executor is blocked before submitting the
+     * password, then released only after ActivityScenario reaches STARTED.
+     */
+    @Test
+    public void pausedMasterClassificationResetsAndAllowsRetry() throws Exception {
+        assertPausedClassificationResets(REAL_PASSWORD);
+    }
+
+    @Test
+    public void pausedDecoyClassificationResetsAndAllowsRetry() throws Exception {
+        assertPausedClassificationResets(DECOY_PASSWORD);
+    }
+
+    @Test
+    public void pausedNoMatchClassificationResetsAndAllowsRetry() throws Exception {
+        assertPausedClassificationResets("unrelated unknown paused classification 2026");
+    }
+
+    @Test
+    public void stoppedClassificationCannotActivateVault() throws Exception {
+        assertAbandonedClassificationCannotActivate(Lifecycle.State.CREATED);
+    }
+
+    @Test
+    public void destroyedClassificationCannotActivateVault() throws Exception {
+        assertAbandonedClassificationCannotActivate(Lifecycle.State.DESTROYED);
+    }
+
+    private void assertPausedClassificationResets(String candidate) throws Exception {
+        ExecutorService worker = classificationWorker();
+        CountDownLatch blockerEntered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = worker.submit(() -> {
+            blockerEntered.countDown();
+            try {
+                release.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertTrue("Worker did not reach the blocker",
+                blockerEntered.await(30, TimeUnit.SECONDS));
+        try (ActivityScenario<SignInActivity> scenario = launch(false)) {
+            AtomicReference<SignInActivity> activityRef = new AtomicReference<>();
+            scenario.onActivity(activityRef::set);
+            enterPassword(scenario, candidate);
+            scenario.moveToState(Lifecycle.State.STARTED);
+            assertEquals(Lifecycle.State.STARTED, scenario.getState());
+            assertFalse("The submitted form should initially be busy",
+                    isSubmitEnabled(activityRef));
+            release.countDown();
+            awaitCondition(() -> isSubmitEnabled(activityRef));
+            scenario.moveToState(Lifecycle.State.RESUMED);
+            assertTrue("The form remained disabled after resume",
+                    isSubmitEnabled(activityRef));
+            assertEquals(SessionState.LOCKED, SafeKeySession.getState());
+            assertFalse(real.isVaultOpen());
+            assertFalse(decoy.isDecoyVaultOpen());
+            assertFalse(isHomeResumed());
+        } finally {
+            release.countDown();
+            blocker.get(30, TimeUnit.SECONDS);
+        }
+    }
+
+    private void assertAbandonedClassificationCannotActivate(Lifecycle.State endState)
+            throws Exception {
+        ExecutorService worker = classificationWorker();
+        CountDownLatch blockerEntered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Future<?> blocker = worker.submit(() -> {
+            blockerEntered.countDown();
+            try {
+                release.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertTrue(blockerEntered.await(30, TimeUnit.SECONDS));
+        try (ActivityScenario<SignInActivity> scenario = launch(false)) {
+            enterPassword(scenario, DECOY_PASSWORD);
+            scenario.moveToState(endState);
+            release.countDown();
+            blocker.get(30, TimeUnit.SECONDS);
+            // Drain tasks after the blocked classification worker before checking
+            // for an unintended late navigation or vault activation.
+            worker.submit(() -> {}).get(30, TimeUnit.SECONDS);
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+            assertEquals(SessionState.LOCKED, SafeKeySession.getState());
+            assertFalse(real.isVaultOpen());
+            assertFalse(decoy.isDecoyVaultOpen());
+            assertFalse(isHomeResumed());
+        } finally {
+            release.countDown();
+            blocker.get(30, TimeUnit.SECONDS);
+        }
+    }
+
+    private ExecutorService classificationWorker() throws Exception {
+        Field field = SafeKeyApplication.class.getDeclaredField("signInControlWorker");
+        field.setAccessible(true);
+        return (ExecutorService) field.get(app);
+    }
+
+    private static boolean isSubmitEnabled(AtomicReference<SignInActivity> activityRef) {
+        AtomicBoolean enabled = new AtomicBoolean();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            SignInActivity activity = activityRef.get();
+            if (activity != null && !activity.isDestroyed()) {
+                Button button = activity.findViewById(R.id.buttonUnlockVault);
+                EditText input = activity.findViewById(R.id.editMasterPassword);
+                enabled.set(button.isEnabled() && input.isEnabled()
+                        && input.length() == 0);
+            }
+        });
+        return enabled.get();
     }
 
     private ActivityScenario<SignInActivity> launch(boolean masterRequired) {
