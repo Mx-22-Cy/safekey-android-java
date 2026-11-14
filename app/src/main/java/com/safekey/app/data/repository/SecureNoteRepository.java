@@ -9,6 +9,7 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class SecureNoteRepository {
 
@@ -162,21 +163,21 @@ public class SecureNoteRepository {
             String query
     ) {
 
+        // Search note contents only through the opened repository.
+        // A future per-item cipher will decrypt fields in fromCursor().
+        // SQL LIKE must not be applied to randomized ciphertext.
+        String normalizedQuery =
+                query.trim().toLowerCase(Locale.ROOT);
+
         List<SecureNote> notes =
                 new ArrayList<>();
-
-        String searchText =
-                "%" + query.trim() + "%";
 
         Cursor cursor =
                 database.query(
                         "secure_notes",
                         null,
-                        "title LIKE ? OR content_ciphertext LIKE ?",
-                        new String[]{
-                                searchText,
-                                searchText
-                        },
+                        null,
+                        null,
                         null,
                         null,
                         "updated_at DESC"
@@ -184,9 +185,21 @@ public class SecureNoteRepository {
 
         try {
             while (cursor.moveToNext()) {
-                notes.add(
-                        fromCursor(cursor)
-                );
+                SecureNote note = fromCursor(cursor);
+
+                String title = note.getTitle();
+                String content = note.getContent();
+
+                boolean titleMatches = title != null
+                        && title.toLowerCase(Locale.ROOT)
+                        .contains(normalizedQuery);
+                boolean contentMatches = content != null
+                        && content.toLowerCase(Locale.ROOT)
+                        .contains(normalizedQuery);
+
+                if (titleMatches || contentMatches) {
+                    notes.add(note);
+                }
             }
         } finally {
             cursor.close();

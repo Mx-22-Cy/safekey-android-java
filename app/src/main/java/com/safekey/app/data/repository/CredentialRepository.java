@@ -243,9 +243,12 @@ public class CredentialRepository {
             }
             ContentValues values = new ContentValues();
             values.put("breach_status", effective.name());
+            // The password was compared within this write transaction.
+            // Never compare plaintext with stored ciphertext: per-item encryption
+            // uses randomized nonces, so the encrypted representation changes.
             int changed = database.update("credentials", values,
-                    "id = ? AND password_ciphertext = ?",
-                    new String[]{String.valueOf(id), expectedPassword});
+                    "id = ?",
+                    new String[]{String.valueOf(id)});
             database.setTransactionSuccessful();
             return changed == 1 ? effective : null;
         } finally {
