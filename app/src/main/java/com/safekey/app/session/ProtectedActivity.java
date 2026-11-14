@@ -20,16 +20,21 @@ public abstract class ProtectedActivity
             this::checkInactivityTimeout;
 
     private boolean redirectingToSignIn;
+    private SafeKeySession.TimeoutRegistration timeoutRegistration;
 
     @Override
     protected void onRuntimeResume() {
         super.onRuntimeResume();
 
+        stopObservingTimeoutChanges();
+        timeoutRegistration = SafeKeySession.observeTimeoutChanges(
+                this::checkInactivityTimeout);
         checkInactivityTimeout();
     }
 
     @Override
     protected void onRuntimePause() {
+        stopObservingTimeoutChanges();
         inactivityHandler.removeCallbacks(
                 inactivityTimeoutCheck
         );
@@ -39,11 +44,19 @@ public abstract class ProtectedActivity
 
     @Override
     protected void onRuntimeDestroy() {
+        stopObservingTimeoutChanges();
         inactivityHandler.removeCallbacks(
                 inactivityTimeoutCheck
         );
 
         super.onRuntimeDestroy();
+    }
+
+    private void stopObservingTimeoutChanges() {
+        if (timeoutRegistration != null) {
+            timeoutRegistration.close();
+            timeoutRegistration = null;
+        }
     }
 
     @Override

@@ -17,7 +17,6 @@ import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.home.HomeActivity;
 import com.safekey.app.session.logic.SessionState;
-import com.safekey.app.session.logic.VaultSessionManager;
 
 import org.junit.After;
 import org.junit.Before;
@@ -56,7 +55,7 @@ public class ProtectedActivityBackgroundTimeoutInstrumentedTest {
     }
 
     @Test
-    public void timeInBackground_expiresOnResume_andRedirectsToSignIn()
+    public void backgrounding_locksBeforeResume_andRedirectsToSignIn()
             throws InterruptedException {
 
         Application application =
@@ -133,6 +132,7 @@ public class ProtectedActivityBackgroundTimeoutInstrumentedTest {
                 );
 
                 scenario.moveToState(Lifecycle.State.CREATED);
+                InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
                 assertTrue(
                         "Home did not pause",
@@ -143,19 +143,14 @@ public class ProtectedActivityBackgroundTimeoutInstrumentedTest {
                         scenario.getState()
                 );
                 assertEquals(
-                        SessionState.UNLOCKED,
+                        SessionState.LOCKED,
                         SafeKeySession.getState()
-                );
-
-                nowMillis.addAndGet(
-                        VaultSessionManager
-                                .DEFAULT_INACTIVITY_TIMEOUT_MILLIS
                 );
 
                 scenario.moveToState(Lifecycle.State.RESUMED);
 
                 assertTrue(
-                        "Sign In did not resume after the timeout",
+                        "Sign In did not resume after background locking",
                         signInResumed.await(10, TimeUnit.SECONDS)
                 );
                 assertTrue(
