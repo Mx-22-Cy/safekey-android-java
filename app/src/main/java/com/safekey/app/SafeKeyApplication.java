@@ -3,12 +3,16 @@ package com.safekey.app;
 import com.safekey.app.security.panic.PanicRuntimeScope;
 
 import android.app.Application;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
 import com.safekey.app.auth.MasterPasswordHealth;
+import com.safekey.app.auth.SignInController;
+import com.safekey.app.security.panic.PanicBackend;
+import com.safekey.app.security.panic.PanicTerminalHandoff;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.security.storage.DecoyVaultCoordinator;
 import com.safekey.app.security.storage.DecoyVaultStorage;
@@ -29,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -53,6 +58,13 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     private MasterPasswordHealth masterPasswordHealth;
     private TotpEnrollmentCoordinator totpEnrollmentCoordinator;
     private com.safekey.app.security.panic.PanicBackend panicBackend;
+
+    // Process-owned control worker: never register it with PanicRuntimeScope.
+    // The Panic request running on this worker must not wait for its own drain.
+    private final ExecutorService signInControlWorker = Executors.newSingleThreadExecutor(
+            action -> new Thread(action, "safekey-signin-control"));
+    private volatile SignInController signInController;
+    private PanicTerminalHandoff<PanicBackend> signInPanicHandoff;
 
     private final Handler mainHandler =
             new Handler(Looper.getMainLooper());
@@ -110,6 +122,8 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     private void initializeVaultRuntime(boolean recovered) {
+        closeSignInController();
+        signInPanicHandoff = null;
         runtimeInitializationAttempted = true;
         if (recovered || panicRuntimeScope.isStopped()) {
             // Every object from the stopped scope remains permanently stopped.
@@ -143,6 +157,7 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         }
         panicBackend = new com.safekey.app.security.panic.PanicBackend(
                 this, secureVaultCoordinator, decoyVaultCoordinator, getPanicShutdownRuntime());
+        initializeSignInOwnership(panicBackend, panicRuntimeScope);
         synchronized (this) {
             activeVault = ActiveVault.NONE;
             activeVaultOperations = null;
@@ -196,15 +211,120 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
         return panicBackend;
     }
 
-    /** Hind's Sign In controller calls this on main after PANIC_WIPED, before fresh-setup navigation. */
+    /**
+     * Application-owned completion entry point. Unverified, stale and duplicate
+     * results are ignored; they cannot restart a current or replacement runtime.
+     */
     public void continueAfterPanicWipe(com.safekey.app.security.panic.PanicBackend completedBackend) {
-        if (Looper.myLooper() != Looper.getMainLooper()
-                || completedBackend == null || completedBackend != panicBackend
-                || !completedBackend.wasWipeCompleted()
-                || !panicRuntimeScope.isStopped() || !panicRuntimeScope.areResourcesClosed()) {
-            throw new IllegalStateException("A completed Panic wipe is required before restarting setup.");
+        requireMainThread();
+        PanicTerminalHandoff<PanicBackend> handoff = signInPanicHandoff;
+        if (handoff != null) {
+            handoff.onPanicWiped(completedBackend);
         }
-        beginStartup();
+    }
+
+    /**
+     * Screens borrow this controller; only the application closes it. Retain the
+     * borrowed reference for teardown instead of fetching it from a stopped runtime.
+     */
+    public SignInController getSignInController() {
+        requireMainThread();
+        requireRuntimeReady();
+        SignInController controller = signInController;
+        if (controller == null) {
+            throw new IllegalStateException("Sign In ownership is unavailable.");
+        }
+        return controller;
+    }
+
+    private static void requireMainThread() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            throw new IllegalStateException("Use Sign In ownership on the main thread.");
+        }
+    }
+
+    private void initializeSignInOwnership(PanicBackend backend, PanicRuntimeScope ownedScope) {
+        final PanicTerminalHandoff<PanicBackend> handoff = new PanicTerminalHandoff<>(
+                backend, new PanicTerminalHandoff.Runtime<PanicBackend>() {
+                    @Override public boolean isCurrent(PanicBackend source) {
+                        return source == panicBackend && ownedScope == panicRuntimeScope;
+                    }
+                    @Override public boolean isStopped() { return ownedScope.isStopped(); }
+                    @Override public boolean wasWipeCompleted(PanicBackend source) {
+                        return source.wasWipeCompleted();
+                    }
+                    @Override public boolean areResourcesClosed() {
+                        return ownedScope.areResourcesClosed();
+                    }
+                    @Override public void onWiped(PanicBackend source) {
+                        closeSignInController();
+                        startupNavigationRequired = true;
+                        beginStartup();
+                        openStartupScreen();
+                    }
+                    @Override public void onFailed(PanicBackend source, Exception error) {
+                        // Keep this stopped runtime stopped even when the marker
+                        // was not saved. Only cold-start recovery may retry it.
+                        closeSignInController();
+                        startupNavigationRequired = true;
+                        closeStoppedSignInRuntime(ownedScope);
+                        Log.e(TAG, "Required vault cleanup did not complete; restart required.");
+                        openStartupScreen();
+                    }
+                });
+        signInPanicHandoff = handoff;
+        signInController = new SignInController(this, signInControlWorker, mainHandler,
+                new SignInController.PanicTerminalHandler() {
+                    @Override public void onPanicWiped(PanicBackend source) {
+                        requireMainThread();
+                        handoff.onPanicWiped(source);
+                    }
+                    @Override public void onPanicFailed(PanicBackend source, Exception error) {
+                        requireMainThread();
+                        handoff.onPanicFailed(source, error);
+                    }
+                });
+    }
+
+    private void closeSignInController() {
+        SignInController previous = signInController;
+        signInController = null;
+        if (previous != null) {
+            previous.close();
+        }
+    }
+
+    /** Close keys/connections without retrying deletion or creating a new runtime. */
+    private void closeStoppedSignInRuntime(PanicRuntimeScope ownedScope) {
+        try {
+            ownedScope.cancelPending();
+        } catch (RuntimeException error) {
+            Log.e(TAG, "Vault cancellation remains incomplete.");
+        }
+        try {
+            SafeKeySession.lock();
+            clearSessionAndCloseVaults();
+        } catch (RuntimeException error) {
+            Log.e(TAG, "Vault session cleanup remains incomplete.");
+        }
+        // This worker belongs to the process, not to the runtime being drained.
+        try {
+            signInControlWorker.execute(() -> {
+                try {
+                    ownedScope.closeAndAwait(30_000L);
+                } catch (Exception error) {
+                    Log.e(TAG, "Vault resources require a process restart.");
+                }
+            });
+        } catch (RejectedExecutionException error) {
+            Log.e(TAG, "Vault cleanup worker is unavailable; restart required.");
+        }
+    }
+
+    private void openStartupScreen() {
+        Intent intent = new Intent(this, PanicStartupActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
     }
 
     public MasterPasswordHealth getMasterPasswordHealth() {
@@ -509,6 +629,10 @@ public final class SafeKeyApplication extends Application implements PanicRuntim
     }
 
     private void clearSessionAndCloseVaults() {
+        SignInController controller = signInController;
+        if (controller != null) {
+            controller.cancelCurrentAttempt();
+        }
         if (totpEnrollmentCoordinator != null) {
             totpEnrollmentCoordinator.invalidateSession();
         }

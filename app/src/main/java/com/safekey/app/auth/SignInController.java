@@ -137,6 +137,7 @@ public final class SignInController implements AutoCloseable {
             }
             PanicSignInService.Result result = request.run();
             if (result == PanicSignInService.Result.PANIC_WIPED) {
+                attempt.erasePassword();
                 // This is intentionally independent of the current attempt,
                 // Activity lifetime, and controller closure. Maryam's app-level
                 // handler is responsible for terminal deduplication and handoff.
@@ -153,26 +154,29 @@ public final class SignInController implements AutoCloseable {
                 deliverError(attempt, new IllegalStateException("Unknown Sign In result."));
             }
         } catch (Exception error) {
-            // The work gate is blocked once the Panic role is committed. Keep
-            // terminal delivery independent of Activity ownership and stale
-            // normal callbacks, even when the screen has already been closed.
-            // Other runtime shutdowns are also blocked: the application-owned
-            // handler must verify the pending wipe marker before recovery.
-            if (backend != null && application.getPanicRuntimeScope().isStopped()) {
+            // Only this request's committed Panic failure is terminal. A stopped
+            // runtime or pending marker alone does not establish that ownership.
+            if (backend != null && request != null && request.isPanicCommitted()) {
+                attempt.erasePassword();
                 PanicBackend failedBackend = backend;
-                mainHandler.post(() -> terminalHandler.onPanicFailed(failedBackend, error));
+                if (!mainHandler.post(() -> terminalHandler.onPanicFailed(failedBackend, error))) {
+                    attempt.cancel();
+                }
             } else {
                 deliverError(attempt, error);
             }
         } finally {
             if (request != null) {
                 request.close();
+                if (request.isPanicCommitted()) {
+                    attempt.erasePassword();
+                }
             }
         }
     }
 
     private void deliverRole(Attempt attempt, PanicSignInService.Result role) {
-        mainHandler.post(() -> {
+        boolean posted = mainHandler.post(() -> {
             if (!isCurrent(attempt)) {
                 return;
             }
@@ -188,19 +192,26 @@ public final class SignInController implements AutoCloseable {
                 Arrays.fill(password, '\0');
             }
         });
+        if (!posted) {
+            attempt.cancel();
+        }
     }
 
     private void deliverError(Attempt attempt, Exception error) {
-        mainHandler.post(() -> {
+        // An error callback never needs to retain the submitted password.
+        attempt.erasePassword();
+        boolean posted = mainHandler.post(() -> {
             if (!isCurrent(attempt)) {
                 return;
             }
             SignInCallback callback = attempt.callback();
-            attempt.erasePassword();
             if (callback != null) {
                 callback.onError(error);
             }
         });
+        if (!posted) {
+            attempt.cancel();
+        }
     }
 
     private boolean isCurrent(Attempt attempt) {
