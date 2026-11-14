@@ -64,6 +64,9 @@ public class PanicSignInInstrumentedTest {
         final List<PanicWipeCoordinator.Target> targets = PanicWipeTargets.create(base, names);
         final CountDownLatch locked = new CountDownLatch(1);
         boolean failDelete;
+        boolean failMarkerRead;
+        boolean failMarkerWrite;
+        PanicBackend.SignInRequest lastRequest;
         final PanicAndroidRuntime runtime = new PanicAndroidRuntime(scope,
                 new Handler(Looper.getMainLooper()), locked::countDown);
         final PanicWipeCoordinator wipe;
@@ -77,7 +80,18 @@ public class PanicSignInInstrumentedTest {
                 @Override public void erase() throws Exception { if (failDelete) { throw new IOException("Injected failure."); } }
                 @Override public void verifyAbsent() { }
             });
-            wipe = new PanicWipeCoordinator(scope.getWorkGate(), journal, runtime, plan);
+            PanicWipeCoordinator.Journal checkedJournal = new PanicWipeCoordinator.Journal() {
+                @Override public boolean isPending() throws Exception {
+                    if (failMarkerRead) { throw new IOException("Injected marker read failure."); }
+                    return journal.isPending();
+                }
+                @Override public void markPending() throws Exception {
+                    if (failMarkerWrite) { throw new IOException("Injected marker write failure."); }
+                    journal.markPending();
+                }
+                @Override public void clearPending() throws Exception { journal.clearPending(); }
+            };
+            wipe = new PanicWipeCoordinator(scope.getWorkGate(), checkedJournal, runtime, plan);
             service = new PanicSignInService(scope.getWorkGate(), credentials, wipe);
             backend = new PanicBackend(scope, null, null, service);
             for (String database : names.databases) {
@@ -95,7 +109,11 @@ public class PanicSignInInstrumentedTest {
 
         PanicSignInService.Result run(String password) throws Exception {
             char[] input = password.toCharArray();
-            try (PanicBackend.SignInRequest request = backend.prepareSignIn(input)) { return request.run(); }
+            try (PanicBackend.SignInRequest request = backend.prepareSignIn(input)) {
+                lastRequest = request;
+                assertFalse(request.isPanicCommitted());
+                return request.run();
+            }
             finally { Arrays.fill(input, '\0'); }
         }
 
@@ -167,8 +185,11 @@ public class PanicSignInInstrumentedTest {
     @Test public void actualMasterDecoyAndIncorrectPasswordsRouteWithoutWiping() throws Exception {
         try (Fixture f = new Fixture()) {
             assertEquals(PanicSignInService.Result.MASTER, f.run(MASTER));
+            assertFalse(f.lastRequest.isPanicCommitted());
             assertEquals(PanicSignInService.Result.DECOY, f.run(DECOY));
+            assertFalse(f.lastRequest.isPanicCommitted());
             assertEquals(PanicSignInService.Result.NO_MATCH, f.run("Unrelated test password"));
+            assertFalse(f.lastRequest.isPanicCommitted());
             f.assertPresent();
         }
     }
@@ -179,6 +200,9 @@ public class PanicSignInInstrumentedTest {
             try {
                 PanicInstrumentedFixture.write(unrelated, new byte[]{3});
                 assertEquals(PanicSignInService.Result.PANIC_WIPED, f.run(PANIC)); f.assertWiped();
+                assertTrue(f.lastRequest.isPanicCommitted());
+                f.lastRequest.close();
+                assertTrue(f.lastRequest.isPanicCommitted());
                 assertTrue(unrelated.isFile());
             } finally { PanicFiles.deleteAll(new File[]{unrelated}); }
         }
@@ -206,6 +230,7 @@ public class PanicSignInInstrumentedTest {
         try (Fixture f = new Fixture()) {
             PanicInstrumentedFixture.write(new File(f.base.getNoBackupFilesDir(), f.names.panicFile), new byte[]{1});
             rejects(() -> f.run(MASTER)); rejects(() -> f.run(PANIC)); f.assertPresent();
+            assertFalse(f.lastRequest.isPanicCommitted());
         }
     }
 
@@ -214,6 +239,7 @@ public class PanicSignInInstrumentedTest {
             assertTrue(f.base.getSharedPreferences(f.names.preferences[0], 0).edit()
                     .putString("wrapped_database_key", "invalid-envelope").commit());
             rejects(() -> f.run(PANIC)); f.assertPresent();
+            assertFalse(f.lastRequest.isPanicCommitted());
         }
     }
 
@@ -221,6 +247,7 @@ public class PanicSignInInstrumentedTest {
         try (Fixture f = new Fixture()) {
             f.master.save(envelope(PANIC, "safekey:database-key-envelope:v1"));
             rejects(() -> f.run(PANIC)); f.assertPresent();
+            assertFalse(f.lastRequest.isPanicCommitted());
         }
     }
 
@@ -229,9 +256,11 @@ public class PanicSignInInstrumentedTest {
             char[] input = PANIC.toCharArray();
             try (PanicBackend.SignInRequest request = f.backend.prepareSignIn(input)) {
                 request.close(); rejects(request::run); assertArrayEquals(PANIC.toCharArray(), input);
+                assertFalse(request.isPanicCommitted());
             } finally { Arrays.fill(input, '\0'); }
             PanicBackend.SignInRequest normal = f.backend.prepareSignIn(MASTER.toCharArray());
             assertEquals(PanicSignInService.Result.MASTER, normal.run()); rejects(normal::run); f.assertPresent();
+            assertFalse(normal.isPanicCommitted());
         }
     }
 
@@ -242,6 +271,7 @@ public class PanicSignInInstrumentedTest {
                 try { request.run(); } catch (Exception error) { failure.set(error); }
             });
             assertTrue(failure.get() instanceof IllegalStateException); f.assertPresent();
+            assertFalse(request.isPanicCommitted());
         }
     }
 
@@ -252,6 +282,7 @@ public class PanicSignInInstrumentedTest {
             try (PanicBackend.SignInRequest request = backend.prepareSignIn(PANIC.toCharArray())) {
                 pending.set(request); rejects(request::run); f.assertPresent();
                 assertFalse(backend.wasWipeCompleted());
+                assertFalse(request.isPanicCommitted());
             }
         }
     }
@@ -261,6 +292,7 @@ public class PanicSignInInstrumentedTest {
             PanicBackend backend = afterMasterCheck(f, () -> f.proof.save(f.proof.load()));
             try (PanicBackend.SignInRequest request = backend.prepareSignIn(PANIC.toCharArray())) {
                 rejects(request::run); f.assertPresent(); assertFalse(backend.wasWipeCompleted());
+                assertFalse(request.isPanicCommitted());
             }
         }
     }
@@ -268,6 +300,7 @@ public class PanicSignInInstrumentedTest {
     @Test public void pendingJournalRequiresStartupRecoveryInsteadOfFreshPasswordRouting() throws Exception {
         try (Fixture f = new Fixture()) {
             f.journal.markPending(); rejects(() -> f.run(PANIC)); assertTrue(f.journal.isPending());
+            assertFalse(f.lastRequest.isPanicCommitted());
             for (String database : f.names.databases) { assertTrue(f.base.getDatabasePath(database).isFile()); }
         }
     }
@@ -276,6 +309,51 @@ public class PanicSignInInstrumentedTest {
         try (Fixture f = new Fixture()) {
             f.failDelete = true; rejects(() -> f.run(PANIC));
             assertTrue(f.journal.isPending()); assertTrue(f.scope.isStopped());
+            assertTrue(f.lastRequest.isPanicCommitted()); assertFalse(f.backend.wasWipeCompleted());
+        }
+    }
+
+    @Test public void markerWriteFailureStillIdentifiesThisCommittedRequestWithoutDeleting() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.failMarkerWrite = true;
+            rejects(() -> f.run(PANIC));
+            assertTrue(f.lastRequest.isPanicCommitted());
+            assertFalse(f.backend.wasWipeCompleted());
+            assertTrue(f.scope.isStopped());
+            assertFalse(f.journal.isPending());
+            assertEquals(0L, f.locked.getCount());
+            for (String database : f.names.databases) { assertTrue(f.base.getDatabasePath(database).isFile()); }
+            for (String alias : f.names.aliases) {
+                assertTrue(PanicInstrumentedFixture.keyStore().containsAlias(alias));
+            }
+            assertTrue(new File(f.base.getNoBackupFilesDir(), f.names.panicFile).isFile());
+            f.lastRequest.close();
+            assertTrue(f.lastRequest.isPanicCommitted());
+        }
+    }
+
+    @Test public void unreadableMarkerBlocksRuntimeWithoutClaimingACommittedPanic() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.failMarkerRead = true;
+            rejects(() -> f.run(PANIC));
+            assertFalse(f.lastRequest.isPanicCommitted());
+            assertFalse(f.backend.wasWipeCompleted());
+            assertTrue(f.scope.isStopped());
+            assertFalse(f.journal.isPending());
+            for (String database : f.names.databases) { assertTrue(f.base.getDatabasePath(database).isFile()); }
+        }
+    }
+
+    @Test public void anotherPreparedRequestCannotInheritPanicCommitment() throws Exception {
+        try (Fixture f = new Fixture();
+             PanicBackend.SignInRequest other = f.backend.prepareSignIn(MASTER.toCharArray())) {
+            f.failMarkerWrite = true;
+            rejects(() -> f.run(PANIC));
+            assertTrue(f.lastRequest.isPanicCommitted());
+            rejects(other::run);
+            assertFalse(other.isPanicCommitted());
+            assertFalse(f.backend.wasWipeCompleted());
+            assertFalse(f.journal.isPending());
         }
     }
 

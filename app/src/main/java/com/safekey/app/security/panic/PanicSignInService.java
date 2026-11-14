@@ -14,6 +14,8 @@ public final class PanicSignInService {
         /** Transfers one privately owned copy. The service clears it before releasing its work lease. */
         char[] takePassword();
         void commitIfCurrent(PanicPasswordService.Commit action) throws Exception;
+        /** Record this request's Panic commitment only after action returns, under its cancellation guard. */
+        void commitPanicIfCurrent(PanicPasswordService.Commit action) throws Exception;
         @Override void close();
     }
 
@@ -64,11 +66,21 @@ public final class PanicSignInService {
                     if (count > 1) { throw new GeneralSecurityException("Password roles are ambiguous."); }
                     Result result = matches[2] ? Result.PANIC_WIPED
                             : matches[1] ? Result.DECOY : matches[0] ? Result.MASTER : Result.NO_MATCH;
-                    snapshot.commitIfCurrent(() -> submission.commitIfCurrent(() -> {
-                        if (!operation.ticket().isCurrent()) { throw new CancellationException("Sign In was invalidated."); }
-                        if (result == Result.PANIC_WIPED) { gate.blockNewWork(); }
+                    PanicPasswordService.Commit commit = () -> {
+                        if (result == Result.PANIC_WIPED) {
+                            gate.blockNewWorkIfCurrent(operation.ticket());
+                        } else if (!operation.ticket().isCurrent()) {
+                            throw new CancellationException("Sign In was invalidated.");
+                        }
                         decided[0] = result;
-                    }));
+                    };
+                    snapshot.commitIfCurrent(() -> {
+                        if (result == Result.PANIC_WIPED) {
+                            submission.commitPanicIfCurrent(commit);
+                        } else {
+                            submission.commitIfCurrent(commit);
+                        }
+                    });
                 } finally { if (candidate != null) { Arrays.fill(candidate, '\0'); } }
             }
         }
