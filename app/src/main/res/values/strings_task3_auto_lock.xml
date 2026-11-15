@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_auto_lock_one_minute">1 minute</string>
+    <string name="settings_auto_lock_fifteen_minutes">15 minutes</string>
+    <string name="settings_auto_lock_save_error">Unable to save auto-lock timeout. Please try again.</string>
+</resources>
