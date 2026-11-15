@@ -49,6 +49,63 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RunWith(AndroidJUnit4.class)
 public class T38SettingsSecurityInstrumentedTest {
 
+    @Test
+    public void realVaultManualLockAllowsNormalSignIn() throws Exception {
+        verifyManualLockAllowsNormalSignIn(false);
+    }
+
+    @Test
+    public void decoyVaultManualLockAllowsNormalSignIn() throws Exception {
+        verifyManualLockAllowsNormalSignIn(true);
+    }
+
+    private void verifyManualLockAllowsNormalSignIn(boolean decoy) throws Exception {
+        SafeKeyApplication application = app();
+        try {
+            if (decoy) {
+                authenticateDecoyVaultForUiTest();
+            } else {
+                authenticateRealVaultForUiTest();
+            }
+
+            assertEquals(SessionState.UNLOCKED, SafeKeySession.getState());
+
+            android.app.Instrumentation instrumentation =
+                    InstrumentationRegistry.getInstrumentation();
+            android.app.Instrumentation.ActivityMonitor monitor =
+                    instrumentation.addMonitor(
+                            "com.safekey.app.auth.SignInActivity", null, false);
+            try {
+                try (ActivityScenario<SettingsActivity> scenario =
+                             ActivityScenario.launch(SettingsActivity.class)) {
+                    scenario.onActivity(activity -> {
+                        View lockButton = activity.findViewById(R.id.rowSettingsLockVault);
+                        assertTrue("Lock Vault control missing", lockButton != null);
+                        assertTrue("Lock Vault click was not handled",
+                                lockButton.performClick());
+                    });
+
+                    android.app.Activity signIn =
+                            monitor.waitForActivityWithTimeout(10000);
+                    assertTrue("Manual lock did not open Sign In", signIn != null);
+                    assertFalse("Manual lock must not require the REAL master password",
+                            signIn.getIntent().getBooleanExtra(
+                                    com.safekey.app.auth.SignInActivity.REQUIRE_MASTER_PASSWORD,
+                                    false));
+
+                    assertEquals("Manual Lock Vault must lock the session",
+                            SessionState.LOCKED, SafeKeySession.getState());
+                    assertTrue("Settings must leave the foreground after manual lock",
+                            scenario.getState() != Lifecycle.State.RESUMED);
+                }
+            } finally {
+                instrumentation.removeMonitor(monitor);
+            }
+        } finally {
+            SafeKeySession.lock();
+            application.registerSessionCleanup();
+        }
+    }
     private SafeKeyApplication app() {
         return (SafeKeyApplication) InstrumentationRegistry.getInstrumentation()
                 .getTargetContext().getApplicationContext();
@@ -131,45 +188,44 @@ public class T38SettingsSecurityInstrumentedTest {
         verifyRenamePersists(true);
     }
 
-    /** A stopped Settings screen must release its dialog and allow a fresh rename. */
     @Test
-    public void backgroundDuringRenameDoesNotLeaveDisabledDialog() throws Exception {
+    public void backgroundDuringRenameDoesNotLeaveDisabledDialog()
+            throws Exception {
         SafeKeyApplication application = app();
         try {
             authenticateRealVaultForUiTest();
+            String original;
+            AlertDialog previousDialog;
+
             try (ActivityScenario<SettingsActivity> scenario =
                          ActivityScenario.launch(SettingsActivity.class)) {
                 awaitEditableName(scenario);
-                String original = currentName(scenario);
-                String attempted = "T38BackgroundRename";
-                try {
-                    AlertDialog previousDialog = openRenameDialog(scenario);
-                    submitRename(scenario, previousDialog, attempted);
-                    // A save may complete before this transition. Either way,
-                    // stopping Settings must dismiss the original dialog.
-                    scenario.moveToState(Lifecycle.State.CREATED);
-                    assertTrue("Stopped Settings retained its rename dialog",
-                            !previousDialog.isShowing());
-                    scenario.moveToState(Lifecycle.State.RESUMED);
-                    awaitEditableName(scenario);
-                    AlertDialog newDialog = openRenameDialog(scenario);
-                    assertTrue("Settings reopened the same dialog instance",
-                            previousDialog != newDialog);
-                    submitRename(scenario, newDialog, original);
-                    awaitName(scenario, original);
-                } finally {
-                    // Restore the original test vault name if a save completed late.
-                    awaitEditableName(scenario);
-                    if (!original.equals(currentName(scenario))) {
-                        rename(scenario, original);
-                    }
-                }
+                original = currentName(scenario);
+                previousDialog = openRenameDialog(scenario);
+                submitRename(scenario, previousDialog, "T38BackgroundRename");
+
+                scenario.moveToState(Lifecycle.State.CREATED);
+                assertFalse("Stopped Settings retained its rename dialog",
+                        previousDialog.isShowing());
+            }
+
+            authenticateRealVaultForUiTest();
+
+            try (ActivityScenario<SettingsActivity> reopened =
+                         ActivityScenario.launch(SettingsActivity.class)) {
+                awaitEditableName(reopened);
+                AlertDialog newDialog = openRenameDialog(reopened);
+                assertTrue("Settings reused the stopped dialog",
+                        previousDialog != newDialog);
+                submitRename(reopened, newDialog, original);
+                awaitName(reopened, original);
             }
         } finally {
             SafeKeySession.lock();
             application.registerSessionCleanup();
         }
     }
+
 
     /** A DECOY session may not reveal or modify REAL biometric enrollment. */
     @Test
@@ -191,9 +247,9 @@ public class T38SettingsSecurityInstrumentedTest {
         }
     }
 
-    /** The five-minute timeout is display-only until the session backend PR. */
+    /** The auto-lock setting must provide access to the timeout picker. */
     @Test
-    public void autoLockRemainsReadOnlyAtFiveMinutes() throws Exception {
+    public void autoLockSettingIsInteractive() throws Exception {
         SafeKeyApplication application = app();
         try {
             authenticateRealVaultForUiTest();
@@ -204,7 +260,7 @@ public class T38SettingsSecurityInstrumentedTest {
                     TextView value = activity.findViewById(R.id.textSettingsAutoLockValue);
                     assertEquals(activity.getString(R.string.settings_auto_lock_five_minutes),
                             value.getText().toString());
-                    assertFalse("Auto-lock has no action in T38", row.hasOnClickListeners());
+                    assertTrue("Auto-lock must open the timeout picker", row.hasOnClickListeners());
                 });
             }
         } finally {
@@ -374,6 +430,7 @@ public class T38SettingsSecurityInstrumentedTest {
                 original = currentName(first);
                 rename(first, changed);
             }
+            if (decoy) { authenticateDecoyVaultForUiTest(); } else { authenticateRealVaultForUiTest(); }
             try (ActivityScenario<SettingsActivity> reopened =
                          ActivityScenario.launch(SettingsActivity.class)) {
                 try {

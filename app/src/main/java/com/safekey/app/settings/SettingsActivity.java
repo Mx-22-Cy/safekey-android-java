@@ -161,7 +161,6 @@ public class SettingsActivity extends ProtectedActivity {
             invalidateVaultNameRequests();
             SafeKeySession.lock();
             Intent intent = new Intent(this, SignInActivity.class);
-            intent.putExtra(SignInActivity.REQUIRE_MASTER_PASSWORD, true);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
