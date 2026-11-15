@@ -17,7 +17,7 @@
     <string name="t27_decoy_password_help">Minimum 15 characters. Must differ from your master password.</string>
 
     <string name="t27_decoy_create">Create Decoy Vault</string>
-    <string name="t27_decoy_creating">Creating...</string>
+    <string name="t27_decoy_creating">Creating…</string>
     <string name="t27_decoy_success">Decoy Vault created successfully.</string>
 
     <!-- Panic Mode Setup -->
@@ -39,7 +39,7 @@
     <string name="t27_panic_confirmation">I understand that entering my Panic Password at Sign In will permanently delete all my SafeKey vault data.</string>
 
     <string name="t27_panic_enable">Enable Panic Mode</string>
-    <string name="t27_panic_enabling">Enabling...</string>
+    <string name="t27_panic_enabling">Enabling…</string>
     <string name="t27_panic_success">Panic Mode enabled successfully.</string>
 
     <!-- Shared Buttons -->
