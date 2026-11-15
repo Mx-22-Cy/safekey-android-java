@@ -16,7 +16,8 @@ import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
@@ -28,7 +29,8 @@ public class AddSecureNoteActivity extends ProtectedActivity {
             "secure_note_id";
     private boolean editMode = false;
     private long secureNoteId = 0L;
-    private SecureVaultCoordinator secureVaultCoordinator;
+    private VaultOperations activeVaultOperations;
+    private ActiveVaultUiBinding vaultBinding;
     private SecureNote loadedSecureNote;
     private AppCompatEditText editSecureNoteTitle;
     private AppCompatEditText editSecureNoteContent;
@@ -64,9 +66,9 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                 R.layout.activity_add_secure_note
         );
 
-        secureVaultCoordinator =
-                ((SafeKeyApplication) getApplication())
-                        .getSecureVaultCoordinator();
+        vaultBinding = new ActiveVaultUiBinding(
+                (SafeKeyApplication) getApplication());
+        activeVaultOperations = vaultBinding.operations();
 
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(
@@ -165,7 +167,16 @@ public class AddSecureNoteActivity extends ProtectedActivity {
             return;
         }
 
-        secureVaultCoordinator.getSecureNote(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getSecureNote(
                 secureNoteId,
                 new VaultDataService.ResultCallback<SecureNote>() {
 
@@ -173,9 +184,12 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onSuccess(
                             SecureNote note
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -207,9 +221,12 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -314,7 +331,16 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     content
             );
 
-            secureVaultCoordinator.updateSecureNote(
+            if (!vaultBinding.isCurrent()) {
+
+                finish();
+
+                return;
+
+            }
+
+
+            activeVaultOperations.updateSecureNote(
                     loadedSecureNote,
                     new VaultDataService.ResultCallback<Integer>() {
 
@@ -322,6 +348,9 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                         public void onSuccess(
                                 Integer rows
                         ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                             if (rows == null || rows <= 0) {
                                 showSaveError();
@@ -335,6 +364,9 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                         public void onError(
                                 Exception exception
                         ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                             showSaveError();
                         }
                     }
@@ -349,7 +381,16 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                         content
                 );
 
-        secureVaultCoordinator.addSecureNote(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.addSecureNote(
                 secureNote,
                 new VaultDataService.ResultCallback<Long>() {
 
@@ -357,6 +398,9 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onSuccess(
                             Long id
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         if (id == null || id <= 0L) {
                             showSaveError();
@@ -370,6 +414,9 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         showSaveError();
                     }
                 }
@@ -409,4 +456,13 @@ public class AddSecureNoteActivity extends ProtectedActivity {
                 .toString()
                 .trim();
     }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (vaultBinding != null && !vaultBinding.isCurrent()) {
+            finish();
+        }
+    }
+
 }

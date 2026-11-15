@@ -20,7 +20,8 @@ import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.service.VaultDataService;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
@@ -52,7 +53,8 @@ public class CredentialDetailsActivity extends ProtectedActivity {
 
     private boolean passwordVisible = false;
     private long credentialId = 0L;
-    private SecureVaultCoordinator secureVaultCoordinator;
+    private VaultOperations activeVaultOperations;
+    private ActiveVaultUiBinding vaultBinding;
 
     @Override
     protected void onRuntimeCreate(
@@ -83,9 +85,9 @@ public class CredentialDetailsActivity extends ProtectedActivity {
                 R.layout.activity_credential_details
         );
 
-        secureVaultCoordinator =
-                ((SafeKeyApplication) getApplication())
-                        .getSecureVaultCoordinator();
+        vaultBinding = new ActiveVaultUiBinding(
+                (SafeKeyApplication) getApplication());
+        activeVaultOperations = vaultBinding.operations();
 
         credentialId =
                 getIntent().getLongExtra(
@@ -186,7 +188,16 @@ public class CredentialDetailsActivity extends ProtectedActivity {
             return;
         }
 
-        secureVaultCoordinator.getCredential(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getCredential(
                 credentialId,
                 new VaultDataService.ResultCallback<Credential>() {
 
@@ -194,9 +205,12 @@ public class CredentialDetailsActivity extends ProtectedActivity {
                     public void onSuccess(
                             Credential credential
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -343,9 +357,12 @@ public class CredentialDetailsActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -424,7 +441,16 @@ public class CredentialDetailsActivity extends ProtectedActivity {
 
     private void deleteCredential() {
 
-        secureVaultCoordinator.deleteCredential(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.deleteCredential(
                 credentialId,
                 new VaultDataService.ResultCallback<Integer>() {
 
@@ -432,6 +458,9 @@ public class CredentialDetailsActivity extends ProtectedActivity {
                     public void onSuccess(
                             Integer rows
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         if (rows == null || rows <= 0) {
 
@@ -451,6 +480,9 @@ public class CredentialDetailsActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 CredentialDetailsActivity.this,
@@ -536,4 +568,13 @@ public class CredentialDetailsActivity extends ProtectedActivity {
 
         return value;
     }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (vaultBinding != null && !vaultBinding.isCurrent()) {
+            finish();
+        }
+    }
+
 }

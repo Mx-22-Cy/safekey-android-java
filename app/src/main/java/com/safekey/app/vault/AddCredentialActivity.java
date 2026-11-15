@@ -21,7 +21,8 @@ import androidx.activity.result.contract.ActivityResultContracts;
 
 import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.data.model.Credential;
 import com.safekey.app.data.service.VaultDataService;
 import com.safekey.app.session.SafeKeySession;
@@ -42,7 +43,8 @@ public class AddCredentialActivity extends ProtectedActivity {
     private boolean passwordVisible = false;
     private boolean editMode = false;
     private long credentialId = 0L;
-    private SecureVaultCoordinator secureVaultCoordinator;
+    private VaultOperations activeVaultOperations;
+    private ActiveVaultUiBinding vaultBinding;
     private Credential loadedCredential;
     private TextView buttonGenerateCredentialPassword;
 
@@ -50,6 +52,10 @@ public class AddCredentialActivity extends ProtectedActivity {
             registerForActivityResult(
                     new ActivityResultContracts.StartActivityForResult(),
                     result -> {
+
+                        if (vaultBinding == null || !vaultBinding.isCurrent()) {
+                            return;
+                        }
 
                         if (result.getResultCode() != RESULT_OK
                                 || result.getData() == null) {
@@ -131,9 +137,9 @@ public class AddCredentialActivity extends ProtectedActivity {
                 R.layout.activity_add_credential
         );
 
-        secureVaultCoordinator =
-                ((SafeKeyApplication) getApplication())
-                        .getSecureVaultCoordinator();
+        vaultBinding = new ActiveVaultUiBinding(
+                (SafeKeyApplication) getApplication());
+        activeVaultOperations = vaultBinding.operations();
 
         View rootAddCredential =
                 findViewById(
@@ -269,7 +275,16 @@ public class AddCredentialActivity extends ProtectedActivity {
             return;
         }
 
-        secureVaultCoordinator.getCredential(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getCredential(
                 credentialId,
                 new VaultDataService.ResultCallback<Credential>() {
 
@@ -277,9 +292,12 @@ public class AddCredentialActivity extends ProtectedActivity {
                     public void onSuccess(
                             Credential credential
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -327,9 +345,12 @@ public class AddCredentialActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -553,7 +574,16 @@ public class AddCredentialActivity extends ProtectedActivity {
                     notes
             );
 
-            secureVaultCoordinator.updateCredential(
+            if (!vaultBinding.isCurrent()) {
+
+                finish();
+
+                return;
+
+            }
+
+
+            activeVaultOperations.updateCredential(
                     loadedCredential,
                     new VaultDataService.ResultCallback<Integer>() {
 
@@ -561,6 +591,9 @@ public class AddCredentialActivity extends ProtectedActivity {
                         public void onSuccess(
                                 Integer rows
                         ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                             if (rows == null || rows <= 0) {
 
@@ -575,6 +608,9 @@ public class AddCredentialActivity extends ProtectedActivity {
                         public void onError(
                                 Exception exception
                         ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                             showSaveError();
                         }
                     }
@@ -593,7 +629,16 @@ public class AddCredentialActivity extends ProtectedActivity {
                         notes
                 );
 
-        secureVaultCoordinator.addCredential(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.addCredential(
                 credential,
                 new VaultDataService.ResultCallback<Long>() {
 
@@ -601,6 +646,9 @@ public class AddCredentialActivity extends ProtectedActivity {
                     public void onSuccess(
                             Long id
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         if (id == null || id <= 0L) {
 
@@ -615,6 +663,9 @@ public class AddCredentialActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         showSaveError();
                     }
                 }
@@ -658,4 +709,13 @@ public class AddCredentialActivity extends ProtectedActivity {
                 .toString()
                 .trim();
     }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (vaultBinding != null && !vaultBinding.isCurrent()) {
+            finish();
+        }
+    }
+
 }

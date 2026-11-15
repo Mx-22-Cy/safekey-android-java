@@ -22,6 +22,7 @@ import com.safekey.app.security.results.AndroidCredentialSecurity;
 import com.safekey.app.security.results.CredentialSecurityController;
 import com.safekey.app.security.results.CredentialSecurityItem;
 import com.safekey.app.security.results.CredentialSecuritySummary;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.session.ProtectedActivity;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
@@ -32,6 +33,7 @@ import com.safekey.app.settings.SettingsActivity;
 public class AlertsActivity extends ProtectedActivity {
     private enum AlertFilter { ALL, BREACHED, ATTENTION, PASSED }
     private AlertFilter selectedFilter = AlertFilter.ALL;
+    private ActiveVaultUiBinding vaultBinding;
     private CredentialSecurityController controller;
     private CredentialSecuritySummary summary;
     private boolean activityStarted;
@@ -54,8 +56,8 @@ public class AlertsActivity extends ProtectedActivity {
             return insets;
         });
         ViewCompat.requestApplyInsets(findViewById(R.id.rootAlerts));
-        controller = AndroidCredentialSecurity.create(((SafeKeyApplication) getApplication())
-                .getSecureVaultCoordinator(), true);
+        vaultBinding = new ActiveVaultUiBinding((SafeKeyApplication) getApplication());
+        controller = AndroidCredentialSecurity.createForActiveVault((SafeKeyApplication) getApplication(), true);
         setupNavigation();
         int[] ids = {R.id.filterAlertsAll, R.id.filterAlertsBreached,
                 R.id.filterAlertsAttention, R.id.filterAlertsPassed};
@@ -111,7 +113,7 @@ public class AlertsActivity extends ProtectedActivity {
     }
 
     private boolean canDisplay() {
-        return activityStarted && !isFinishing() && !isDestroyed()
+        return activityStarted && vaultBinding != null && vaultBinding.isCurrent() && !isFinishing() && !isDestroyed()
                 && SafeKeySession.getState() == SessionState.UNLOCKED;
     }
 

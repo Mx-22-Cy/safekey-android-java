@@ -14,8 +14,11 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.home.HomeActivity;
+import com.safekey.app.alerts.AlertsActivity;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.vault.VaultActivity;
+import com.safekey.app.vault.CredentialDetailsActivity;
+import com.safekey.app.vault.SecureNoteDetailsActivity;
 import com.safekey.app.SafeKeyApplication;
 
 import org.junit.Test;
@@ -37,6 +40,16 @@ public class ProtectedActivityRedirectInstrumentedTest {
     @Test
     public void lockedVault_redirectsToSignIn() throws InterruptedException {
         assertLockedActivityRedirectsToSignIn(VaultActivity.class);
+    }
+
+    @Test public void lockedAlerts_redirectsToSignIn() throws InterruptedException {
+        assertLockedActivityRedirectsToSignIn(AlertsActivity.class);
+    }
+    @Test public void lockedCredentialDetails_redirectsToSignIn() throws InterruptedException {
+        assertLockedActivityRedirectsToSignIn(CredentialDetailsActivity.class);
+    }
+    @Test public void lockedSecureNoteDetails_redirectsToSignIn() throws InterruptedException {
+        assertLockedActivityRedirectsToSignIn(SecureNoteDetailsActivity.class);
     }
 
     private void assertLockedActivityRedirectsToSignIn(
