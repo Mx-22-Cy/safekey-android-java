@@ -35,7 +35,8 @@ import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.service.VaultDataService;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.generator.GeneratorActivity;
 import com.safekey.app.alerts.AlertsActivity;
@@ -48,7 +49,8 @@ import java.util.Locale;
 public class VaultActivity extends ProtectedActivity {
 
     private VaultCredentialAdapter adapter;
-    private SecureVaultCoordinator secureVaultCoordinator;
+    private VaultOperations activeVaultOperations;
+    private ActiveVaultUiBinding vaultBinding;
     private VaultSecureNoteAdapter noteAdapter;
     private RecyclerView recyclerVault;
 
@@ -92,9 +94,9 @@ public class VaultActivity extends ProtectedActivity {
                 savedInstanceState
         );
 
-        secureVaultCoordinator =
-                ((SafeKeyApplication) getApplication())
-                        .getSecureVaultCoordinator();
+        vaultBinding = new ActiveVaultUiBinding(
+                (SafeKeyApplication) getApplication());
+        activeVaultOperations = vaultBinding.operations();
 
         WindowCompat.enableEdgeToEdge(
                 getWindow()
@@ -208,7 +210,16 @@ public class VaultActivity extends ProtectedActivity {
 
                                 applyFilters();
 
-                                secureVaultCoordinator.setCredentialFavorite(
+                                if (!vaultBinding.isCurrent()) {
+
+                                    finish();
+
+                                    return;
+
+                                }
+
+
+                                activeVaultOperations.setCredentialFavorite(
                                         credential.getId(),
                                         newFavorite,
                                         new VaultDataService.ResultCallback<Integer>() {
@@ -217,9 +228,12 @@ public class VaultActivity extends ProtectedActivity {
                                             public void onSuccess(
                                                     Integer rows
                                             ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                                                 if (isFinishing()
                                                         || isDestroyed()
-                                                        || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                                        || !vaultBinding.isCurrent()) {
                                                     return;
                                                 }
 
@@ -243,9 +257,12 @@ public class VaultActivity extends ProtectedActivity {
                                             public void onError(
                                                     Exception exception
                                             ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                                                 if (isFinishing()
                                                         || isDestroyed()
-                                                        || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                                        || !vaultBinding.isCurrent()) {
                                                     return;
                                                 }
 
@@ -418,16 +435,28 @@ public class VaultActivity extends ProtectedActivity {
 
         showVaultLoadingState();
 
-        secureVaultCoordinator.getCredentials(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getCredentials(
                 new VaultDataService.ResultCallback<List<Credential>>() {
 
                     @Override
                     public void onSuccess(
                             List<Credential> credentials
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -454,9 +483,12 @@ public class VaultActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -468,16 +500,28 @@ public class VaultActivity extends ProtectedActivity {
 
     private void loadSecureNotes() {
 
-        secureVaultCoordinator.getSecureNotes(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getSecureNotes(
                 new VaultDataService.ResultCallback<List<SecureNote>>() {
 
                     @Override
                     public void onSuccess(
                             List<SecureNote> notes
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -503,9 +547,12 @@ public class VaultActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -1208,6 +1255,10 @@ public class VaultActivity extends ProtectedActivity {
     @Override
     protected void onRuntimeResume() {
         super.onRuntimeResume();
+        if (!vaultBinding.isCurrent()) {
+            finish();
+            return;
+        }
 
         if (isFinishing()) {
             return;
@@ -1219,7 +1270,7 @@ public class VaultActivity extends ProtectedActivity {
     }
     private boolean requireUnlockedSession() {
 
-        if (!SafeKeySession.recordActivity()) {
+        if (!vaultBinding.isCurrent() || !SafeKeySession.recordActivity()) {
 
             navigateToSignIn();
 

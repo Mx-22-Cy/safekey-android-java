@@ -17,14 +17,16 @@ import com.safekey.app.R;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.SecureNote;
 import com.safekey.app.data.service.VaultDataService;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.session.SafeKeySession;
 import com.safekey.app.session.logic.SessionState;
 
 public class SecureNoteDetailsActivity extends ProtectedActivity {
 
     private long secureNoteId = 0L;
-    private SecureVaultCoordinator secureVaultCoordinator;
+    private VaultOperations activeVaultOperations;
+    private ActiveVaultUiBinding vaultBinding;
     public static final String EXTRA_ID =
             "secure_note_id";
 
@@ -59,9 +61,9 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                 R.layout.activity_secure_note_details
         );
 
-        secureVaultCoordinator =
-                ((SafeKeyApplication) getApplication())
-                        .getSecureVaultCoordinator();
+        vaultBinding = new ActiveVaultUiBinding(
+                (SafeKeyApplication) getApplication());
+        activeVaultOperations = vaultBinding.operations();
 
         ViewCompat.setOnApplyWindowInsetsListener(
                 findViewById(
@@ -125,7 +127,16 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
             return;
         }
 
-        secureVaultCoordinator.getSecureNote(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.getSecureNote(
                 secureNoteId,
                 new VaultDataService.ResultCallback<SecureNote>() {
 
@@ -133,9 +144,12 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                     public void onSuccess(
                             SecureNote note
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -190,9 +204,12 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
                         if (isFinishing()
                                 || isDestroyed()
-                                || SafeKeySession.getState() != SessionState.UNLOCKED) {
+                                || !vaultBinding.isCurrent()) {
                             return;
                         }
 
@@ -264,7 +281,16 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
 
     private void deleteSecureNote() {
 
-        secureVaultCoordinator.deleteSecureNote(
+        if (!vaultBinding.isCurrent()) {
+
+            finish();
+
+            return;
+
+        }
+
+
+        activeVaultOperations.deleteSecureNote(
                 secureNoteId,
                 new VaultDataService.ResultCallback<Integer>() {
 
@@ -272,6 +298,9 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                     public void onSuccess(
                             Integer rows
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         if (rows == null || rows <= 0) {
 
@@ -291,6 +320,9 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                     public void onError(
                             Exception exception
                     ) {
+                        if (!vaultBinding.isCurrent() || isFinishing() || isDestroyed()) {
+                            return;
+                        }
 
                         Toast.makeText(
                                 SecureNoteDetailsActivity.this,
@@ -324,4 +356,13 @@ public class SecureNoteDetailsActivity extends ProtectedActivity {
                 intent
         );
     }
+
+    @Override
+    protected void onRuntimeResume() {
+        super.onRuntimeResume();
+        if (vaultBinding != null && !vaultBinding.isCurrent()) {
+            finish();
+        }
+    }
+
 }

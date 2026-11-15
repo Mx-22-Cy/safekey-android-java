@@ -23,7 +23,8 @@ import com.safekey.app.security.results.CredentialSecuritySummary;
 import com.safekey.app.SafeKeyApplication;
 import com.safekey.app.data.model.VaultCounts;
 import com.safekey.app.data.service.VaultDataService;
-import com.safekey.app.security.storage.SecureVaultCoordinator;
+import com.safekey.app.security.storage.VaultOperations;
+import com.safekey.app.session.ActiveVaultUiBinding;
 import com.safekey.app.auth.SignInActivity;
 import com.safekey.app.auth.MasterPasswordHealth;
 import com.safekey.app.security.storage.MasterPasswordCheckStatus;
@@ -37,6 +38,7 @@ import com.safekey.app.settings.SettingsActivity;
 public class HomeActivity extends ProtectedActivity {
 
     private CredentialSecurityController securityController;
+    private ActiveVaultUiBinding vaultBinding;
     private TextView textSecurityStatus;
     private TextView textSecurityCoverage;
     private TextView textSecurityReview;
@@ -199,8 +201,14 @@ public class HomeActivity extends ProtectedActivity {
             finish();
         });
 
-        securityController = AndroidCredentialSecurity.create(
-                ((SafeKeyApplication) getApplication()).getSecureVaultCoordinator(), false);
+        SafeKeyApplication safeKeyApp = (SafeKeyApplication) getApplication();
+        vaultBinding = new ActiveVaultUiBinding(safeKeyApp);
+        // Security-results integration for Decoy is owned by Israa.
+        // Never query the Real coordinator while the Decoy vault is active.
+        if (vaultBinding.isCurrent() && safeKeyApp.getActiveVault() == SafeKeyApplication.ActiveVault.REAL) {
+            securityController = AndroidCredentialSecurity.create(
+                    safeKeyApp.getSecureVaultCoordinator(), false);
+        }
         textSecurityStatus = findViewById(R.id.textHomeSecurityStatus);
         textSecurityCoverage = findViewById(R.id.textHomeSecurityCoverage);
         textSecurityReview = findViewById(R.id.textHomeSecurityReview);
@@ -287,6 +295,10 @@ public class HomeActivity extends ProtectedActivity {
     @Override
     protected void onRuntimeResume() {
         super.onRuntimeResume();
+        if (vaultBinding == null || !vaultBinding.isCurrent()) {
+            finish();
+            return;
+        }
 
         if (isFinishing() || isDestroyed()) {
             return;
@@ -301,7 +313,7 @@ public class HomeActivity extends ProtectedActivity {
 
     @Override
     protected void onRuntimePause() {
-        securityController.stop();
+        if (securityController != null) { securityController.stop(); }
         showSecurityUnavailable(R.string.security_not_checked);
         countsActive = false;
         masterPasswordHealth.removeListener(masterPasswordHealthChanged);
@@ -322,6 +334,13 @@ public class HomeActivity extends ProtectedActivity {
     }
 
     private void refreshMasterPasswordHealth() {
+        if (!vaultBinding.isCurrent()
+                || ((SafeKeyApplication) getApplication()).getActiveVault()
+                        != SafeKeyApplication.ActiveVault.REAL) {
+            layoutMasterPasswordHealth.setVisibility(View.GONE);
+            textMasterPasswordHealth.setText(null);
+            return;
+        }
         if (!countsActive || isFinishing() || isDestroyed()
                 || SafeKeySession.getManager().getRemainingInactivityMillis() <= 0L) { return; }
         MasterPasswordCheckStatus status = masterPasswordHealth.getStatus();
@@ -345,7 +364,7 @@ public class HomeActivity extends ProtectedActivity {
          * It checks timeout state and returns false if the
          * session is already locked or expires during the check.
          */
-        if (!SafeKeySession.recordActivity()) {
+        if (!vaultBinding.isCurrent() || !SafeKeySession.recordActivity()) {
 
             navigateToSignIn();
 
@@ -416,11 +435,16 @@ public class HomeActivity extends ProtectedActivity {
     }
 
     private void refreshSecurityResults() {
+        if (securityController == null || !vaultBinding.isCurrent()) {
+            // Do not display Real vault security results in a Decoy session.
+            showSecurityUnavailable(R.string.security_unavailable);
+            return;
+        }
         showSecurityUnavailable(R.string.security_loading);
         try {
             securityController.load(new CredentialSecurityController.Listener() {
                 @Override public void onResults(CredentialSecuritySummary summary) {
-                    if (!countsActive || isFinishing() || isDestroyed()) { return; }
+                    if (!countsActive || !vaultBinding.isCurrent() || isFinishing() || isDestroyed()) { return; }
                     textAtRiskCount.setText(getString(R.string.home_vault_count_value, summary.getAtRiskCount()));
                     textBreachCount.setText(getString(R.string.home_vault_count_value, summary.getBreachCount()));
                     if (summary.hasScore()) {
@@ -459,7 +483,7 @@ public class HomeActivity extends ProtectedActivity {
                             ? R.drawable.dashboard_alert_banner_bg : R.drawable.dashboard_card_bg);
                 }
                 @Override public void onError(Exception error) {
-                    if (countsActive && !isFinishing() && !isDestroyed()) {
+                    if (countsActive && vaultBinding.isCurrent() && !isFinishing() && !isDestroyed()) {
                         showSecurityUnavailable(R.string.security_unavailable);
                     }
                 }
@@ -490,11 +514,9 @@ public class HomeActivity extends ProtectedActivity {
         }
 
         try {
-            SecureVaultCoordinator coordinator =
-                    ((SafeKeyApplication) getApplication())
-                            .getSecureVaultCoordinator();
+            VaultOperations operations = vaultBinding.operations();
 
-            coordinator.getVaultCounts(
+            operations.getVaultCounts(
                     new VaultDataService.ResultCallback<VaultCounts>() {
                         @Override
                         public void onSuccess(VaultCounts counts) {
@@ -537,6 +559,7 @@ public class HomeActivity extends ProtectedActivity {
 
     private boolean canApplyVaultCounts(long requestGeneration) {
         return countsActive
+                && vaultBinding != null && vaultBinding.isCurrent()
                 && requestGeneration == countRequestGeneration
                 && !isFinishing()
                 && !isDestroyed()
