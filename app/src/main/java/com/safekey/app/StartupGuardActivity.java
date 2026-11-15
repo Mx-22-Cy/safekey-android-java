@@ -1,10 +1,19 @@
 package com.safekey.app;
 
 import android.content.Intent;
+import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.session.ProtectedActivity;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 import android.os.Bundle;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.safekey.app.auth.SignInActivity;
+import com.safekey.app.session.ProtectedActivity;
+import com.safekey.app.session.SafeKeySession;
+import com.safekey.app.session.logic.SessionState;
 
 /** Prevent a restored screen from initializing against a recovering runtime. */
 public abstract class StartupGuardActivity extends AppCompatActivity {
@@ -21,6 +30,22 @@ public abstract class StartupGuardActivity extends AppCompatActivity {
             startActivity(intent);
             finish();
             return;
+        }
+        if (this instanceof ProtectedActivity) {
+            boolean authenticated = SafeKeySession.getState() == SessionState.UNLOCKED;
+            if (authenticated) {
+                try { application.getActiveVaultOperations(); }
+                catch (IllegalStateException e) { authenticated = false; }
+            }
+            if (!authenticated) {
+                super.onCreate(null);
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                Intent intent = new Intent(this, SignInActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(intent);
+                finish();
+                return;
+            }
         }
         runtimeScreenCreated = true;
         onRuntimeCreate(state);
