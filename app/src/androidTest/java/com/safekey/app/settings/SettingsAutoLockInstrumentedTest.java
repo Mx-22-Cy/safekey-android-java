@@ -1,12 +1,9 @@
 package com.safekey.app.settings;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import android.content.Context;
-import android.os.SystemClock;
 import android.widget.TextView;
 import android.widget.ListView;
 
@@ -22,10 +19,13 @@ import com.safekey.app.security.storage.SecureVaultCoordinator;
 import com.safekey.app.security.storage.VaultKeyEnvelopeStore;
 import com.safekey.app.session.AutoLockPreferences;
 import com.safekey.app.session.SafeKeySession;
-import com.safekey.app.session.logic.SessionState;
 import com.safekey.app.testutil.CallbackTimeoutDiagnostics;
 
 import org.junit.After;
+import org.junit.Rule;
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,9 +39,41 @@ import java.util.concurrent.atomic.AtomicReference;
  * Tests the actual Settings timeout picker with a temporary authenticated vault.
  * DESTRUCTIVE TEST FIXTURE: use only a disposable emulator; existing primary
  * vault storage is deleted by setup and cleanup.
+ * Disabled by default; requires the explicit instrumentation argument
+ * allowDestructiveSettingsTests=true on a disposable emulator.
  */
 @RunWith(AndroidJUnit4.class)
 public final class SettingsAutoLockInstrumentedTest {
+    private static final String OPT_IN_ARGUMENT = "allowDestructiveSettingsTests";
+    private boolean cleanupAuthorized;
+
+    // Wrap the entire JUnit lifecycle, including @Before and @After.
+    // Unapproved runs are no-ops; AndroidJUnitRunner reports assumptions as
+    // failures on some versions, so avoid assumption-based skipping.
+    @Rule
+    public final TestRule destructiveTestOptIn = new TestRule() {
+        @Override
+        public Statement apply(Statement base, Description description) {
+            return new Statement() {
+                @Override
+                public void evaluate() throws Throwable {
+                    if (!isExplicitlyAuthorized()) {
+                        android.util.Log.i("SafeKeySettingsTest",
+                                "NOT RUN (no destructive-test opt-in): "
+                                        + description.getMethodName());
+                        return;
+                    }
+                    base.evaluate();
+                }
+            };
+        }
+    };
+
+    private static boolean isExplicitlyAuthorized() {
+        return "true".equals(InstrumentationRegistry.getArguments()
+                .getString(OPT_IN_ARGUMENT));
+    }
+
     private static final String TEST_PASSWORD = "task three disposable settings password";
     private SafeKeyApplication app;
     private SecureVaultCoordinator coordinator;
@@ -49,6 +81,13 @@ public final class SettingsAutoLockInstrumentedTest {
 
     @Before
     public void setUp() throws Exception {
+        // Authorization MUST precede all session, preference, database, and
+        // envelope operations. A skipped test may not modify user data.
+        if (!isExplicitlyAuthorized()) {
+            throw new IllegalStateException("Destructive Settings setup not authorized");
+        }
+        cleanupAuthorized = true;
+
         app = (SafeKeyApplication) InstrumentationRegistry.getInstrumentation()
                 .getTargetContext().getApplicationContext();
         coordinator = app.getSecureVaultCoordinator();
@@ -74,7 +113,8 @@ public final class SettingsAutoLockInstrumentedTest {
 
     @After
     public void tearDown() throws Exception {
-        if (app == null) return;
+        // @After runs even when @Before is skipped or rejected.
+        if (!isExplicitlyAuthorized() || !cleanupAuthorized || app == null) return;
         onMain(SafeKeySession::lock);
         await(callback -> app.prepareForVaultAuthentication(callback));
         app.deleteDatabase("safekey.db");
