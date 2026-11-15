@@ -49,6 +49,63 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RunWith(AndroidJUnit4.class)
 public class T38SettingsSecurityInstrumentedTest {
 
+    @Test
+    public void realVaultManualLockAllowsNormalSignIn() throws Exception {
+        verifyManualLockAllowsNormalSignIn(false);
+    }
+
+    @Test
+    public void decoyVaultManualLockAllowsNormalSignIn() throws Exception {
+        verifyManualLockAllowsNormalSignIn(true);
+    }
+
+    private void verifyManualLockAllowsNormalSignIn(boolean decoy) throws Exception {
+        SafeKeyApplication application = app();
+        try {
+            if (decoy) {
+                authenticateDecoyVaultForUiTest();
+            } else {
+                authenticateRealVaultForUiTest();
+            }
+
+            assertEquals(SessionState.UNLOCKED, SafeKeySession.getState());
+
+            android.app.Instrumentation instrumentation =
+                    InstrumentationRegistry.getInstrumentation();
+            android.app.Instrumentation.ActivityMonitor monitor =
+                    instrumentation.addMonitor(
+                            "com.safekey.app.auth.SignInActivity", null, false);
+            try {
+                try (ActivityScenario<SettingsActivity> scenario =
+                             ActivityScenario.launch(SettingsActivity.class)) {
+                    scenario.onActivity(activity -> {
+                        View lockButton = activity.findViewById(R.id.rowSettingsLockVault);
+                        assertTrue("Lock Vault control missing", lockButton != null);
+                        assertTrue("Lock Vault click was not handled",
+                                lockButton.performClick());
+                    });
+
+                    android.app.Activity signIn =
+                            monitor.waitForActivityWithTimeout(10000);
+                    assertTrue("Manual lock did not open Sign In", signIn != null);
+                    assertFalse("Manual lock must not require the REAL master password",
+                            signIn.getIntent().getBooleanExtra(
+                                    com.safekey.app.auth.SignInActivity.REQUIRE_MASTER_PASSWORD,
+                                    false));
+
+                    assertEquals("Manual Lock Vault must lock the session",
+                            SessionState.LOCKED, SafeKeySession.getState());
+                    assertTrue("Settings must leave the foreground after manual lock",
+                            scenario.getState() != Lifecycle.State.RESUMED);
+                }
+            } finally {
+                instrumentation.removeMonitor(monitor);
+            }
+        } finally {
+            SafeKeySession.lock();
+            application.registerSessionCleanup();
+        }
+    }
     private SafeKeyApplication app() {
         return (SafeKeyApplication) InstrumentationRegistry.getInstrumentation()
                 .getTargetContext().getApplicationContext();
