@@ -203,11 +203,8 @@ public class HomeActivity extends ProtectedActivity {
 
         SafeKeyApplication safeKeyApp = (SafeKeyApplication) getApplication();
         vaultBinding = new ActiveVaultUiBinding(safeKeyApp);
-        // Security-results integration for Decoy is owned by Israa.
-        // Never query the Real coordinator while the Decoy vault is active.
-        if (vaultBinding.isCurrent() && safeKeyApp.getActiveVault() == SafeKeyApplication.ActiveVault.REAL) {
-            securityController = AndroidCredentialSecurity.create(
-                    safeKeyApp.getSecureVaultCoordinator(), false);
+        if (vaultBinding.isCurrent()) {
+            securityController = AndroidCredentialSecurity.createForActiveVault(safeKeyApp, false);
         }
         textSecurityStatus = findViewById(R.id.textHomeSecurityStatus);
         textSecurityCoverage = findViewById(R.id.textHomeSecurityCoverage);
