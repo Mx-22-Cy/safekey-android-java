@@ -405,6 +405,58 @@ public class T27ProtectedScreensInstrumentedTest {
     // If another master password is already enrolled, authentication fails safely.
     private static final String TEST_MASTER = "T27DisposableMasterPassword123!";
 
+    @Test
+    public void unlockedVaultWindowBlocksScreenshots() throws Exception {
+        authenticateRealVaultForUiTest();
+
+        try {
+            assertSecureProtectedWindow(
+                    com.safekey.app.vault.VaultActivity.class
+            );
+
+            // Closing the first Activity may lock the session.
+            // Restore authenticated state before opening the next screen.
+            authenticateRealVaultForUiTest();
+
+            assertSecureProtectedWindow(
+                    com.safekey.app.generator.GeneratorActivity.class
+            );
+        } finally {
+            SafeKeySession.lock();
+
+            SafeKeyApplication app = (SafeKeyApplication)
+                    InstrumentationRegistry.getInstrumentation()
+                            .getTargetContext()
+                            .getApplicationContext();
+
+            app.registerSessionCleanup();
+        }
+    }
+
+    private void assertSecureProtectedWindow(
+            Class<? extends Activity> activityClass
+    ) {
+        Intent intent = new Intent(
+                InstrumentationRegistry.getInstrumentation()
+                        .getTargetContext(),
+                activityClass
+        );
+
+        try (ActivityScenario<? extends Activity> scenario =
+                     ActivityScenario.launch(intent)) {
+
+            scenario.onActivity(activity -> {
+                int flags = activity.getWindow().getAttributes().flags;
+
+                assertTrue(
+                        activityClass.getSimpleName()
+                                + " must enable FLAG_SECURE",
+                        (flags & android.view.WindowManager.LayoutParams.FLAG_SECURE) != 0
+                );
+            });
+        }
+    }
+
     private void authenticateRealVaultForUiTest() throws Exception {
         SafeKeyApplication app = (SafeKeyApplication) InstrumentationRegistry
                 .getInstrumentation().getTargetContext().getApplicationContext();
