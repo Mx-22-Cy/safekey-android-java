@@ -134,7 +134,7 @@ public final class AutofillLoginFields {
             }
         }
 
-        if (usernameCount != 1 || passwordCount != 1) {
+        if ((usernameCount == 0 && passwordCount == 0) || usernameCount > 1 || passwordCount > 1) {
             return null;
         }
 

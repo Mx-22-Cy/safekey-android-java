@@ -87,9 +87,8 @@ public final class AutofillRequestTracker {
 
         String packageName = metadata.getPackageName();
 
-        if (usernameId == null
-                || passwordId == null
-                || usernameId.equals(passwordId)
+        if ((usernameId == null && passwordId == null)
+                || (usernameId != null && usernameId.equals(passwordId))
                 || packageName == null
                 || packageName.isEmpty()
                 || !packageName.equals(packageName.trim())) {

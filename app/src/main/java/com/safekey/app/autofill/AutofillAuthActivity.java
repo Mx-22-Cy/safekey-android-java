@@ -9,6 +9,7 @@ import android.os.SystemClock;
 import android.service.autofill.Dataset;
 import android.service.autofill.FillResponse;
 import android.view.WindowManager;
+import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
 import android.widget.Button;
@@ -347,8 +348,13 @@ public final class AutofillAuthActivity
 
         new Thread(() -> {
 
+            // A verified browser may handle HTTPS website requests.
+            // Other applications still require Digital Asset Links.
             boolean verified =
-                    AutofillAssociationVerifier.isAssociated(
+                    AutofillTrustedBrowsers.isTrustedBrowser(
+                            getApplicationContext(),
+                            request.getPackageName()
+                    ) || AutofillAssociationVerifier.isAssociated(
                             getApplicationContext(),
                             request
                     );
@@ -444,6 +450,11 @@ public final class AutofillAuthActivity
                                                     metadata
                                                             .getClaimedWebHost()
                                             );
+
+                            // Debug-only website diagnosis: no saved secrets logged.
+                            debugAutofill("MATCHING_HOST="
+                                    + metadata.getClaimedWebHost()
+                                    + " MATCH_COUNT=" + matches.size());
 
                             showCredentialChoices(
                                     matches
@@ -548,9 +559,24 @@ public final class AutofillAuthActivity
 
         if (verifiedChoices.isEmpty()) {
 
-            showMessage(
-                    "No verified matching credentials found."
-            );
+            // A trusted browser can report a different login hostname from
+            // the address bar (for example, an embedded login frame). Never
+            // broaden credential matching without explicit user verification.
+            String verifiedHost = metadata != null && !metadata.isNativeApp()
+                    && websiteAssociationVerified
+                    ? AutofillWebsiteMatcher.normalizeHost(
+                            metadata.getClaimedWebHost())
+                    : null;
+            if (verifiedHost != null) {
+                showMessage("No matching SafeKey credentials for https://"
+                        + verifiedHost + ".\n\n"
+                        + "Check the website shown in your browser. "
+                        + "Only if you trust this exact login host, "
+                        + "update the credential's Website to this "
+                        + "HTTPS address and try again.");
+            } else {
+                showMessage("No verified matching credentials found.");
+            }
 
             return;
         }
@@ -765,12 +791,13 @@ public final class AutofillAuthActivity
         AutofillLoginFields.Fields fields =
                 metadata.getFields();
 
-        if (fields == null
-                || fields.getUsernameId() == null
-                || fields.getPasswordId() == null
-                || fields.getUsernameId().equals(
-                fields.getPasswordId()
-        )
+        AutofillId usernameId =
+                fields == null ? null : fields.getUsernameId();
+        AutofillId passwordId =
+                fields == null ? null : fields.getPasswordId();
+
+        if ((usernameId == null && passwordId == null)
+                || (usernameId != null && usernameId.equals(passwordId))
                 || credential.getUsername() == null
                 || credential.getUsername().trim().isEmpty()
                 || credential.getPassword() == null
@@ -826,22 +853,25 @@ public final class AutofillAuthActivity
                     "SafeKey"
             );
 
-            Dataset dataset = new Dataset.Builder()
-                    .setValue(
-                            fields.getUsernameId(),
-                            AutofillValue.forText(
-                                    credential.getUsername()
-                            ),
-                            presentation
-                    )
-                    .setValue(
-                            fields.getPasswordId(),
-                            AutofillValue.forText(
-                                    credential.getPassword()
-                            ),
-                            presentation
-                    )
-                    .build();
+            Dataset.Builder datasetBuilder = new Dataset.Builder();
+
+            if (usernameId != null) {
+                datasetBuilder.setValue(
+                        usernameId,
+                        AutofillValue.forText(credential.getUsername()),
+                        presentation
+                );
+            }
+
+            if (passwordId != null) {
+                datasetBuilder.setValue(
+                        passwordId,
+                        AutofillValue.forText(credential.getPassword()),
+                        presentation
+                );
+            }
+
+            Dataset dataset = datasetBuilder.build();
 
             FillResponse response =
                     new FillResponse.Builder()
@@ -898,6 +928,13 @@ public final class AutofillAuthActivity
                 && SafeKeySession.getManager()
                 .getAuthenticationGeneration()
                 == authenticationGeneration;
+    }
+
+    private void debugAutofill(String message) {
+        if ((getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            android.util.Log.d("SafeKeyAutofillDiag", message);
+        }
     }
 
     private void showMessage(String message) {
