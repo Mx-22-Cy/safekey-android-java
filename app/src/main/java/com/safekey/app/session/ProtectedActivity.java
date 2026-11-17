@@ -1,8 +1,10 @@
 package com.safekey.app.session;
 
 import android.content.Intent;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.WindowManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -10,6 +12,12 @@ import com.safekey.app.auth.SignInActivity;
 
 public abstract class ProtectedActivity
         extends com.safekey.app.StartupGuardActivity {
+
+    @Override
+    protected void onRuntimeCreate(Bundle state) {
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        super.onRuntimeCreate(state);
+    }
 
     private final Handler inactivityHandler =
             new Handler(
