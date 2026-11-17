@@ -32,12 +32,26 @@ public final class SafeKeyAutofillService extends AutofillService {
     private static final AtomicInteger NEXT_REQUEST_ID =
             new AtomicInteger(1);
 
+    private void diagnostic(String message) {
+        if ((getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            android.util.Log.d("SafeKeyAutofillDiag", message);
+        }
+    }
+
+    @Override
+    public void onConnected() {
+        super.onConnected();
+        diagnostic("SERVICE_CONNECTED");
+    }
+
     @Override
     public void onFillRequest(
             FillRequest request,
             CancellationSignal cancellationSignal,
             FillCallback callback
     ) {
+        diagnostic("FILL_REQUEST_ENTER");
 
         if (callback == null) {
             return;
@@ -51,6 +65,7 @@ public final class SafeKeyAutofillService extends AutofillService {
         }
 
         List<FillContext> contexts = request.getFillContexts();
+        diagnostic("FILL_CONTEXT_COUNT=" + (contexts == null ? -1 : contexts.size()));
 
         if (contexts == null || contexts.isEmpty()) {
             callback.onSuccess(null);
@@ -63,9 +78,32 @@ public final class SafeKeyAutofillService extends AutofillService {
         AutofillRequestMetadata metadata =
                 AutofillRequestMetadata.extract(structure);
 
-        if (metadata == null || cancellationSignal.isCanceled()) {
+        boolean cancelledAfterExtraction = cancellationSignal.isCanceled();
+
+        if ((getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            android.util.Log.d(
+                    "SafeKeyAutofillDiag",
+                    metadata == null ? "METADATA_NULL" : "METADATA_PRESENT"
+            );
+            android.util.Log.d(
+                    "SafeKeyAutofillDiag",
+                    cancelledAfterExtraction ? "REQUEST_CANCELLED" : "REQUEST_ACTIVE"
+            );
+        }
+
+        if (metadata == null || cancelledAfterExtraction) {
             callback.onSuccess(null);
             return;
+        }
+
+        diagnostic("METADATA_ACCEPTED package="
+                + metadata.getPackageName()
+                + " mode="
+                + (metadata.isNativeApp() ? "NATIVE" : "WEB"));
+        if (!metadata.isNativeApp()) {
+            // Claimed by the browser form, not yet authorized for credentials.
+            diagnostic("CLAIMED_WEB_HOST=" + metadata.getClaimedWebHost());
         }
 
         AutofillLoginFields.Fields fields = metadata.getFields();
@@ -78,18 +116,35 @@ public final class SafeKeyAutofillService extends AutofillService {
         AutofillId usernameId = fields.getUsernameId();
         AutofillId passwordId = fields.getPasswordId();
 
-        if (usernameId == null || passwordId == null) {
+        if ((usernameId == null && passwordId == null)
+                || (usernameId != null && usernameId.equals(passwordId))) {
             callback.onSuccess(null);
             return;
         }
+
+        // Only include fields actually present on this login screen.
+        AutofillId[] authenticationIds =
+                usernameId != null && passwordId != null
+                        ? new AutofillId[]{usernameId, passwordId}
+                        : new AutofillId[]{
+                                usernameId != null ? usernameId : passwordId
+                        };
+
+        diagnostic("FIELDS username="
+                + (usernameId != null)
+                + " password="
+                + (passwordId != null));
 
         // Register the original request before launching authentication.
         String token = AutofillRequestTracker.registerForAuthentication(metadata);
 
         if (token == null) {
+            diagnostic("TRACKER_REJECTED");
             callback.onSuccess(null);
             return;
         }
+
+        diagnostic("TRACKER_ACCEPTED");
 
         try {
             Intent authenticationIntent =
@@ -126,10 +181,7 @@ public final class SafeKeyAutofillService extends AutofillService {
             FillResponse response =
                     new FillResponse.Builder()
                             .setAuthentication(
-                                    new AutofillId[]{
-                                            usernameId,
-                                            passwordId
-                                    },
+                                    authenticationIds,
                                     authenticationPendingIntent.getIntentSender(),
                                     presentation
                             )
@@ -143,9 +195,13 @@ public final class SafeKeyAutofillService extends AutofillService {
             }
 
             // No credentials are included in the initial response.
+            diagnostic("AUTH_RESPONSE_SUBMITTED");
             callback.onSuccess(response);
 
         } catch (RuntimeException exception) {
+
+            diagnostic("RESPONSE_EXCEPTION_"
+                    + exception.getClass().getSimpleName());
 
             // Fail closed and remove the unused token.
             AutofillRequestTracker.cancel(token);
